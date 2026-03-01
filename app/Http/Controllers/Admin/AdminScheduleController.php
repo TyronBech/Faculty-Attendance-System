@@ -67,11 +67,12 @@ class AdminScheduleController extends Controller
             'details.*.hours_required' => 'required|integer|min:1|max:12',
         ]);
 
+        $minAllowedTime = Carbon::createFromFormat('H:i', '07:00');
+        $maxAllowedTime = Carbon::createFromFormat('H:i', '21:00');
+
         foreach ($validated['details'] as $index => $detail) {
             $timeIn = Carbon::createFromFormat('H:i', $detail['time_in']);
             $timeOut = Carbon::createFromFormat('H:i', $detail['time_out']);
-            $minAllowedTime = Carbon::createFromFormat('H:i', '07:00');
-            $maxAllowedTime = Carbon::createFromFormat('H:i', '21:00');
 
             if ($timeIn->lessThan($minAllowedTime) || $timeIn->greaterThan($maxAllowedTime)) {
                 return back()
@@ -166,11 +167,12 @@ class AdminScheduleController extends Controller
             'details.*.hours_required' => 'required|integer|min:1|max:12',
         ]);
 
+        $minAllowedTime = Carbon::createFromFormat('H:i', '07:00');
+        $maxAllowedTime = Carbon::createFromFormat('H:i', '21:00');
+
         foreach ($validated['details'] as $index => $detail) {
             $timeIn = Carbon::createFromFormat('H:i', $detail['time_in']);
             $timeOut = Carbon::createFromFormat('H:i', $detail['time_out']);
-            $minAllowedTime = Carbon::createFromFormat('H:i', '07:00');
-            $maxAllowedTime = Carbon::createFromFormat('H:i', '21:00');
 
             if ($timeIn->lessThan($minAllowedTime) || $timeIn->greaterThan($maxAllowedTime)) {
                 return back()
@@ -343,7 +345,7 @@ class AdminScheduleController extends Controller
                         $query->where('id', '!=', $currentSchedule->id);
                     }
                 })
-                ->with(['schedule.faculty'])
+                ->with('schedule')
                 ->first();
 
             if ($roomConflictQuery) {

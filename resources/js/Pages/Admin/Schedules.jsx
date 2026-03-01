@@ -29,6 +29,19 @@ const emptyDetail = {
 const ALLOWED_TIME_MIN = '07:00';
 const ALLOWED_TIME_MAX = '21:00';
 
+const toMinutes = (timeValue) => {
+    if (!timeValue || !timeValue.includes(':')) {
+        return null;
+    }
+
+    const [hourPart, minutePart] = timeValue.split(':').map(Number);
+    if (Number.isNaN(hourPart) || Number.isNaN(minutePart)) {
+        return null;
+    }
+
+    return (hourPart * 60) + minutePart;
+};
+
 /* ──────────────────────────────────────────────
    Status badge component
    ────────────────────────────────────────────── */
@@ -247,19 +260,6 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
         setShowViewModal(true);
     };
 
-    const toMinutes = (timeValue) => {
-        if (!timeValue || !timeValue.includes(':')) {
-            return null;
-        }
-
-        const [hourPart, minutePart] = timeValue.split(':').map(Number);
-        if (Number.isNaN(hourPart) || Number.isNaN(minutePart)) {
-            return null;
-        }
-
-        return (hourPart * 60) + minutePart;
-    };
-
     const minAllowedMinutes = toMinutes(ALLOWED_TIME_MIN);
     const maxAllowedMinutes = toMinutes(ALLOWED_TIME_MAX);
 
@@ -271,6 +271,14 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
             const timeOutMinutes = toMinutes(detail.time_out);
 
             if (timeInMinutes === null || timeOutMinutes === null) {
+                if (timeInMinutes === null) {
+                    localErrors[`details.${index}.time_in`] = 'Time In is required and must be a valid time.';
+                }
+
+                if (timeOutMinutes === null) {
+                    localErrors[`details.${index}.time_out`] = 'Time Out is required and must be a valid time.';
+                }
+
                 return;
             }
 
@@ -792,19 +800,6 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
    Schedule Form component (shared between Create/Edit)
    ────────────────────────────────────────────── */
 function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRow, removeDetailRow, updateDetail }) {
-    const toMinutes = (timeValue) => {
-        if (!timeValue || !timeValue.includes(':')) {
-            return null;
-        }
-
-        const [hourPart, minutePart] = timeValue.split(':').map(Number);
-        if (Number.isNaN(hourPart) || Number.isNaN(minutePart)) {
-            return null;
-        }
-
-        return (hourPart * 60) + minutePart;
-    };
-
     const minAllowedMinutes = toMinutes(ALLOWED_TIME_MIN);
     const maxAllowedMinutes = toMinutes(ALLOWED_TIME_MAX);
 
@@ -838,9 +833,9 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
     };
 
     const toTimeString = (minutesValue) => {
-        const normalizedMinutes = ((minutesValue % 1440) + 1440) % 1440;
-        const hours = Math.floor(normalizedMinutes / 60);
-        const minutes = normalizedMinutes % 60;
+        const clampedMinutes = Math.min(minutesValue, maxAllowedMinutes);
+        const hours = Math.floor(clampedMinutes / 60);
+        const minutes = clampedMinutes % 60;
 
         return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
     };
