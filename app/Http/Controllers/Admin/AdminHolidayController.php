@@ -26,10 +26,16 @@ class AdminHolidayController extends Controller
         }
 
         if ($year = $request->query('year')) {
-            $query->whereYear('holiday_date', $year);
+            $query->where(function ($q) use ($year) {
+                $q->whereYear('holiday_date', $year)
+                  ->orWhere('is_recurring', true);
+            });
         }
 
-        $holidays = $query->paginate($request->query('per_page', 15))->withQueryString();
+        $perPage = (int) $request->query('per_page', 15);
+        $perPage = max(1, min($perPage, 100));
+
+        $holidays = $query->paginate($perPage)->withQueryString();
 
         return Inertia::render('Admin/Holidays', [
             'holidays' => $holidays,
@@ -37,7 +43,7 @@ class AdminHolidayController extends Controller
                 'search'   => $request->query('search', ''),
                 'type'     => $request->query('type', ''),
                 'year'     => $request->query('year', ''),
-                'per_page' => $request->query('per_page', 15),
+                'per_page' => $perPage,
             ],
         ]);
     }
@@ -48,7 +54,7 @@ class AdminHolidayController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'holiday_date' => ['required', 'date', Rule::unique('holidays', 'holiday_date')->whereNull('deleted_at')],
+            'holiday_date' => ['required', 'date', Rule::unique('holidays', 'holiday_date')],
             'name'         => ['required', 'string', 'max:255'],
             'type'         => ['required', Rule::in(['national', 'local', 'observance'])],
             'is_recurring' => ['boolean'],
@@ -69,8 +75,7 @@ class AdminHolidayController extends Controller
                 'required',
                 'date',
                 Rule::unique('holidays', 'holiday_date')
-                    ->ignore($holiday->id)
-                    ->whereNull('deleted_at'),
+                    ->ignore($holiday->id),
             ],
             'name'         => ['required', 'string', 'max:255'],
             'type'         => ['required', Rule::in(['national', 'local', 'observance'])],

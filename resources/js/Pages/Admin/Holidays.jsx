@@ -214,6 +214,7 @@ export default function AdminHolidays({ holidays, filters }) {
     const openCreate = () => {
         createForm.reset();
         createForm.setData({ ...defaultData });
+        createForm.clearErrors();
         setShowCreateModal(true);
     };
 
@@ -234,6 +235,7 @@ export default function AdminHolidays({ holidays, filters }) {
             type:         holiday.type,
             is_recurring: !!holiday.is_recurring,
         });
+        editForm.clearErrors();
         setShowEditModal(true);
     };
 
