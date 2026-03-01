@@ -3,7 +3,6 @@ import ScrollToTop from '@/Components/ScrollToTop';
 import Modal from '@/Components/Modal';
 import InputLabel from '@/Components/InputLabel';
 import InputError from '@/Components/InputError';
-import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
 import DangerButton from '@/Components/DangerButton';
 import { Head, useForm } from '@inertiajs/react';
@@ -66,12 +65,20 @@ export default function AdminScheduleChangeRequests({ requests: initialRequests,
                 'X-Requested-With': 'XMLHttpRequest',
             },
         })
-            .then((res) => res.json())
+            .then((res) => {
+                if (!res.ok) {
+                    throw new Error(`Failed to fetch schedule change requests: ${res.status} ${res.statusText}`);
+                }
+                return res.json();
+            })
             .then((data) => {
                 setRequestsData(data);
                 setCurrentPage(data.current_page || 1);
             })
-            .catch(() => {})
+            .catch((error) => {
+                console.error('Error fetching schedule change requests:', error);
+                window.alert('Failed to load schedule change requests. Please try again.');
+            })
             .finally(() => setIsFiltering(false));
     }, []);
 

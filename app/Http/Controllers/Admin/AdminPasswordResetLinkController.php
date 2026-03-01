@@ -42,7 +42,7 @@ class AdminPasswordResetLinkController extends Controller
             ]));
         });
 
-        $status = Password::broker('users')->sendResetLink(
+        $status = Password::broker('admins')->sendResetLink(
             $request->only('email')
         );
 

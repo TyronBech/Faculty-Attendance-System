@@ -25,7 +25,8 @@ export default function AuthenticatedLayout({ header, children }) {
     const [showingNavigationDropdown, setShowingNavigationDropdown] =
         useState(false);
     const [mobileAttendanceOpen, setMobileAttendanceOpen] = useState(false);
-    const [mobileRequestsOpen, setMobileRequestsOpen] = useState(false);
+    const [mobileFacultyRequestsOpen, setMobileFacultyRequestsOpen] = useState(false);
+    const [mobileAdminRequestsOpen, setMobileAdminRequestsOpen] = useState(false);
 
     // ── Global flash → toast ──────────────────────────────────────────────
     useEffect(() => {
@@ -368,7 +369,7 @@ export default function AuthenticatedLayout({ header, children }) {
                                 {/* ── Requests group ─────────────── */}
                                 <div>
                                     <button
-                                        onClick={() => setMobileRequestsOpen(!mobileRequestsOpen)}
+                                        onClick={() => setMobileFacultyRequestsOpen(!mobileFacultyRequestsOpen)}
                                         className={
                                             'flex w-full items-center justify-between border-l-4 py-2 pe-4 ps-3 text-start text-base font-medium transition-all duration-300 ' +
                                             (route().current('faculty.schedule-change-requests.*') || route().current('faculty.online-attendance.*')
@@ -377,11 +378,11 @@ export default function AuthenticatedLayout({ header, children }) {
                                         }
                                     >
                                         Requests
-                                        <svg className={'h-4 w-4 transition-transform duration-200 ' + (mobileRequestsOpen ? 'rotate-180' : '')} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                        <svg className={'h-4 w-4 transition-transform duration-200 ' + (mobileFacultyRequestsOpen ? 'rotate-180' : '')} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                                             <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
                                         </svg>
                                     </button>
-                                    {mobileRequestsOpen && (
+                                    {mobileFacultyRequestsOpen && (
                                         <div className="bg-gray-50 dark:bg-gray-800/50 ps-4">
                                             <ResponsiveNavLink
                                                 href={route('faculty.schedule-change-requests.index')}
@@ -413,7 +414,7 @@ export default function AuthenticatedLayout({ header, children }) {
                                 {/* ── Admin Requests group ─────────── */}
                                 <div>
                                     <button
-                                        onClick={() => setMobileRequestsOpen(!mobileRequestsOpen)}
+                                        onClick={() => setMobileAdminRequestsOpen(!mobileAdminRequestsOpen)}
                                         className={
                                             'flex w-full items-center justify-between border-l-4 py-2 pe-4 ps-3 text-start text-base font-medium transition-all duration-300 ' +
                                             (route().current('admin.schedule-change-requests.*')
@@ -422,11 +423,11 @@ export default function AuthenticatedLayout({ header, children }) {
                                         }
                                     >
                                         Requests
-                                        <svg className={'h-4 w-4 transition-transform duration-200 ' + (mobileRequestsOpen ? 'rotate-180' : '')} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                        <svg className={'h-4 w-4 transition-transform duration-200 ' + (mobileAdminRequestsOpen ? 'rotate-180' : '')} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                                             <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
                                         </svg>
                                     </button>
-                                    {mobileRequestsOpen && (
+                                    {mobileAdminRequestsOpen && (
                                         <div className="bg-gray-50 dark:bg-gray-800/50 ps-4">
                                             <ResponsiveNavLink
                                                 href={route('admin.schedule-change-requests.index')}

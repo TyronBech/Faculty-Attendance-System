@@ -44,39 +44,63 @@ class AdminScheduleChangeRequestController extends Controller
     public function approve(Request $request, ScheduleChangeRequest $scheduleChangeRequest)
     {
         if ($scheduleChangeRequest->status !== 'pending') {
-            return back()->withErrors(['error' => 'This request has already been reviewed.']);
+            return back()->with('error', 'This request has already been reviewed.');
         }
 
         $validated = $request->validate([
             'review_remarks' => 'nullable|string|max:1000',
         ]);
 
-        DB::transaction(function () use ($scheduleChangeRequest, $validated) {
-            // ── Apply the requested changes to the schedule detail ──────────
-            $detail = ScheduleDetail::findOrFail($scheduleChangeRequest->schedule_detail_id);
+        try {
+            DB::transaction(function () use ($scheduleChangeRequest, $validated) {
+                // Re-fetch and lock the request row to prevent concurrent/double review.
+                $locked = ScheduleChangeRequest::whereKey($scheduleChangeRequest->id)
+                    ->lockForUpdate()
+                    ->first();
 
-            $timeIn  = Carbon::parse($scheduleChangeRequest->requested_time_in);
-            $timeOut = Carbon::parse($scheduleChangeRequest->requested_time_out);
+                if (! $locked || $locked->status !== 'pending') {
+                    throw new \RuntimeException('This request has already been reviewed.');
+                }
 
-            // Recalculate hours_required from the new times
-            $hoursRequired = max(0, round($timeOut->diffInMinutes($timeIn) / 60, 2));
+                // ── Apply the requested changes to the schedule detail ──────────
+                $detail = ScheduleDetail::findOrFail($locked->schedule_detail_id);
 
-            $detail->update([
-                'day_of_week'    => $scheduleChangeRequest->requested_day_of_week,
-                'time_in'        => $scheduleChangeRequest->requested_time_in,
-                'time_out'       => $scheduleChangeRequest->requested_time_out,
-                'room'           => $scheduleChangeRequest->requested_room ?? $detail->room,
-                'hours_required' => $hoursRequired,
-            ]);
+                // Preserve the existing date part from the stored timestamps and apply the requested times
+                $existingTimeIn  = Carbon::parse($detail->time_in);
+                $existingTimeOut = Carbon::parse($detail->time_out);
 
-            // ── Mark the request as approved ────────────────────────────────
-            $scheduleChangeRequest->update([
-                'status'         => 'approved',
-                'reviewed_by'    => Auth::id(),
-                'reviewed_at'    => now(),
-                'review_remarks' => $validated['review_remarks'] ?? null,
-            ]);
-        });
+                $timeIn  = (clone $existingTimeIn)->setTimeFromTimeString($locked->requested_time_in);
+                $timeOut = (clone $existingTimeOut)->setTimeFromTimeString($locked->requested_time_out);
+
+                // Ensure the requested time out is after time in before proceeding
+                if ($timeOut->lessThanOrEqualTo($timeIn)) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'requested_time_out' => ['The requested time out must be after the requested time in.'],
+                    ]);
+                }
+
+                // Recalculate hours_required from the new times (whole hours)
+                $hoursRequired = max(0, intval(round($timeOut->diffInMinutes($timeIn) / 60)));
+
+                $detail->update([
+                    'day_of_week'    => $locked->requested_day_of_week,
+                    'time_in'        => $timeIn->toDateTimeString(),
+                    'time_out'       => $timeOut->toDateTimeString(),
+                    'room'           => $locked->requested_room ?? $detail->room,
+                    'hours_required' => $hoursRequired,
+                ]);
+
+                // ── Mark the request as approved ────────────────────────────────
+                $locked->update([
+                    'status'         => 'approved',
+                    'reviewed_by'    => Auth::id(),
+                    'reviewed_at'    => now(),
+                    'review_remarks' => $validated['review_remarks'] ?? null,
+                ]);
+            });
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
 
         return back()->with('success', 'Schedule change request approved. The schedule has been updated.');
     }
@@ -87,19 +111,34 @@ class AdminScheduleChangeRequestController extends Controller
     public function reject(Request $request, ScheduleChangeRequest $scheduleChangeRequest)
     {
         if ($scheduleChangeRequest->status !== 'pending') {
-            return back()->withErrors(['error' => 'This request has already been reviewed.']);
+            return back()->with('error', 'This request has already been reviewed.');
         }
 
         $validated = $request->validate([
             'review_remarks' => 'required|string|min:5|max:1000',
         ]);
 
-        $scheduleChangeRequest->update([
-            'status'         => 'rejected',
-            'reviewed_by'    => Auth::id(),
-            'reviewed_at'    => now(),
-            'review_remarks' => $validated['review_remarks'],
-        ]);
+        try {
+            DB::transaction(function () use ($scheduleChangeRequest, $validated) {
+                // Re-fetch and lock the request row to prevent concurrent/double review.
+                $locked = ScheduleChangeRequest::whereKey($scheduleChangeRequest->id)
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $locked || $locked->status !== 'pending') {
+                    throw new \RuntimeException('This request has already been reviewed.');
+                }
+
+                $locked->update([
+                    'status'         => 'rejected',
+                    'reviewed_by'    => Auth::id(),
+                    'reviewed_at'    => now(),
+                    'review_remarks' => $validated['review_remarks'],
+                ]);
+            });
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
 
         return back()->with('success', 'Schedule change request has been rejected.');
     }

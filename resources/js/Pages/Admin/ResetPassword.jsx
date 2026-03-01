@@ -54,7 +54,7 @@ export default function AdminResetPassword({ token, email }) {
                             value={data.email}
                             className="block w-full rounded-xl border-0 py-3 pl-11 pr-4 text-gray-900 ring-1 ring-inset ring-gray-300 dark:bg-gray-800/50 dark:text-white dark:ring-gray-700 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-[#7a1315] dark:focus:ring-[#cc2127] sm:text-sm sm:leading-6 transition-all duration-300 shadow-sm"
                             autoComplete="username"
-                            onChange={(e) => setData('email', e.target.value)}
+                            readOnly
                         />
                     </div>
                     <InputError message={errors.email} className="mt-2" />

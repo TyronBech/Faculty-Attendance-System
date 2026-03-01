@@ -40,7 +40,7 @@ class AdminNewPasswordController extends Controller
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
         ]);
 
-        $status = Password::broker('users')->reset(
+        $status = Password::broker('admins')->reset(
             $request->only('email', 'password', 'password_confirmation', 'token'),
             function ($user) use ($request) {
                 $user->forceFill([
