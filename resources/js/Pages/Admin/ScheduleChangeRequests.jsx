@@ -480,9 +480,16 @@ function RequestCard({ req, onApprove, onReject }) {
         callback();
     };
 
+    const reviewBlockStyle = req.status === 'approved'
+        ? { wrap: 'bg-emerald-50 dark:bg-emerald-900/10 border-emerald-100 dark:border-emerald-800/30', text: 'text-emerald-600 dark:text-emerald-400' }
+        : { wrap: 'bg-amber-50 dark:bg-amber-900/10 border-amber-100 dark:border-amber-800/30', text: 'text-amber-600 dark:text-amber-400' };
+
     return (
         <div
             onClick={toggleExpand}
+            onKeyDown={(e) => { if (e.key === 'Enter') { toggleExpand(); } else if (e.key === ' ') { e.preventDefault(); toggleExpand(); } }}
+            role="button"
+            tabIndex={0}
             className="rounded-2xl border border-gray-200/60 dark:border-gray-700/60 bg-white dark:bg-gray-800/80 shadow-sm overflow-hidden hover:shadow-md transition-shadow cursor-pointer"
         >
             <div className="p-5">
@@ -536,9 +543,12 @@ function RequestCard({ req, onApprove, onReject }) {
                 </div>
 
                 {/* ── Action buttons ── */}
-                <div className="mt-4 flex items-center justify-end gap-2">
-                    {req.status === 'pending' ? (
-                        <>
+                <div className="mt-4 flex items-center justify-between gap-2">
+                    <p className="text-xs font-bold text-gray-500 dark:text-gray-400">
+                        Click card to {isExpanded ? 'hide' : 'show'} details
+                    </p>
+                    {req.status === 'pending' && (
+                        <div className="flex items-center gap-2">
                             <button
                                 onClick={(event) => handleActionClick(event, onReject)}
                                 className="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-bold text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800/50 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
@@ -557,11 +567,7 @@ function RequestCard({ req, onApprove, onReject }) {
                                 </svg>
                                 Approve
                             </button>
-                        </>
-                    ) : (
-                        <p className="text-xs font-bold text-gray-500 dark:text-gray-400">
-                            Click card to {isExpanded ? 'hide' : 'show'} details
-                        </p>
+                        </div>
                     )}
                 </div>
 
@@ -603,13 +609,19 @@ function RequestCard({ req, onApprove, onReject }) {
                             <p className="text-sm text-gray-700 dark:text-gray-300">{req.reason}</p>
                         </div>
 
-                        {/* ── Admin remarks (if reviewed) ── */}
-                        {req.review_remarks && (
-                            <div className="mt-3 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-800/30">
-                                <p className="text-xs font-bold text-amber-600 dark:text-amber-400 mb-1">
-                                    Admin Remarks — {req.reviewed_at}
+                        {/* ── Review details (always visible once reviewed) ── */}
+                        {req.reviewed_at && (
+                            <div className={`mt-3 p-3 rounded-lg border ${reviewBlockStyle.wrap}`}>
+                                <p className={`text-xs font-bold mb-1 ${reviewBlockStyle.text}`}>
+                                    Reviewed by{' '}
+                                    <span className="font-semibold">
+                                        {req.reviewed_by_email || 'Unknown reviewer'}
+                                    </span>
+                                    {' '}on {req.reviewed_at}
                                 </p>
-                                <p className="text-sm text-gray-700 dark:text-gray-300">{req.review_remarks}</p>
+                                {req.review_remarks && (
+                                    <p className="text-sm text-gray-700 dark:text-gray-300">{req.review_remarks}</p>
+                                )}
                             </div>
                         )}
                     </div>
