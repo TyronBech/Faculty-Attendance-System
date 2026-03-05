@@ -122,22 +122,9 @@ export default function AttendanceImports({ batches, filters }) {
         setBatchDetails(null);
 
         try {
-            const response = await fetch(route('admin.attendance-imports.details', batch.id), {
-                credentials: 'same-origin',
-                headers: {
-                    Accept: 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
-            });
-
-            if (!response.ok) {
-                throw new Error(`Failed to load import details (${response.status}).`);
-            }
-
-            const payload = await response.json();
-            setBatchDetails(payload);
+            const { data } = await window.axios.get(route('admin.attendance-imports.details', batch.id));
+            setBatchDetails(data);
         } catch (error) {
-            console.error('Failed to load attendance import details:', error);
             setDetailsError('Failed to load import details. Please try again.');
         } finally {
             setDetailsLoading(false);
@@ -155,71 +142,24 @@ export default function AttendanceImports({ batches, filters }) {
     const syncBatch = async (batchOverride) => {
         const batch = batchOverride ?? selectedBatch;
 
-        console.group('[syncBatch] START');
-        console.log('selectedBatch (state):', selectedBatch);
-        console.log('batchOverride:', batchOverride);
-        console.log('resolved batch:', batch);
-        console.log('syncing:', syncing);
-
         if (!batch || syncing) {
-            console.warn('[syncBatch] Aborted — guard hit (no batch or already syncing)');
-            console.groupEnd();
             return;
         }
 
         setSyncing(true);
 
         try {
-            const rawCookie = document.cookie;
-            const match = rawCookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]+)/);
-            const xsrfToken = decodeURIComponent(match?.[1] ?? '');
-            const url = route('admin.attendance-imports.sync', batch.id);
-
-            console.log('[syncBatch] Cookie string:', rawCookie);
-            console.log('[syncBatch] XSRF-TOKEN (decoded):', xsrfToken || '(empty — CSRF will fail)');
-            console.log('[syncBatch] PATCH URL:', url);
-
-            const response = await fetch(url, {
-                method: 'PATCH',
-                credentials: 'same-origin',
-                headers: {
-                    Accept: 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'X-XSRF-TOKEN': xsrfToken,
-                },
-            });
-
-            console.log('[syncBatch] HTTP status:', response.status, response.statusText);
-            console.log('[syncBatch] Response headers:', Object.fromEntries(response.headers.entries()));
-
-            const rawText = await response.text();
-            console.log('[syncBatch] Raw response body:', rawText);
-
-            if (!response.ok) {
-                let parsed = {};
-                try { parsed = JSON.parse(rawText); } catch (_) {}
-                throw new Error(parsed.message || `Sync failed (${response.status}).`);
-            }
-
-            let data = {};
-            try { data = JSON.parse(rawText); } catch (_) {}
-
-            console.log('[syncBatch] Parsed response data:', data);
+            const { data } = await window.axios.patch(route('admin.attendance-imports.sync', batch.id));
 
             setShowSyncModal(false);
-            toast.success(data.message ?? 'Logs synced successfully.');
+            toast.success(data?.message ?? 'Logs synced successfully.');
 
-            console.log('[syncBatch] Reloading batch details…');
             await loadBatchDetails(batch);
-            console.log('[syncBatch] Batch details reloaded. Triggering router.reload…');
             router.reload({ only: ['batches'], preserveState: true, preserveScroll: true });
-            console.log('[syncBatch] Done.');
         } catch (error) {
-            console.error('[syncBatch] Error caught:', error);
-            toast.error(error.message || 'Failed to sync. Please try again.');
+            toast.error(error?.response?.data?.message || error?.message || 'Failed to sync. Please try again.');
         } finally {
             setSyncing(false);
-            console.groupEnd();
         }
     };
 
@@ -410,8 +350,8 @@ export default function AttendanceImports({ batches, filters }) {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {batchDetails.logs?.length > 0 ? (
-                                            batchDetails.logs.map((log) => (
+                                        {batchDetails.logs?.data?.length > 0 ? (
+                                            batchDetails.logs.data.map((log) => (
                                                 <tr key={log.id} className="border-b border-gray-100 dark:border-gray-700/80 text-gray-700 dark:text-gray-200">
                                                     <td className="py-3 px-3 align-top">
                                                         <p className="font-semibold text-gray-800 dark:text-gray-100">{log.faculty_name}</p>
@@ -440,6 +380,11 @@ export default function AttendanceImports({ batches, filters }) {
                                         )}
                                     </tbody>
                                 </table>
+                                {batchDetails.logs?.last_page > 1 && (
+                                    <p className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">
+                                        Showing {batchDetails.logs.from ?? 0}–{batchDetails.logs.to ?? 0} of {batchDetails.logs.total} logs.
+                                    </p>
+                                )}
                             </div>
 
                             <div className="rounded-xl border border-dashed border-gray-300 dark:border-gray-600 p-4">
