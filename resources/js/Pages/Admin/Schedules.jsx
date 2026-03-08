@@ -982,13 +982,13 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
 
     return (
         <div className="mt-5 space-y-6">
-        {errors.general && (
-                    <div className="mb-4 rounded-xl border border-red-200 dark:border-red-800/50 bg-red-50 dark:bg-red-900/20 px-4 py-3">
-                        <p className="text-sm font-semibold text-red-700 dark:text-red-400">{errors.general}</p>
-                    </div>
-                )}
+            {errors.general && (
+                <div className="mb-4 rounded-xl border border-red-200 dark:border-red-800/50 bg-red-50 dark:bg-red-900/20 px-4 py-3">
+                    <p className="text-sm font-semibold text-red-700 dark:text-red-400">{errors.general}</p>
+                </div>
+            )}
 
-                {/* Top fields grid */}
+            {/* Top fields grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormField label="Faculty" error={errors.faculty_id}>
                     <select

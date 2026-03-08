@@ -115,8 +115,10 @@ class AdminHolidayController extends Controller
             return response()->json([]);
         }
 
-        $holidays = Holiday::where('name', 'like', "%{$query}%")
-            ->orWhere('type', 'like', "%{$query}%")
+        $holidays = Holiday::where(function ($q) use ($query) {
+            $q->where('name', 'like', "%{$query}%")
+              ->orWhere('type', 'like', "%{$query}%");
+        })
             ->orderBy('holiday_date')
             ->limit(8)
             ->get(['id', 'name', 'type', 'holiday_date']);
