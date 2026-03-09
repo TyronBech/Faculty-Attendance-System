@@ -17,6 +17,14 @@ return new class extends Migration
         });
     }
 
+    /**
+     * Restore the foreign key constraint.
+     *
+     * WARNING: This rollback will fail if any biometric_logs rows have a biometric_id
+     * that does not correspond to an active faculties.biometric_id (i.e. unrecognized-ID
+     * logs that were inserted after the up() migration ran). Remove or update those rows
+     * before attempting to roll back this migration.
+     */
     public function down(): void
     {
         Schema::table('biometric_logs', function (Blueprint $table) {

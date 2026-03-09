@@ -431,7 +431,9 @@ export default function AttendanceImports({ batches, filters }) {
                                     <p className="text-sm text-gray-600 dark:text-gray-300">
                                         {syncableLogsCount > 0
                                             ? <>Ready to sync <span className="font-semibold">{syncableLogsCount}</span> log {syncableLogsCount === 1 ? 'entry' : 'entries'}.</>
-                                            : 'All logs in this batch are already synced.'}
+                                            : (unrecognizedLogsCount > 0
+                                                ? 'All recognized logs in this batch have been synced.'
+                                                : 'All logs in this batch are already synced.')}
                                     </p>
 
                                     <PrimaryButton
@@ -467,7 +469,9 @@ export default function AttendanceImports({ batches, filters }) {
                     <p className="text-sm text-gray-700 dark:text-gray-300">
                         {syncableLogsCount > 0
                             ? <>Sync <span className="font-semibold">{syncableLogsCount}</span> unsynced log {syncableLogsCount === 1 ? 'entry' : 'entries'} now?</>
-                            : 'No unsynced logs were found. You can still continue to verify the batch status.'}
+                            : (unrecognizedLogsCount > 0
+                                ? 'No syncable logs remaining. Unrecognized entries cannot be synced.'
+                                : 'No unsynced logs were found. You can still continue to verify the batch status.')}
                     </p>
                 </div>
 

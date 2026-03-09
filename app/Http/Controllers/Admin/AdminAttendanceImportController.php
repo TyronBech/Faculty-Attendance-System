@@ -184,9 +184,14 @@ class AdminAttendanceImportController extends Controller
         $totalLogs = (int) ($counts->total ?? 0);
         $syncedLogs = (int) ($counts->synced ?? 0);
 
-        // Count logs whose biometric_id has no matching faculty record.
+        // Count unsynced logs whose biometric_id has no matching faculty record.
+        // Uses the already-loaded $knownBiometricIds collection to avoid an extra DB round-trip.
+        // Only unprocessed logs are counted so that the frontend's syncable-count arithmetic
+        // (unsyncedLogs − unrecognizedLogs) remains accurate even when a faculty is soft-deleted
+        // after their logs were already synced.
         $unrecognizedLogs = BiometricLog::where('import_batch_id', $batch->id)
-            ->whereNotIn('biometric_id', Faculty::query()->select('biometric_id'))
+            ->where('is_processed', false)
+            ->whereNotIn('biometric_id', $knownBiometricIds->keys())
             ->count();
 
         return response()->json([
