@@ -143,13 +143,20 @@ class Schedule extends Model
             ->take($perPage)
             ->get();
 
-        $formatted = $items->map(function (Schedule $schedule) {
-            $approvedRequests = ScheduleChangeRequest::where('status', 'approved')
-                ->whereHas('scheduleDetail', function ($q) use ($schedule) {
-                    $q->where('schedule_id', $schedule->id);
-                })
-                ->with('scheduleDetail')
-                ->get();
+        // Pre-load all approved change requests for this page's schedules in a
+        // single query, keyed by schedule_id, to avoid N+1 round-trips.
+        $scheduleIds = $items->pluck('id')->all();
+
+        $approvedRequestsBySchedule = ScheduleChangeRequest::where('status', 'approved')
+            ->whereHas('scheduleDetail', function ($q) use ($scheduleIds): void {
+                $q->whereIn('schedule_id', $scheduleIds);
+            })
+            ->with('scheduleDetail')
+            ->get()
+            ->groupBy(fn (ScheduleChangeRequest $r): int => $r->scheduleDetail?->schedule_id ?? 0);
+
+        $formatted = $items->map(function (Schedule $schedule) use ($approvedRequestsBySchedule) {
+            $approvedRequests = $approvedRequestsBySchedule->get($schedule->id, collect());
 
             return [
                 'id'             => $schedule->id,

@@ -12,7 +12,7 @@ return new class extends Migration {
         }
 
         $driver = DB::getDriverName();
-        if ($driver === 'sqlite') {
+        if ($driver !== 'mysql' && $driver !== 'mariadb') {
             return;
         }
 
@@ -26,7 +26,7 @@ return new class extends Migration {
         }
 
         $driver = DB::getDriverName();
-        if ($driver === 'sqlite') {
+        if ($driver !== 'mysql' && $driver !== 'mariadb') {
             return;
         }
 

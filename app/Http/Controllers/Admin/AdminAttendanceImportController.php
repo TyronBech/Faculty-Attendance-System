@@ -335,13 +335,42 @@ class AdminAttendanceImportController extends Controller
                 : 'This batch is already fully synced.';
         }
 
-        $remainingSyncable = BiometricLog::query()
+        // Determine whether any truly syncable logs remain. A group is syncable only
+        // when there is at least one unprocessed IN *and* one unprocessed OUT log for
+        // the same recognized faculty/date pair. Logs that can never form a complete
+        // pair are excluded so they do not block the batch from reaching 'completed'.
+        $unresolvedRecognizedLogs = BiometricLog::query()
             ->where('import_batch_id', $batch->id)
             ->where('is_processed', false)
             ->whereIn('biometric_id', Faculty::query()->select('biometric_id'))
-            ->count();
+            ->get(['id', 'biometric_id', 'log_datetime', 'log_type']);
 
-        if ($remainingSyncable === 0 && $batch->status !== 'failed') {
+        $hasSyncableRemaining = false;
+
+        if ($unresolvedRecognizedLogs->isNotEmpty()) {
+            $facultyIdMap = Faculty::query()
+                ->whereIn('biometric_id', $unresolvedRecognizedLogs->pluck('biometric_id')->unique()->values())
+                ->pluck('id', 'biometric_id');
+
+            $groupedUnresolved = $unresolvedRecognizedLogs->groupBy(function (BiometricLog $log) use ($facultyIdMap): string {
+                $facultyId = $facultyIdMap->get($log->biometric_id) ?? '0';
+                $date = $log->log_datetime?->toDateString() ?? '';
+
+                return $facultyId . '|' . $date;
+            });
+
+            foreach ($groupedUnresolved as $group) {
+                $hasIn  = $group->contains(fn (BiometricLog $l): bool => strtoupper(trim((string) $l->log_type)) === 'IN');
+                $hasOut = $group->contains(fn (BiometricLog $l): bool => strtoupper(trim((string) $l->log_type)) === 'OUT');
+
+                if ($hasIn && $hasOut) {
+                    $hasSyncableRemaining = true;
+                    break;
+                }
+            }
+        }
+
+        if (! $hasSyncableRemaining && $batch->status !== 'failed') {
             $batch->update([
                 'status' => 'completed',
                 'completed_at' => now(),
@@ -637,8 +666,8 @@ class AdminAttendanceImportController extends Controller
                 );
 
                 $recordsCreatedOrUpdated++;
-                $processedLogIds = array_merge($processedLogIds, $unusedLogs->pluck('id')->all());
-                $processedLogIds = array_values(array_unique($processedLogIds));
+                $processedLogIds[] = $unusedIn->id;
+                $processedLogIds[] = $unusedOut->id;
             }
         }
 
@@ -740,13 +769,13 @@ class AdminAttendanceImportController extends Controller
             return [];
         }
 
-        $duplicates = [];
-        $seenKeys = [];
-        $existingCache = [];
+        // ── First pass: parse all rows and track first-seen keys ─────────────
+        $parsedRows = [];
+        $seenKeys   = [];
 
         foreach ($rows as $row) {
             $biometricId = trim((string) ($row['biometric_id'] ?? ''));
-            $logType = trim((string) ($row['log_type'] ?? ''));
+            $logType     = trim((string) ($row['log_type'] ?? ''));
             $logDateTime = $row['log_datetime'] ?? '';
 
             if ($biometricId === '' || $logType === '' || $logDateTime === '') {
@@ -761,41 +790,68 @@ class AdminAttendanceImportController extends Controller
             $normalizedType = strtoupper($logType);
             $key = "{$biometricId}|{$parsedDateTime}|{$normalizedType}";
 
-            $isDuplicate = false;
+            $parsedRows[] = [
+                'row'            => $row,
+                'key'            => $key,
+                'biometricId'    => $biometricId,
+                'parsedDateTime' => $parsedDateTime,
+                'normalizedType' => $normalizedType,
+                'duplicateInFile' => isset($seenKeys[$key]),
+            ];
 
-            if (isset($seenKeys[$key])) {
-                $isDuplicate = true;
-            } else {
+            if (! isset($seenKeys[$key])) {
                 $seenKeys[$key] = true;
-                if (! array_key_exists($key, $existingCache)) {
-                    $existingCache[$key] = BiometricLog::withTrashed()
-                        ->where('biometric_id', $biometricId)
-                        ->where('log_datetime', $parsedDateTime)
-                        ->where('log_type', $normalizedType)
-                        ->where(function ($query) use ($batch) {
-                            $query->whereNull('import_batch_id')
-                                ->orWhere('import_batch_id', '!=', $batch->id);
-                        })
-                        ->exists();
-                }
-
-                if ($existingCache[$key]) {
-                    $isDuplicate = true;
-                }
             }
+        }
+
+        if (empty($parsedRows)) {
+            return [];
+        }
+
+        // ── Batch-load all existing logs for these biometric IDs/date range ──
+        // Collect unique biometric IDs and the min/max datetime for the range query.
+        $uniqueBiometricIds = collect($parsedRows)->pluck('biometricId')->unique()->values()->all();
+        $dateTimes          = collect($parsedRows)->pluck('parsedDateTime')->sort()->values();
+        $minDate            = $dateTimes->first();
+        $maxDate            = $dateTimes->last();
+
+        // One query to fetch every log in this date range that belongs to a
+        // different batch (or has no batch), keyed by composite lookup string.
+        $existingSet = BiometricLog::withTrashed()
+            ->whereIn('biometric_id', $uniqueBiometricIds)
+            ->whereBetween('log_datetime', [$minDate, $maxDate])
+            ->where(function ($query) use ($batch): void {
+                $query->whereNull('import_batch_id')
+                    ->orWhere('import_batch_id', '!=', $batch->id);
+            })
+            ->get(['biometric_id', 'log_datetime', 'log_type'])
+            ->mapWithKeys(function (BiometricLog $log): array {
+                $key = $log->biometric_id . '|' . Carbon::parse($log->log_datetime)->format('Y-m-d H:i:s') . '|' . strtoupper(trim((string) $log->log_type));
+
+                return [$key => true];
+            });
+
+        // ── Second pass: classify each row as duplicate or not ───────────────
+        $duplicates = [];
+
+        foreach ($parsedRows as $entry) {
+            $isDuplicate = $entry['duplicateInFile'] || isset($existingSet[$entry['key']]);
 
             if (! $isDuplicate) {
                 continue;
             }
 
+            $key = $entry['key'];
+            $biometricId = $entry['biometricId'];
+
             $duplicates[] = [
-                'id' => 'dup-' . ($row['line'] ?? uniqid()) . '-' . md5($key),
-                'faculty_name' => null,
+                'id'            => 'dup-' . ($entry['row']['line'] ?? uniqid()) . '-' . md5($key),
+                'faculty_name'  => null,
                 'faculty_exists' => $knownBiometricIds->has($biometricId),
-                'biometric_id' => $biometricId,
-                'log_datetime' => $parsedDateTime,
-                'log_type' => $normalizedType,
-                'is_processed' => false,
+                'biometric_id'  => $biometricId,
+                'log_datetime'  => $entry['parsedDateTime'],
+                'log_type'      => $entry['normalizedType'],
+                'is_processed'  => false,
             ];
         }
 
