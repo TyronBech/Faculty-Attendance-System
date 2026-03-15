@@ -20,7 +20,7 @@ return new class extends Migration
             $table->integer('processed_records')->default(0);
             $table->integer('failed_records')->default(0);
             $table->integer('duplicate_records')->default(0);
-            $table->enum('status', ['pending', 'processing', 'completed', 'failed'])->default('pending');
+            $table->enum('status', ['pending', 'completed', 'failed'])->default('pending');
             $table->unsignedBigInteger('imported_by')->nullable();
             $table->timestamp('started_at')->nullable();
             $table->timestamp('completed_at')->nullable();
