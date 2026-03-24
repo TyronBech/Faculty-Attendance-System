@@ -24,6 +24,9 @@ class ScheduleSeeder extends Seeder
 
             $adminUser = User::where('username', 'admin')->first();
 
+            /** @var array<string, int> $roomCodeToId */
+            $roomCodeToId = Room::pluck('id', 'room_code')->all();
+
             foreach ($records as $item) {
                 $externalFacultyId = (int) ($item['faculty_id'] ?? 0);
                 $facultyCode = (string) ($item['faculty_code'] ?? '');
@@ -74,7 +77,7 @@ class ScheduleSeeder extends Seeder
                     }
 
                     $roomCode = $entry['room_code'] ?? null;
-                    $roomId = $roomCode ? Room::where('room_code', $roomCode)->value('id') : null;
+                    $roomId = $roomCode ? ($roomCodeToId[$roomCode] ?? null) : null;
 
                     $detail = ScheduleDetail::firstOrCreate(
                         [

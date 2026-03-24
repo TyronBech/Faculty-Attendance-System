@@ -5,7 +5,6 @@ namespace Database\Seeders;
 use App\Models\Room;
 use App\Services\FlssBackendClient;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\DB;
 
 class RoomSeeder extends Seeder
 {
