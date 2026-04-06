@@ -11,8 +11,10 @@ export default function DtrPreviewModal({ open, onClose, facultyIds = [], month,
     const [loading, setLoading] = useState(false);
     const [data, setData] = useState(null);
     const [downloading, setDownloading] = useState(false);
+    const [exportStatusText, setExportStatusText] = useState('');
     const pollRef = useRef(null);
     const [openIds, setOpenIds] = useState([]);
+    const [timeModeByFaculty, setTimeModeByFaculty] = useState({});
 
     // Fetch preview data when modal opens
     useEffect(() => {
@@ -39,10 +41,16 @@ export default function DtrPreviewModal({ open, onClose, facultyIds = [], month,
     useEffect(() => {
         if (!open || !data?.previews) {
             setOpenIds([]);
+            setTimeModeByFaculty({});
             return;
         }
 
         setOpenIds(data.previews.map((preview) => preview.faculty.id));
+        setTimeModeByFaculty(
+            Object.fromEntries(
+                data.previews.map((preview) => [preview.faculty.id, 'official'])
+            )
+        );
     }, [open, data]);
 
     // Clean up polling on unmount
@@ -63,6 +71,7 @@ export default function DtrPreviewModal({ open, onClose, facultyIds = [], month,
     const handleDownload = useCallback(async () => {
         if (downloading || facultyIds.length === 0) return;
         setDownloading(true);
+        setExportStatusText('Queued for export...');
 
         try {
             const { data: dispatch } = await axios.post(route('admin.dtr-export.dispatch-batch'), {
@@ -73,10 +82,18 @@ export default function DtrPreviewModal({ open, onClose, facultyIds = [], month,
 
             const { token, fileName } = dispatch;
             toast.success('Batch export started. Download will begin shortly...');
+            let attempts = 0;
 
             // Poll for completion
             pollRef.current = setInterval(async () => {
                 try {
+                    attempts += 1;
+                    setExportStatusText(
+                        attempts < 4
+                            ? 'Queued for export...'
+                            : 'Generating ZIP file in background...'
+                    );
+
                     const { data: statusRes } = await axios.get(route('admin.dtr-export.status'), {
                         params: { token, extension: 'zip' },
                     });
@@ -100,6 +117,7 @@ export default function DtrPreviewModal({ open, onClose, facultyIds = [], month,
 
                         toast.success('ZIP downloaded!');
                         setDownloading(false);
+                        setExportStatusText('');
                         onClose();
                     }
                 } catch {
@@ -113,13 +131,15 @@ export default function DtrPreviewModal({ open, onClose, facultyIds = [], month,
                     clearInterval(pollRef.current);
                     pollRef.current = null;
                     setDownloading(false);
-                    toast.error('Batch export timed out. Please try again.');
+                    setExportStatusText('');
+                    toast.error('Export is taking too long. Ensure `php artisan queue:work` is running, then try again.');
                 }
             }, 60000);
         } catch (err) {
             console.error(err);
             toast.error('Failed to start batch export.');
             setDownloading(false);
+            setExportStatusText('');
         }
     }, [downloading, facultyIds, month, year, onClose]);
 
@@ -196,7 +216,17 @@ export default function DtrPreviewModal({ open, onClose, facultyIds = [], month,
                                         {isOpen && (
                                             <div className="p-4 space-y-5 bg-white dark:bg-gray-900">
                                                 <FacultySummary summary={preview.summary} />
-                                                <FacultyTimeLog rows={preview.rows} totalHours={preview.summary?.totalHoursRendered ?? 0} />
+                                                <FacultyTimeLog
+                                                    rows={preview.rows}
+                                                    totalHours={preview.summary?.totalHoursRendered ?? 0}
+                                                    mode={timeModeByFaculty[preview.faculty.id] ?? 'official'}
+                                                    onModeChange={(mode) => {
+                                                        setTimeModeByFaculty((prev) => ({
+                                                            ...prev,
+                                                            [preview.faculty.id]: mode,
+                                                        }));
+                                                    }}
+                                                />
                                             </div>
                                         )}
                                     </div>
@@ -208,8 +238,19 @@ export default function DtrPreviewModal({ open, onClose, facultyIds = [], month,
 
                 {/* Footer */}
                 <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+                    {downloading && (
+                        <div className="mr-auto min-w-[280px]">
+                            <div className="mb-1 text-xs font-medium text-gray-600 dark:text-gray-300">
+                                {exportStatusText}
+                            </div>
+                            <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
+                                <div className="h-full w-1/2 animate-pulse rounded-full bg-gradient-to-r from-[#7a1315] to-[#cc2127]" />
+                            </div>
+                        </div>
+                    )}
                     <button
                         onClick={onClose}
+                        disabled={downloading}
                         className="rounded-xl px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition"
                     >
                         Cancel
@@ -284,14 +325,40 @@ function FacultySummary({ summary }) {
     );
 }
 
-function FacultyTimeLog({ rows, totalHours }) {
+function FacultyTimeLog({ rows, totalHours, mode = 'official', onModeChange }) {
     const totalHoursText = Number(totalHours ?? 0).toFixed(2);
 
     return (
         <div>
-            <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-3">
-                Time Logs
-            </h3>
+            <div className="mb-3 flex items-center justify-between gap-3">
+                <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                    Time Logs
+                </h3>
+                <div className="inline-flex rounded-lg border border-gray-200 dark:border-gray-700 p-1 bg-gray-50 dark:bg-gray-800">
+                    <button
+                        type="button"
+                        onClick={() => onModeChange('official')}
+                        className={`rounded-md px-3 py-1 text-xs font-semibold transition ${
+                            mode === 'official'
+                                ? 'bg-[#7a1315] text-white'
+                                : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                        }`}
+                    >
+                        Official
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => onModeChange('actual')}
+                        className={`rounded-md px-3 py-1 text-xs font-semibold transition ${
+                            mode === 'actual'
+                                ? 'bg-[#7a1315] text-white'
+                                : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                        }`}
+                    >
+                        Actual
+                    </button>
+                </div>
+            </div>
             <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
                 <table className="w-full text-sm">
                     <thead>
@@ -320,13 +387,24 @@ function FacultyTimeLog({ rows, totalHours }) {
                             const isHoliday = r.is_holiday;
                             const hasTardy = r.tardy_minutes > 0 || r.undertime_minutes > 0;
                             const isAbsent = r.status === 'absent' && !isHoliday;
+                            const prefix = mode === 'actual' ? 'actual_' : 'official_';
+                            const displayDay = mode === 'actual'
+                                ? (r.actual_day ?? r.day)
+                                : (r.official_day ?? r.day);
+                            const dayShift = mode === 'actual' ? (r.actual_day_shift ?? 0) : 0;
+                            const morningIn = r[`${prefix}morning_in`] ?? r.morning_in ?? '';
+                            const morningOut = r[`${prefix}morning_out`] ?? r.morning_out ?? '';
+                            const afternoonIn = r[`${prefix}afternoon_in`] ?? r.afternoon_in ?? '';
+                            const afternoonOut = r[`${prefix}afternoon_out`] ?? r.afternoon_out ?? '';
+                            const nightIn = r[`${prefix}night_in`] ?? r.night_in ?? '';
+                            const nightOut = r[`${prefix}night_out`] ?? r.night_out ?? '';
                             const hasTimes = Boolean(
-                                r.morning_in
-                                || r.morning_out
-                                || r.afternoon_in
-                                || r.afternoon_out
-                                || r.night_in
-                                || r.night_out
+                                morningIn
+                                || morningOut
+                                || afternoonIn
+                                || afternoonOut
+                                || nightIn
+                                || nightOut
                             );
 
                             let rowClass = '';
@@ -338,7 +416,12 @@ function FacultyTimeLog({ rows, totalHours }) {
                                 <tr key={r.day} className={`${rowClass} hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors`}>
                                     <td className="px-3 py-1.5 text-center font-bold text-xs">
                                         <div className="flex flex-col items-center gap-0.5">
-                                            <span>{r.day}</span>
+                                            <span>{displayDay}</span>
+                                            {dayShift !== 0 && (
+                                                <span className="text-[9px] font-semibold text-indigo-700 dark:text-indigo-300">
+                                                    {dayShift > 0 ? `+${dayShift}d` : `${dayShift}d`}
+                                                </span>
+                                            )}
                                             {isHoliday && hasTimes && (
                                                 <span className="text-[9px] font-semibold uppercase text-green-700 dark:text-green-400">
                                                     {r.holiday_label || 'Holiday'}
@@ -352,12 +435,12 @@ function FacultyTimeLog({ rows, totalHours }) {
                                         </td>
                                     ) : (
                                         <>
-                                            <td className="px-2 py-1.5 text-center text-xs">{r.morning_in}</td>
-                                            <td className="px-2 py-1.5 text-center text-xs">{r.morning_out}</td>
-                                            <td className="px-2 py-1.5 text-center text-xs">{r.afternoon_in}</td>
-                                            <td className="px-2 py-1.5 text-center text-xs">{r.afternoon_out}</td>
-                                            <td className="px-2 py-1.5 text-center text-xs">{r.night_in}</td>
-                                            <td className="px-2 py-1.5 text-center text-xs">{r.night_out}</td>
+                                            <td className="px-2 py-1.5 text-center text-xs">{morningIn}</td>
+                                            <td className="px-2 py-1.5 text-center text-xs">{morningOut}</td>
+                                            <td className="px-2 py-1.5 text-center text-xs">{afternoonIn}</td>
+                                            <td className="px-2 py-1.5 text-center text-xs">{afternoonOut}</td>
+                                            <td className="px-2 py-1.5 text-center text-xs">{nightIn}</td>
+                                            <td className="px-2 py-1.5 text-center text-xs">{nightOut}</td>
                                         </>
                                     )}
                                     <td className="px-2 py-1.5 text-center text-xs font-medium">

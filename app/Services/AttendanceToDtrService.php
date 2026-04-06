@@ -9,7 +9,7 @@ use Carbon\Carbon;
 // Converts each biometric log to a DTR record
 class AttendanceToDtrService
 {
-    //Start at attendance records
+    // Start at attendance records
     public function convertToDtr(int $facultyId, int $month, int $year): array
     {
         $attendance = $this->buildConversionMap($facultyId, $month, $year);
@@ -46,7 +46,7 @@ class AttendanceToDtrService
             $nightMinutes = (int) ($record->night_minutes ?? 0);
             $overtimeMinutes = (int) ($record->overtime_minutes ?? 0);
             $overtimeNightMinutes = (int) ($record->overtime_night_minutes ?? 0);
-            $hasActualAttendance = !empty($record->actual_time_in) || !empty($record->actual_time_out);
+            $hasActualAttendance = ! empty($record->actual_time_in) || ! empty($record->actual_time_out);
 
             if ($lateMinutes > 0) {
                 $summary['timesLate']++;
@@ -84,48 +84,53 @@ class AttendanceToDtrService
         ];
     }
 
-    private function buildConversionMap(int $facultyId, int $month, int $year): array {
+    private function buildConversionMap(int $facultyId, int $month, int $year): array
+    {
         $monthlyAttendance = AttendanceRecord::where('faculty_id', $facultyId)
-                            ->whereYear('attendance_date', $year)
-                            ->whereMonth('attendance_date', $month)
-                            ->with('faculty:id,first_name,middle_name,last_name,department_id')
-                            ->get();
+            ->whereYear('attendance_date', $year)
+            ->whereMonth('attendance_date', $month)
+            ->with('faculty:id,first_name,middle_name,last_name,department_id')
+            ->get();
 
         $attendance = [];
-        foreach($monthlyAttendance as $mt){
+        foreach ($monthlyAttendance as $mt) {
+            $mt->raw_actual_time_in = $mt->actual_time_in;
+            $mt->raw_actual_time_out = $mt->actual_time_out;
+
             $daySource = $mt->official_time_in ?? $mt->attendance_date;
             if (empty($daySource)) {
                 continue;
             }
 
             $attendanceDay = Carbon::parse($daySource)->day;
-            $hasOfficialSchedule = !empty($mt->official_time_in) && !empty($mt->official_time_out);
-            $hasActualAttendance = !empty($mt->actual_time_in) || !empty($mt->actual_time_out);
+            $hasOfficialSchedule = ! empty($mt->official_time_in) && ! empty($mt->official_time_out);
+            $hasActualAttendance = ! empty($mt->actual_time_in) || ! empty($mt->actual_time_out);
 
-            if ($hasOfficialSchedule && !$hasActualAttendance) {
+            if ($hasOfficialSchedule && ! $hasActualAttendance) {
                 $attendance[$attendanceDay] = [
                     'status' => 'absent',
                     'record' => $mt,
                     'holidays' => [],
                 ];
+
                 continue;
             }
 
-            $sameOfficialIn = !empty($mt->official_time_in) && !empty($mt->operational_time_in)
+            $sameOfficialIn = ! empty($mt->official_time_in) && ! empty($mt->operational_time_in)
                 ? Carbon::parse($mt->official_time_in)->equalTo(Carbon::parse($mt->operational_time_in))
                 : false;
-            $sameOfficialOut = !empty($mt->official_time_out) && !empty($mt->operational_time_out)
+            $sameOfficialOut = ! empty($mt->official_time_out) && ! empty($mt->operational_time_out)
                 ? Carbon::parse($mt->official_time_out)->equalTo(Carbon::parse($mt->operational_time_out))
                 : false;
 
-            $canConvert = !empty($mt->official_time_in)
-                && !empty($mt->official_time_out)
-                && !empty($mt->operational_time_in)
-                && !empty($mt->actual_time_in);
+            $canConvert = ! empty($mt->official_time_in)
+                && ! empty($mt->official_time_out)
+                && ! empty($mt->operational_time_in)
+                && ! empty($mt->actual_time_in);
 
-            if(
+            if (
                 ($sameOfficialIn && $sameOfficialOut) ||
-                !$canConvert
+                ! $canConvert
             ) {
                 $attendance[$attendanceDay] = [
                     'status' => 'present',
@@ -163,7 +168,8 @@ class AttendanceToDtrService
         return $attendance;
     }
 
-    private function buildHolidaysMap(int $month, int $year): array {
+    private function buildHolidaysMap(int $month, int $year): array
+    {
         $monthHolidays = Holiday::query()
             ->where(function ($query) use ($year, $month) {
                 $query->where(function ($monthlyQuery) use ($year, $month) {
@@ -185,14 +191,15 @@ class AttendanceToDtrService
         return $holidaysByDay;
     }
 
-    private function finalizeAttendanceMapping(array $attendance, array $holidaysByDay, int $month, int $year): array {
+    private function finalizeAttendanceMapping(array $attendance, array $holidaysByDay, int $month, int $year): array
+    {
         $daysInMonth = Carbon::create($year, $month, 1)->daysInMonth;
 
-        for($day = 1; $day <= $daysInMonth; $day++){
-            if(array_key_exists($day, $attendance)) {
+        for ($day = 1; $day <= $daysInMonth; $day++) {
+            if (array_key_exists($day, $attendance)) {
                 if (array_key_exists($day, $holidaysByDay)) {
                     $record = $attendance[$day]['record'] ?? null;
-                    $hasActualAttendance = !empty($record?->actual_time_in) || !empty($record?->actual_time_out);
+                    $hasActualAttendance = ! empty($record?->actual_time_in) || ! empty($record?->actual_time_out);
 
                     $attendance[$day]['holidays'] = $holidaysByDay[$day];
                     $attendance[$day]['status'] = $hasActualAttendance ? 'holiday_present' : 'holiday';
@@ -220,6 +227,4 @@ class AttendanceToDtrService
 
         return $attendance;
     }
-
-
 }

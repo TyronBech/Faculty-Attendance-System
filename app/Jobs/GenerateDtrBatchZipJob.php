@@ -13,7 +13,6 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Storage;
-use Spatie\Browsershot\Browsershot;
 use Spatie\LaravelPdf\Facades\Pdf;
 use ZipArchive;
 
@@ -50,7 +49,7 @@ class GenerateDtrBatchZipJob implements ShouldQueue
         $batchDirectory = "dtr-exports/{$this->token}";
         Storage::disk('local')->makeDirectory($batchDirectory);
 
-        $controller = new AdminDtrExportController();
+        $controller = new AdminDtrExportController;
 
         foreach ($this->facultyIds as $facultyId) {
             $faculty = $faculties->get($facultyId);
@@ -61,7 +60,7 @@ class GenerateDtrBatchZipJob implements ShouldQueue
 
             $conversion = $service->convertToDtr($faculty->id, $this->month, $this->year);
             $attendance = $conversion['attendance'] ?? [];
-            $summary    = $conversion['summary'] ?? [];
+            $summary = $conversion['summary'] ?? [];
 
             $rows = $controller->buildRows($attendance, $this->month, $this->year);
 
@@ -75,7 +74,7 @@ class GenerateDtrBatchZipJob implements ShouldQueue
                 ->orderBy('id')
                 ->get()
                 ->map(fn (AttendanceAdjustment $adj) => [
-                    'date'   => optional($adj->attendanceRecord?->attendance_date)->format('M d, Y') ?? 'N/A',
+                    'date' => optional($adj->attendanceRecord?->attendance_date)->format('M d, Y') ?? 'N/A',
                     'reason' => (string) $adj->reason,
                 ])
                 ->values()
@@ -88,32 +87,22 @@ class GenerateDtrBatchZipJob implements ShouldQueue
             $outputPath = Storage::disk('local')->path("{$batchDirectory}/{$fileName}");
 
             Pdf::view('pdf.monthly-dtr', [
-                'faculty'       => $faculty,
-                'rows'          => $rows,
-                'summary'       => $summary,
+                'faculty' => $faculty,
+                'rows' => $rows,
+                'summary' => $summary,
                 'manualEntries' => $manualEntries,
-                'periodLabel'   => $periodLabel,
-                'generatedAt'   => now()->format('l, F d, Y'),
+                'periodLabel' => $periodLabel,
+                'generatedAt' => now()->format('l, F d, Y'),
             ])
+                ->driver('dompdf')
                 ->paperSize(105, 297, 'mm')
                 ->portrait()
                 ->margins(0, 0, 0, 0)
-                ->withBrowsershot(function (Browsershot $browsershot): void {
-                    $browsershot
-                        ->showBackground()
-                        ->emulateMedia('print')
-                        ->waitUntilNetworkIdle()
-                        ->windowSize(397, 1123)
-                        ->scale(1)
-                        ->setOption('printBackground', true)
-                        ->setOption('preferCSSPageSize', true)
-                        ->setOption('displayHeaderFooter', false);
-                })
                 ->save($outputPath);
         }
 
         $zipPath = Storage::disk('local')->path("dtr-exports/{$this->token}.zip");
-        $zip = new ZipArchive();
+        $zip = new ZipArchive;
 
         if ($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
             return;
