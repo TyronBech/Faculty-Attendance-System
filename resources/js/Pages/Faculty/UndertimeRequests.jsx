@@ -103,7 +103,6 @@ export default function UndertimeRequests({ requests: initialRequests, filters, 
                 setPreviewAttachment(null);
                 setSelectedSchedule(schedulesWithUndertime && schedulesWithUndertime.length > 0 ? schedulesWithUndertime[0] : null);
                 fetchRequests(filterStatus, 1);
-                toast.success('Undertime request submitted successfully!');
             },
             onError: (errors) => {
                 toast.error(errors.reason || 'Please fix the errors and try again.');
