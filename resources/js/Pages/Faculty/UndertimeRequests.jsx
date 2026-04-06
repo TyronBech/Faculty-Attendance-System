@@ -48,11 +48,12 @@ const formatDateTime = (dateString) => {
     }
 };
 
-export default function UndertimeRequests({ requests: initialRequests, filters }) {
+export default function UndertimeRequests({ requests: initialRequests, filters, schedulesWithUndertime = [], commonReasons = [] }) {
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showCancelModal, setShowCancelModal] = useState(false);
     const [selectedRequest, setSelectedRequest] = useState(null);
     const [filterStatus, setFilterStatus] = useState(filters.status || '');
+    const [selectedSchedule, setSelectedSchedule] = useState(schedulesWithUndertime && schedulesWithUndertime.length > 0 ? schedulesWithUndertime[0] : null);
 
     // ── AJAX-driven requests list ────────────────────────────
     const [requestsData, setRequestsData] = useState(initialRequests);
@@ -67,7 +68,7 @@ export default function UndertimeRequests({ requests: initialRequests, filters }
 
     // ── Create form ──────────────────────────────────────────
     const createForm = useForm({
-        attendance_record_id: '',
+        attendance_record_id: selectedSchedule?.id || '',
         reason: '',
         attachment: null,
     });
@@ -86,13 +87,13 @@ export default function UndertimeRequests({ requests: initialRequests, filters }
             };
             reader.readAsDataURL(file);
         } else {
-            // Signal it's a document (PDF, doc), show a generic state instead of image preview
             setPreviewAttachment('document');
         }
     };
 
     const handleCreate = (e) => {
         e.preventDefault();
+        
         createForm.post(route('faculty.undertime-requests.store'), {
             preserveScroll: true,
             forceFormData: true,
@@ -100,11 +101,12 @@ export default function UndertimeRequests({ requests: initialRequests, filters }
                 setShowCreateModal(false);
                 createForm.reset();
                 setPreviewAttachment(null);
-                // Refresh the list via AJAX
+                setSelectedSchedule(schedulesWithUndertime && schedulesWithUndertime.length > 0 ? schedulesWithUndertime[0] : null);
                 fetchRequests(filterStatus, 1);
+                toast.success('Undertime request submitted successfully!');
             },
-            onError: () => {
-                toast.error('Please fix the errors and try again.');
+            onError: (errors) => {
+                toast.error(errors.reason || 'Please fix the errors and try again.');
             },
         });
     };
@@ -275,84 +277,153 @@ export default function UndertimeRequests({ requests: initialRequests, filters }
             ) : null}
 
             {/* ═══════════════════════════════════════════════════
-                 CREATE MODAL
+                 CREATE MODAL - SIDE BY SIDE
                 ═══════════════════════════════════════════════════ */}
-            <Modal show={showCreateModal} onClose={() => setShowCreateModal(false)} maxWidth="2xl">
-                <form onSubmit={handleCreate}>
-                    {/* Header */}
-                    <div className="px-6 pt-6 pb-4 border-b border-gray-100 dark:border-gray-700">
-                        <h2 className="text-lg font-extrabold text-gray-900 dark:text-white">
-                            New Undertime Request
-                        </h2>
-                        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                            Submit a request for undertime occurrences. Include a reason for the request.
-                        </p>
-                    </div>
-
-                    {/* Body */}
-                    <div className="px-6 py-5 space-y-5 max-h-[60dvh] overflow-y-auto">
-                        {/* Reason field */}
-                        <div>
-                            <InputLabel value="Reason for Undertime" htmlFor="reason" />
-                            <textarea
-                                id="reason"
-                                rows={4}
-                                className="mt-1 block w-full rounded-xl border-gray-300 shadow-sm focus:border-[#7a1315] focus:ring-[#7a1315] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 text-sm resize-none"
-                                value={createForm.data.reason}
-                                onChange={(e) => { createForm.setData('reason', e.target.value); createForm.clearErrors('reason'); }}
-                                placeholder="Briefly explain the reason for your undertime..."
-                            />
-                            <InputError message={createForm.errors.reason} />
+            <Modal show={showCreateModal} onClose={() => setShowCreateModal(false)} maxWidth="4xl">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-0 h-[75vh] overflow-hidden">
+                    {/* Left: Schedule Selection */}
+                    <div className="flex flex-col h-full overflow-hidden bg-gray-50 dark:bg-gray-900/30 border-r border-gray-100 dark:border-gray-700">
+                        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+                            <h3 className="text-sm font-bold text-gray-900 dark:text-white">Classes with Undertime</h3>
                         </div>
-
-                        <div>
-                            <InputLabel value="Attachment (Optional)" />
-                            <div
-                                onClick={() => fileAttachmentRef.current?.click()}
-                                className="mt-1 flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-700 p-6 cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition-colors bg-gray-50 dark:bg-gray-900"
-                            >
-                                {previewAttachment === 'document' ? (
-                                    <div className="flex flex-col items-center text-blue-600 dark:text-blue-400">
-                                        <svg className="h-10 w-10 mb-2" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-                                        </svg>
-                                        <p className="text-sm font-bold">{createForm.data.attachment?.name}</p>
-                                        <p className="text-xs mt-1 text-blue-500/70">Click to change file</p>
+                        <div className="flex-1 overflow-y-auto space-y-2 p-4 min-h-0">
+                            {schedulesWithUndertime && schedulesWithUndertime.length > 0 ? (
+                                schedulesWithUndertime.map((schedule) => (
+                                    <div
+                                        key={schedule.id}
+                                        onClick={() => {
+                                            setSelectedSchedule(schedule);
+                                            createForm.setData('attendance_record_id', schedule.id);
+                                        }}
+                                        className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${
+                                            selectedSchedule?.id === schedule.id
+                                                ? 'border-red-500 bg-red-50 dark:bg-red-900/20'
+                                                : 'border-gray-200 dark:border-gray-700 hover:border-red-300'
+                                        }`}
+                                    >
+                                        <h4 className="font-bold text-sm text-gray-900 dark:text-white line-clamp-1">
+                                            {schedule.subject}
+                                        </h4>
+                                        {schedule.program_code && (
+                                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                                                Program: {schedule.program_code}
+                                            </p>
+                                        )}
+                                        {schedule.year_level && schedule.section_name && (
+                                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                                                Year {schedule.year_level} - Section {schedule.section_name}
+                                            </p>
+                                        )}
+                                        <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                                            {schedule.attendance_date}
+                                        </p>
+                                        <p className="text-xs text-gray-500 dark:text-gray-500 mt-0.5">
+                                            {schedule.scheduled_time_in} - {schedule.scheduled_time_out}
+                                        </p>
+                                        <div className="mt-2 flex justify-between items-center">
+                                            <span className="text-xs font-bold text-red-600 dark:text-red-400">
+                                                {fmtMins(schedule.undertime_minutes)}
+                                            </span>
+                                        </div>
                                     </div>
-                                ) : previewAttachment ? (
-                                    <img src={previewAttachment} alt="Attachment Preview" className="max-h-36 rounded-lg object-contain" />
-                                ) : (
-                                    <>
-                                        <svg className="h-8 w-8 text-gray-400 dark:text-gray-500 mb-2" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
-                                        </svg>
-                                        <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">Click to upload Attachment (Optional)</p>
-                                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">PDF, JPG, PNG or WebP (max 5MB)</p>
-                                    </>
-                                )}
-                            </div>
-                            <input
-                                ref={fileAttachmentRef}
-                                id="attachment"
-                                type="file"
-                                className="hidden"
-                                onChange={handleFileChange}
-                                accept=".pdf,.jpg,.jpeg,.png,.webp"
-                            />
-                            <InputError message={createForm.errors.attachment} />
+                                ))
+                            ) : (
+                                <p className="text-xs text-gray-500 dark:text-gray-400 text-center py-8">
+                                    No schedules with undertime found
+                                </p>
+                            )}
                         </div>
                     </div>
 
-                    {/* Footer */}
-                    <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-700 flex justify-end gap-3">
-                        <SecondaryButton type="button" onClick={() => setShowCreateModal(false)}>
-                            Cancel
-                        </SecondaryButton>
-                        <PrimaryButton type="submit" disabled={createForm.processing}>
-                            {createForm.processing ? 'Submitting…' : 'Submit Request'}
-                        </PrimaryButton>
+                    {/* Right: Request Form */}
+                    <div className="flex flex-col h-full">
+                        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+                            <h3 className="text-sm font-bold text-gray-900 dark:text-white">Request Details</h3>
+                        </div>
+                        
+                        <form onSubmit={handleCreate} className="flex flex-col flex-1 min-h-0">
+                            <div className="px-6 py-5 space-y-5 overflow-y-auto flex-1">
+                                {/* Schedule Context */}
+                                {selectedSchedule && (
+                                    <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+                                        <p className="text-xs font-bold text-blue-900 dark:text-blue-300 mb-2">Schedule Context</p>
+                                        <div className="text-xs space-y-1 text-blue-800 dark:text-blue-400">
+                                            <p><strong>Course:</strong> {selectedSchedule.subject}</p>
+                                            {selectedSchedule.program_code && (
+                                                <p><strong>Program:</strong> {selectedSchedule.program_code}</p>
+                                            )}
+                                            {selectedSchedule.year_level && selectedSchedule.section_name && (
+                                                <p><strong>Year & Section:</strong> Year {selectedSchedule.year_level} - Section {selectedSchedule.section_name}</p>
+                                            )}
+                                            <p><strong>Expected:</strong> {selectedSchedule.required_hours}h</p>
+                                            <p><strong>Rendered:</strong> {selectedSchedule.total_hours_rendered}h</p>
+                                            <p className="pt-1 border-t border-blue-200 dark:border-blue-800 font-bold text-red-600 dark:text-red-400">
+                                                <strong>Undertime:</strong> {fmtMins(selectedSchedule.undertime_minutes)}
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Reason for Undertime - Textarea */}
+                                <div>
+                                    <InputLabel value="Reason for Undertime" htmlFor="reason" />
+                                    <textarea
+                                        id="reason"
+                                        rows={3}
+                                        className="mt-2 block w-full rounded-xl border-gray-300 shadow-sm focus:border-[#7a1315] focus:ring-[#7a1315] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 text-sm resize-none"
+                                        value={createForm.data.reason}
+                                        onChange={(e) => { createForm.setData('reason', e.target.value); createForm.clearErrors('reason'); }}
+                                        placeholder="Briefly explain the reason for your undertime..."
+                                    />
+                                    <InputError message={createForm.errors.reason} />
+                                </div>
+
+                                {/* Attachment */}
+                                <div>
+                                    <InputLabel value="Attachment (Optional)" />
+                                    <div
+                                        onClick={() => fileAttachmentRef.current?.click()}
+                                        className="mt-2 flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-700 p-3 cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition-colors bg-gray-50 dark:bg-gray-800"
+                                    >
+                                        {previewAttachment === 'document' ? (
+                                            <div className="text-center text-blue-600 dark:text-blue-400">
+                                                <p className="text-xs font-bold">{createForm.data.attachment?.name}</p>
+                                                <p className="text-xs mt-1 opacity-70">Click to change</p>
+                                            </div>
+                                        ) : previewAttachment ? (
+                                            <img src={previewAttachment} alt="Preview" className="max-h-20 rounded object-contain" />
+                                        ) : (
+                                            <>
+                                                <svg className="h-5 w-5 text-gray-400 mb-1" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+                                                </svg>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">Upload file</p>
+                                                <p className="text-xs text-gray-400 dark:text-gray-500">PDF, JPG, PNG (max 5MB)</p>
+                                            </>
+                                        )}
+                                    </div>
+                                    <input
+                                        ref={fileAttachmentRef}
+                                        type="file"
+                                        className="hidden"
+                                        onChange={handleFileChange}
+                                        accept=".pdf,.jpg,.jpeg,.png"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Footer */}
+                            <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 flex justify-end gap-3 flex-shrink-0">
+                                <SecondaryButton type="button" onClick={() => setShowCreateModal(false)}>
+                                    Cancel
+                                </SecondaryButton>
+                                <PrimaryButton type="submit" disabled={createForm.processing || !selectedSchedule || !createForm.data.reason?.trim()}>
+                                    {createForm.processing ? 'Submitting…' : 'Submit Request'}
+                                </PrimaryButton>
+                            </div>
+                        </form>
                     </div>
-                </form>
+                </div>
             </Modal>
 
             {/* ═══════════════════════════════════════════════════
@@ -424,7 +495,19 @@ function RequestCard({ req, onCancel, onPreviewAttachment }) {
     // Get undertime details from attendance record relationship
     const undertimeMin = req.attendance_record?.undertime_minutes || 0;
     const rawDateStr = req.attendance_record?.raw_date || req.created_at;
-    const attendanceDate = rawDateStr ? new Date(rawDateStr).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' }) : '';
+    const attendanceDate = req.attendance_record?.attendance_date 
+        ? new Date(req.attendance_record.attendance_date).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })
+        : '';
+    
+    // Use course_name from backend if available, otherwise fallback
+    const courseName = req.course_name || 'Unknown Course';
+    
+    // Get schedule details
+    const programCode = req.attendance_record?.schedule_detail?.program_code || '';
+    const yearLevel = req.attendance_record?.schedule_detail?.year_level || '';
+    const sectionName = req.attendance_record?.schedule_detail?.section_name || '';
+    
+    const submittedDate = rawDateStr ? new Date(rawDateStr).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' }) : '';
 
     return (
         <div
@@ -445,17 +528,23 @@ function RequestCard({ req, onCancel, onPreviewAttachment }) {
                             <h3 className="font-bold text-gray-900 dark:text-white">
                                 {fmtMins(undertimeMin)} Undertime
                             </h3>
-                            <div className="flex items-center gap-2 flex-wrap mt-0.5">
-                                <p className="text-xs text-gray-500 dark:text-gray-400">
-                                    {attendanceDate}
+                            <p className="text-xs text-gray-600 dark:text-gray-300 mt-0.5 line-clamp-1">
+                                {courseName}
+                            </p>
+                            <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 space-y-0">
+                                <p>
+                                    {programCode && `Program: ${programCode}`}
+                                    {programCode && yearLevel && sectionName && ' | '}
+                                    {yearLevel && sectionName && `Year ${yearLevel} - Section ${sectionName}`}
                                 </p>
-                                <p className="text-xs font-semibold text-orange-600 dark:text-orange-400 flex items-center gap-1">
-                                    <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 24 24">
-                                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/>
-                                    </svg>
-                                    Submitted {formatDateTime(req.created_at)}
-                                </p>
+                                <p>Class: {attendanceDate}</p>
                             </div>
+                            <p className="text-xs font-semibold text-orange-600 dark:text-orange-400 flex items-center gap-1 mt-1">
+                                <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/>
+                                </svg>
+                                Submitted {formatDateTime(req.created_at)}
+                            </p>
                         </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">

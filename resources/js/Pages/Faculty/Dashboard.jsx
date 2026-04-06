@@ -4,6 +4,7 @@ import ScrollToTop from '@/Components/ScrollToTop';
 import Dropdown from '@/Components/Dropdown';
 import { Head, Link, usePage, router } from '@inertiajs/react';
 import { useState, useEffect } from 'react';
+import { formatHours } from '@/Utils/formatHours';
 import axios from 'axios';
 import {
     AreaChart,
@@ -550,7 +551,7 @@ export default function FacultyDashboard({ stats, todaySchedule, checkInTrend, m
                                                     </span>
                                                 </div>
                                                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                                                    {log.dayOfWeek} • Rendered: {log.hoursRendered} hrs
+                                                    {log.dayOfWeek} • Rendered: {formatHours(log.hoursRendered)}
                                                 </p>
                                             </div>
                                         </div>
