@@ -20,6 +20,24 @@ const CLASS_TYPE_BADGE = {
     asynchronous: 'bg-purple-50 text-purple-700 ring-purple-600/20 dark:bg-purple-900/20 dark:text-purple-400',
 };
 
+const formatDateTime = (dateString) => {
+    if (!dateString) return '';
+    try {
+        const date = new Date(dateString);
+        return date.toLocaleString('en-PH', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true,
+        });
+    } catch (e) {
+        return dateString;
+    }
+};
+
 function ApprovalCard({ request, onApprove, onReject, isExpanded, toggleExpand, onOpenScreenshot }) {
     const handleActionClick = (event, callback) => {
         event.stopPropagation();
@@ -173,7 +191,7 @@ function ApprovalCard({ request, onApprove, onReject, isExpanded, toggleExpand, 
                                 </p>
                                 <div className="space-y-1 text-sm text-gray-700 dark:text-gray-300">
                                     <p><span className="font-semibold">Reviewed by:</span> {request.reviewed_by}</p>
-                                    <p><span className="font-semibold">Date:</span> {request.reviewed_at}</p>
+                                    <p><span className="font-semibold">Date:</span> {formatDateTime(request.reviewed_at)}</p>
                                     {request.review_remarks && (
                                         <div className="mt-2">
                                             <p className="font-semibold text-gray-600 dark:text-gray-400">Admin Notes:</p>

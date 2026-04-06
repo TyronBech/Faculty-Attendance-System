@@ -44,6 +44,24 @@ function formatTimeToAmPm(timeValue) {
     return `${String(hours12).padStart(2, '0')}:${minutes} ${period}`;
 }
 
+const formatDateTime = (dateString) => {
+    if (!dateString) return '';
+    try {
+        const date = new Date(dateString);
+        return date.toLocaleString('en-PH', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true,
+        });
+    } catch (e) {
+        return dateString;
+    }
+};
+
 /* ──────────────────────────────────────────────
    Main Component
    ────────────────────────────────────────────── */
@@ -587,7 +605,7 @@ function RequestCard({ req, onApprove, onReject }) {
                                 )}
                             </div>
                             <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-                                Submitted {req.created_at}
+                                Submitted {formatDateTime(req.created_at)}
                             </p>
                             {(req.program_code || req.year_level || req.section_name) && (
                                 <p className="text-xs font-semibold text-purple-600 dark:text-purple-400 mt-0.5">
@@ -712,7 +730,7 @@ function RequestCard({ req, onApprove, onReject }) {
                                     <span className="font-semibold">
                                         {req.reviewed_by_email || 'Unknown reviewer'}
                                     </span>
-                                    {' '}on {req.reviewed_at}
+                                    {' '}on {formatDateTime(req.reviewed_at)}
                                 </p>
                                 {req.review_remarks && (
                                     <p className="text-sm text-gray-700 dark:text-gray-300">{req.review_remarks}</p>

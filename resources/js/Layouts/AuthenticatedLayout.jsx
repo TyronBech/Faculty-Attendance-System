@@ -111,7 +111,7 @@ export default function AuthenticatedLayout({ header, children }) {
                                                     type="button"
                                                     className={
                                                         'inline-flex items-center gap-1 border-b-2 px-1 pt-1 text-sm font-medium leading-5 transition-all duration-300 ease-in-out focus:outline-none h-16 ' +
-                                                        (route().current('faculty.schedule-change-requests.*') || route().current('faculty.online-attendance.*')
+                                                        (route().current('faculty.schedule-change-requests.*') || route().current('faculty.online-attendance.*') || route().current('faculty.undertime-requests.*')
                                                             ? 'border-[#7a1315] text-gray-900 font-bold dark:border-red-500 dark:text-white'
                                                             : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:border-gray-700 dark:hover:text-gray-300')
                                                     }
@@ -134,6 +134,12 @@ export default function AuthenticatedLayout({ header, children }) {
                                                     className={route().current('faculty.online-attendance.*') ? '!bg-red-50 !text-[#7a1315] dark:!bg-gray-700 dark:!text-white' : ''}
                                                 >
                                                     Online Attendance
+                                                </Dropdown.Link>
+                                                <Dropdown.Link
+                                                    href={route('faculty.undertime-requests.index')}
+                                                    className={route().current('faculty.undertime-requests.*') ? '!bg-red-50 !text-[#7a1315] dark:!bg-gray-700 dark:!text-white' : ''}
+                                                >
+                                                    Undertime Requests
                                                 </Dropdown.Link>
                                             </Dropdown.Content>
                                         </Dropdown>

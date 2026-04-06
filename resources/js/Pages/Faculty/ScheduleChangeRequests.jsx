@@ -30,6 +30,24 @@ const formatTime12 = (time24) => {
     return `${h}:${m} ${ampm}`;
 };
 
+const formatDateTime = (dateString) => {
+    if (!dateString) return '';
+    try {
+        const date = new Date(dateString);
+        return date.toLocaleString('en-PH', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true,
+        });
+    } catch (e) {
+        return dateString;
+    }
+};
+
 export default function ScheduleChangeRequests({ requests: initialRequests, scheduleDetails, filters }) {
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showCancelModal, setShowCancelModal] = useState(false);
@@ -639,7 +657,7 @@ function RequestCard({ req, onCancel, onPreviewDocument }) {
                                     </span>
                                 )}
                                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                                    Submitted {req.created_at}
+                                    Submitted {formatDateTime(req.created_at)}
                                 </p>
                                 {(req.program_code || req.year_level || req.section_name) && (
                                     <p className="text-xs font-semibold text-purple-600 dark:text-purple-400">
@@ -753,7 +771,7 @@ function RequestCard({ req, onCancel, onPreviewDocument }) {
                         {req.review_remarks && (
                             <div className="mt-3 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-800/30">
                                 <p className="text-xs font-bold text-amber-600 dark:text-amber-400 mb-1">
-                                    Admin Remarks — {req.reviewed_at}
+                                    Admin Remarks — {formatDateTime(req.reviewed_at)}
                                 </p>
                                 <p className="text-sm text-gray-700 dark:text-gray-300">{req.review_remarks}</p>
                             </div>

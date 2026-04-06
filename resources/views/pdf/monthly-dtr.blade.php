@@ -10,8 +10,8 @@
         }
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         html, body {
-            width: 105mm;
-            height: 297mm;
+            width: auto;
+            height: auto;
             margin: 0;
             padding: 0;
             font-family: Arial, Helvetica, sans-serif;
@@ -24,7 +24,13 @@
         .page {
             width: 105mm;
             min-height: 297mm;
-            padding: 4mm 5mm;
+            padding: 4mm 3mm;
+        }
+
+        .content-wrap {
+            width: 95mm;
+            margin: 0 auto;
+            padding: 0 4mm 0 1mm;
         }
 
         table {
@@ -32,9 +38,36 @@
             border-spacing: 0;
         }
 
+        .header-table {
+            width: 100%;
+            table-layout: fixed;
+            margin-bottom: 2px;
+        }
+
+        .header-left {
+            width: 24mm;
+            vertical-align: top;
+            padding-top: 2px;
+        }
+
+        .header-middle {
+            vertical-align: top;
+            padding-top: 3px;
+        }
+
+        .header-right {
+            width: 32mm;
+            text-align: right;
+            vertical-align: top;
+            padding-top: 3px;
+            white-space: nowrap;
+        }
+
         .dtr-table {
             width: 100%;
             border: 1px solid #000;
+            table-layout: fixed;
+            margin: 0 auto;
         }
 
         .dtr-table th,
@@ -45,6 +78,14 @@
             padding: 1px 2px;
             height: 15px;
         }
+
+        .day-col {
+            width: 9mm;
+        }
+
+        .time-col {
+            width: 15mm;
+        }
     </style>
 </head>
 <body>
@@ -54,18 +95,19 @@
     $monthYear  = \Carbon\Carbon::create($rows[0]['day'] ? now()->year : now()->year, now()->month, 1);
 @endphp
 <div class="page">
+<div class="content-wrap">
 
     {{-- ── HEADER ──────────────────────────────────────────────── --}}
-    <table style="width:100%; margin-bottom:2px;">
+    <table class="header-table">
         <tr>
-            <td style="width:35px; vertical-align:top; padding-top:2px;">
-                <img src="{{ public_path('images/PUPLogo.svg') }}"
-                     style="width:30px; height:30px; display:block;" alt="PUP">
+            <td class="header-left">
+                <img src="{{ public_path('images/PUP Taguig Logo.jpg') }}"
+                     style="width:20mm; height:20mm; display:block;" alt="PUP">
             </td>
-            <td style="vertical-align:top; padding-top:3px;">
+            <td class="header-middle">
                 <div style="font-size:9px; font-weight:700;">PUP TAGUIG</div>
             </td>
-            <td style="text-align:right; vertical-align:top; padding-top:3px;">
+            <td class="header-right">
                 <div style="font-size:7.5px; font-style:italic;">Civil Service Form No. 48</div>
             </td>
         </tr>
@@ -84,7 +126,7 @@
     <div style="text-align:center; font-size:7px; font-style:italic; margin-bottom:4px;">(Name)</div>
 
     {{-- ── MONTH & HOURS INFO ──────────────────────────────────── --}}
-    <table style="width:100%; margin-bottom:3px;">
+    <table style="width:100%; margin:0 auto 3px;">
         <tr>
             <td style="font-size:8px; vertical-align:top; width:55%;">
                 <div>For the month of: <strong style="font-size:9px;">{{ $periodLabel }}</strong></div>
@@ -102,6 +144,15 @@
 
     {{-- ── DTR TABLE ───────────────────────────────────────────── --}}
     <table class="dtr-table">
+        <colgroup>
+            <col class="day-col">
+            <col class="time-col">
+            <col class="time-col">
+            <col class="time-col">
+            <col class="time-col">
+            <col class="time-col">
+            <col class="time-col">
+        </colgroup>
         {{-- Column headers --}}
         <tr>
             <th rowspan="2" style="width:22px; font-size:7px; font-weight:700;">Day</th>
@@ -140,7 +191,7 @@
                 @endif
             </td>
             @if ($isHoliday && ! $hasTimes)
-                <td colspan="6" style="font-size:7px; font-style:italic;">{{ $holidayLabel ?: 'HOLIDAY' }}</td>
+                <td colspan="6" style="font-size:7px; font-style:italic;">HOLIDAY</td>
             @else
                 <td style="font-size:7.5px;">{{ $r['morning_in'] }}</td>
                 <td style="font-size:7.5px;">{{ $r['morning_out'] }}</td>
@@ -188,6 +239,7 @@
 
     <div style="text-align:center; font-size:7px; margin-top:4px;">(SEE INSTRUCTION ON BACK)</div>
 
+</div>
 </div>
 </body>
 </html>

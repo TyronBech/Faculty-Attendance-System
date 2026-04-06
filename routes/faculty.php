@@ -4,6 +4,7 @@ use Inertia\Inertia;
 use App\Http\Controllers\Faculty\FacultyDashboardController;
 use App\Http\Controllers\Faculty\ScheduleChangeRequestController;
 use App\Http\Controllers\Faculty\OnlineAttendanceController;
+use App\Http\Controllers\Faculty\UndertimeRequestController;
 
 Route::middleware(['auth', 'auth.faculty'])->group(function () {
     Route::get('/faculty/dashboard', [FacultyDashboardController::class, 'index'])->name('faculty.dashboard');
@@ -41,6 +42,18 @@ Route::middleware(['auth', 'auth.faculty'])->group(function () {
         ->name('faculty.online-attendance.filter');
     Route::get('/faculty/api/online-attendance/check', [OnlineAttendanceController::class, 'checkAttendance'])
         ->name('faculty.online-attendance.check');
+
+    // ── Undertime Requests ────────────────────────────────────────────────
+    Route::get('/faculty/undertime-requests', [UndertimeRequestController::class, 'index'])
+        ->name('faculty.undertime-requests.index');
+    Route::post('/faculty/undertime-requests', [UndertimeRequestController::class, 'store'])
+        ->name('faculty.undertime-requests.store');
+    Route::delete('/faculty/undertime-requests/{undertimeRequest}', [UndertimeRequestController::class, 'destroy'])
+        ->name('faculty.undertime-requests.destroy');
+
+    // AJAX endpoints for undertime requests
+    Route::get('/faculty/api/undertime-requests', [UndertimeRequestController::class, 'filter'])
+        ->name('faculty.undertime-requests.filter');
 });
 
 /*

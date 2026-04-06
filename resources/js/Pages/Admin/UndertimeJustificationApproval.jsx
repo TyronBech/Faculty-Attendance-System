@@ -40,6 +40,24 @@ function ApprovalCard({ justification, onApprove, onReject, isExpanded, toggleEx
         }
     };
 
+    const formatDateTime = (dateString) => {
+        if (!dateString) return '';
+        try {
+            const date = new Date(dateString);
+            return date.toLocaleString('en-PH', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: true,
+            });
+        } catch (e) {
+            return dateString;
+        }
+    };
+
     return (
         <div
             onClick={toggleExpand}
@@ -152,7 +170,7 @@ function ApprovalCard({ justification, onApprove, onReject, isExpanded, toggleEx
                                 </p>
                                 <div className="space-y-1 text-sm text-gray-700 dark:text-gray-300">
                                     <p><span className="font-semibold">Reviewed by:</span> {justification.reviewer_email}</p>
-                                    <p><span className="font-semibold">Date:</span> {justification.reviewed_at}</p>
+                                    <p><span className="font-semibold">Date:</span> {formatDateTime(justification.reviewed_at)}</p>
                                     {justification.review_remarks && (
                                         <div className="mt-2">
                                             <p className="font-semibold text-gray-600 dark:text-gray-400">Admin Notes:</p>

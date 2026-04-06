@@ -22,6 +22,24 @@ const formatTime12 = (time24) => {
     return `${h}:${m} ${ampm}`;
 };
 
+const formatDateTime = (dateString) => {
+    if (!dateString) return '';
+    try {
+        const date = new Date(dateString);
+        return date.toLocaleString('en-PH', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true,
+        });
+    } catch (e) {
+        return dateString;
+    }
+};
+
 const STATUS_STYLES = {
     pending: 'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-400/10 dark:text-amber-400 dark:ring-amber-400/30',
     approved: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-400/10 dark:text-emerald-400 dark:ring-emerald-400/30',
@@ -673,7 +691,7 @@ function RequestCard({ req, onCancel, onOpenScreenshot }) {
                                 )}
                             </h3>
                             <p className="text-xs text-gray-500 dark:text-gray-400">
-                                Submitted {req.created_at}
+                                Submitted {formatDateTime(req.created_at)}
                             </p>
                         </div>
                     </div>
@@ -789,7 +807,7 @@ function RequestCard({ req, onCancel, onOpenScreenshot }) {
                         {req.review_remarks && (
                             <div className="mt-3 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-800/30">
                                 <p className="text-xs font-bold text-amber-600 dark:text-amber-400 mb-1">
-                                    Admin Remarks — {req.reviewed_at}
+                                    Admin Remarks — {formatDateTime(req.reviewed_at)}
                                 </p>
                                 <p className="text-sm text-gray-700 dark:text-gray-300">{req.review_remarks}</p>
                             </div>

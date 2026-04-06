@@ -102,6 +102,11 @@ class Faculty extends Model
         return $this->hasMany(OnlineAttendanceRequest::class);
     }
 
+    public function undertimeRequests(): HasMany
+    {
+        return $this->hasMany(UndertimeRequest::class);
+    }
+
     /* ------------------------------------------------------------------ */
     /*  Schedule Change Request Methods                                    */
     /* ------------------------------------------------------------------ */
