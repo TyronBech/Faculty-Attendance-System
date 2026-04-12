@@ -7,6 +7,7 @@ use App\Http\Requests\Admin\StoreManualAttendanceRequest;
 use App\Services\ManualAttendanceService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Inertia\Response;
 use Throwable;
@@ -43,6 +44,8 @@ class AdminManualAttendanceController extends Controller
                 remarks: $validated['remarks'],
             );
         } catch (Throwable $e) {
+            Log::error('Manual attendance storage failed', ['exception' => $e, 'data' => $validated]);
+
             return back()->with('error', 'An error occurred while saving manual attendance. Please try again.');
         }
 
