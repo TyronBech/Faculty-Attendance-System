@@ -127,13 +127,36 @@ class ManualAttendanceService
     {
         $dayOfWeek = $targetDate->format('l');
 
+        $targetDateString = $targetDate->toDateString();
+
         $faculties = Faculty::query()
             ->where('is_active', true)
+            ->whereHas('schedules', function ($query) use ($targetDateString, $dayOfWeek): void {
+                $query->where('status', 'active')
+                    ->whereDate('effective_from', '<=', $targetDateString)
+                    ->whereDate('effective_until', '>=', $targetDateString)
+                    ->where(function ($scheduleQuery) use ($dayOfWeek): void {
+                        $scheduleQuery->whereHas('scheduleDetails', function ($detailQuery) use ($dayOfWeek): void {
+                            $detailQuery->where('day', $dayOfWeek);
+                        })->orWhereHas('internalSchedules', function ($internalQuery) use ($dayOfWeek): void {
+                            $internalQuery->where('day_of_week', $dayOfWeek)
+                                ->where('is_operational', true);
+                        });
+                    });
+            })
             ->with([
-                'schedules' => function ($query) use ($targetDate): void {
+                'schedules' => function ($query) use ($targetDateString, $dayOfWeek): void {
                     $query->where('status', 'active')
-                        ->whereDate('effective_from', '<=', $targetDate->toDateString())
-                        ->whereDate('effective_until', '>=', $targetDate->toDateString())
+                        ->whereDate('effective_from', '<=', $targetDateString)
+                        ->whereDate('effective_until', '>=', $targetDateString)
+                        ->where(function ($scheduleQuery) use ($dayOfWeek): void {
+                            $scheduleQuery->whereHas('scheduleDetails', function ($detailQuery) use ($dayOfWeek): void {
+                                $detailQuery->where('day', $dayOfWeek);
+                            })->orWhereHas('internalSchedules', function ($internalQuery) use ($dayOfWeek): void {
+                                $internalQuery->where('day_of_week', $dayOfWeek)
+                                    ->where('is_operational', true);
+                            });
+                        })
                         ->orderBy('effective_from');
                 },
                 'schedules.scheduleDetails' => function ($query) use ($dayOfWeek): void {

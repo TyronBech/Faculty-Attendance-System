@@ -36,11 +36,15 @@ class AdminManualAttendanceController extends Controller
     ) {
         $validated = $request->validated();
 
-        $result = $manualAttendanceService->storeManualAttendance(
-            date: $validated['attendance_date'],
-            facultyIds: $validated['faculty_ids'],
-            remarks: $validated['remarks'],
-        );
+        try {
+            $result = $manualAttendanceService->storeManualAttendance(
+                date: $validated['attendance_date'],
+                facultyIds: $validated['faculty_ids'],
+                remarks: $validated['remarks'],
+            );
+        } catch (Throwable $e) {
+            return back()->with('error', 'An error occurred while saving manual attendance. Please try again.');
+        }
 
         if ($result['processed_faculties'] === 0) {
             return back()->with('error', 'No eligible faculty schedules were found for the selected date.');

@@ -125,13 +125,16 @@ export default function ManualAttendance({
         [candidates],
     );
 
-    const selectedFacultyNames = useMemo(
+    const selectedFacultySummaries = useMemo(
         () =>
             candidates
                 .filter((candidate) =>
                     form.data.faculty_ids.includes(candidate.faculty_id),
                 )
-                .map((candidate) => candidate.faculty_name),
+                .map((candidate) => ({
+                    id: candidate.faculty_id,
+                    name: candidate.faculty_name,
+                })),
         [candidates, form.data.faculty_ids],
     );
 
@@ -279,19 +282,19 @@ export default function ManualAttendance({
                                     Select rows, then confirm with required
                                     remarks.
                                 </span>
-                                {selectedFacultyNames
+                                {selectedFacultySummaries
                                     .slice(0, 3)
-                                    .map((name) => (
+                                    .map((faculty) => (
                                         <span
-                                            key={name}
+                                            key={faculty.id}
                                             className="inline-flex items-center rounded-lg bg-red-50 dark:bg-red-900/20 px-2.5 py-1 text-xs font-semibold text-[#7a1315] dark:text-red-300 border border-red-200 dark:border-red-800/50"
                                         >
-                                            {name}
+                                            {faculty.name}
                                         </span>
                                     ))}
-                                {selectedFacultyNames.length > 3 && (
+                                {selectedFacultySummaries.length > 3 && (
                                     <span className="inline-flex items-center rounded-lg bg-gray-200/70 dark:bg-gray-700 px-2.5 py-1 text-xs font-semibold text-gray-700 dark:text-gray-200">
-                                        +{selectedFacultyNames.length - 3} more
+                                        +{selectedFacultySummaries.length - 3} more
                                         selected
                                     </span>
                                 )}
@@ -325,6 +328,8 @@ export default function ManualAttendance({
                                             <Checkbox
                                                 checked={allSelected}
                                                 onChange={toggleAll}
+                                                aria-label="Select all rows"
+                                                title="Select all rows"
                                             />
                                         </th>
                                         <th className="px-4 py-3 text-left font-semibold">
@@ -401,6 +406,7 @@ export default function ManualAttendance({
                                                                     candidate.faculty_id,
                                                                 )
                                                             }
+                                                            aria-label={`Select ${candidate.faculty_name}`}
                                                         />
                                                     </td>
                                                     <td className="px-4 py-3">
