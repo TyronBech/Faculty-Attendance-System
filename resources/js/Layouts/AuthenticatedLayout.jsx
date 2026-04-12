@@ -1,10 +1,10 @@
-import ApplicationLogo from '@/Components/ApplicationLogo';
-import Dropdown from '@/Components/Dropdown';
-import NavLink from '@/Components/NavLink';
-import ResponsiveNavLink from '@/Components/ResponsiveNavLink';
-import { Link, usePage } from '@inertiajs/react';
-import { useState, useEffect } from 'react';
-import toast from 'react-hot-toast';
+import ApplicationLogo from "@/Components/ApplicationLogo";
+import Dropdown from "@/Components/Dropdown";
+import NavLink from "@/Components/NavLink";
+import ResponsiveNavLink from "@/Components/ResponsiveNavLink";
+import { Link, usePage } from "@inertiajs/react";
+import { useState, useEffect } from "react";
+import toast from "react-hot-toast";
 
 export default function AuthenticatedLayout({ header, children }) {
     const { auth, flash } = usePage().props;
@@ -12,54 +12,60 @@ export default function AuthenticatedLayout({ header, children }) {
     const roles = auth.roles ?? [];
 
     // Determine the correct dashboard route based on user role
-    const isFaculty = roles.includes('faculty');
-    const isAdmin = roles.includes('super_admin') || roles.includes('admin') || roles.includes('hr_staff');
-    const dashboardRoute = isAdmin ? 'admin.dashboard' : (isFaculty ? 'faculty.dashboard' : 'dashboard');
-    const logoutRoute = isAdmin ? 'admin.logout' : 'logout';
+    const isFaculty = roles.includes("faculty");
+    const isAdmin =
+        roles.includes("super_admin") ||
+        roles.includes("admin") ||
+        roles.includes("hr_staff");
+    const dashboardRoute = isAdmin
+        ? "admin.dashboard"
+        : isFaculty
+          ? "faculty.dashboard"
+          : "dashboard";
+    const logoutRoute = isAdmin ? "admin.logout" : "logout";
     const dashboardActive = isAdmin
-        ? route().current('admin.dashboard')
-        : (isFaculty
-            ? route().current('faculty.dashboard')
-            : route().current('dashboard'));
+        ? route().current("admin.dashboard")
+        : isFaculty
+          ? route().current("faculty.dashboard")
+          : route().current("dashboard");
 
     const [showingNavigationDropdown, setShowingNavigationDropdown] =
         useState(false);
-    const [mobileAttendanceOpen, setMobileAttendanceOpen] = useState(false);
-    const [mobileFacultyRequestsOpen, setMobileFacultyRequestsOpen] = useState(false);
-    const [mobileAdminRequestsOpen, setMobileAdminRequestsOpen] = useState(false);
+    const [mobileFacultyRequestsOpen, setMobileFacultyRequestsOpen] =
+        useState(false);
+    const [mobileAdminRequestsOpen, setMobileAdminRequestsOpen] =
+        useState(false);
+    const [mobileAdminAttendanceOpen, setMobileAdminAttendanceOpen] =
+        useState(false);
 
     // ── Global flash → toast ──────────────────────────────────────────────
     useEffect(() => {
         if (flash?.success) toast.success(flash.success);
         if (flash?.error) toast.error(flash.error);
-        if (flash?.warning) toast(
-            flash.warning,
-            {
-                icon: '⚠️',
+        if (flash?.warning)
+            toast(flash.warning, {
+                icon: "⚠️",
                 style: {
-                    background: '#fffbeb',
-                    color: '#92400e',
-                    border: '1px solid #fde68a',
-                    borderRadius: '12px',
-                    fontWeight: '600',
-                    fontSize: '0.875rem',
+                    background: "#fffbeb",
+                    color: "#92400e",
+                    border: "1px solid #fde68a",
+                    borderRadius: "12px",
+                    fontWeight: "600",
+                    fontSize: "0.875rem",
                 },
-            }
-        );
-        if (flash?.info) toast(
-            flash.info,
-            {
-                icon: 'ℹ️',
+            });
+        if (flash?.info)
+            toast(flash.info, {
+                icon: "ℹ️",
                 style: {
-                    background: '#eff6ff',
-                    color: '#1e40af',
-                    border: '1px solid #bfdbfe',
-                    borderRadius: '12px',
-                    fontWeight: '600',
-                    fontSize: '0.875rem',
+                    background: "#eff6ff",
+                    color: "#1e40af",
+                    border: "1px solid #bfdbfe",
+                    borderRadius: "12px",
+                    fontWeight: "600",
+                    fontSize: "0.875rem",
                 },
-            }
-        );
+            });
     }, [flash]);
 
     return (
@@ -71,7 +77,10 @@ export default function AuthenticatedLayout({ header, children }) {
                         <div className="flex items-center">
                             {/* Brand Logo */}
                             <div className="flex shrink-0 items-center">
-                                <Link href={route(dashboardRoute)} className="transition-transform hover:scale-105 active:scale-95">
+                                <Link
+                                    href={route(dashboardRoute)}
+                                    className="transition-transform hover:scale-105 active:scale-95"
+                                >
                                     <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#7a1315] to-[#cc2127] shadow-lg shadow-red-900/20">
                                         <ApplicationLogo className="h-6 w-6 text-white fill-white" />
                                     </div>
@@ -90,16 +99,20 @@ export default function AuthenticatedLayout({ header, children }) {
                                 {isFaculty && (
                                     <>
                                         <NavLink
-                                            href={route('faculty.schedule')}
-                                            active={route().current('faculty.schedule')}
+                                            href={route("faculty.schedule")}
+                                            active={route().current(
+                                                "faculty.schedule",
+                                            )}
                                         >
                                             Schedule
                                         </NavLink>
 
                                         {/* ── Attendance dropdown ───────────── */}
                                         <NavLink
-                                            href={route('faculty.attendance')}
-                                            active={route().current('faculty.attendance')}
+                                            href={route("faculty.attendance")}
+                                            active={route().current(
+                                                "faculty.attendance",
+                                            )}
                                         >
                                             Attendance
                                         </NavLink>
@@ -110,34 +123,79 @@ export default function AuthenticatedLayout({ header, children }) {
                                                 <button
                                                     type="button"
                                                     className={
-                                                        'inline-flex items-center gap-1 border-b-2 px-1 pt-1 text-sm font-medium leading-5 transition-all duration-300 ease-in-out focus:outline-none h-16 ' +
-                                                        (route().current('faculty.schedule-change-requests.*') || route().current('faculty.online-attendance.*') || route().current('faculty.undertime-requests.*')
-                                                            ? 'border-[#7a1315] text-gray-900 font-bold dark:border-red-500 dark:text-white'
-                                                            : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:border-gray-700 dark:hover:text-gray-300')
+                                                        "inline-flex items-center gap-1 border-b-2 px-1 pt-1 text-sm font-medium leading-5 transition-all duration-300 ease-in-out focus:outline-none h-16 " +
+                                                        (route().current(
+                                                            "faculty.schedule-change-requests.*",
+                                                        ) ||
+                                                        route().current(
+                                                            "faculty.online-attendance.*",
+                                                        ) ||
+                                                        route().current(
+                                                            "faculty.undertime-requests.*",
+                                                        )
+                                                            ? "border-[#7a1315] text-gray-900 font-bold dark:border-red-500 dark:text-white"
+                                                            : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:border-gray-700 dark:hover:text-gray-300")
                                                     }
                                                 >
                                                     Requests
-                                                    <svg className="h-4 w-4 opacity-60" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                                        <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                                                    <svg
+                                                        className="h-4 w-4 opacity-60"
+                                                        xmlns="http://www.w3.org/2000/svg"
+                                                        viewBox="0 0 20 20"
+                                                        fill="currentColor"
+                                                    >
+                                                        <path
+                                                            fillRule="evenodd"
+                                                            d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                                                            clipRule="evenodd"
+                                                        />
                                                     </svg>
                                                 </button>
                                             </Dropdown.Trigger>
-                                            <Dropdown.Content align="left" width="48" contentClasses="py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                                            <Dropdown.Content
+                                                align="left"
+                                                width="48"
+                                                contentClasses="py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700"
+                                            >
                                                 <Dropdown.Link
-                                                    href={route('faculty.schedule-change-requests.index')}
-                                                    className={route().current('faculty.schedule-change-requests.*') ? '!bg-red-50 !text-[#7a1315] dark:!bg-gray-700 dark:!text-white' : ''}
+                                                    href={route(
+                                                        "faculty.schedule-change-requests.index",
+                                                    )}
+                                                    className={
+                                                        route().current(
+                                                            "faculty.schedule-change-requests.*",
+                                                        )
+                                                            ? "!bg-red-50 !text-[#7a1315] dark:!bg-gray-700 dark:!text-white"
+                                                            : ""
+                                                    }
                                                 >
                                                     Change Schedule
                                                 </Dropdown.Link>
                                                 <Dropdown.Link
-                                                    href={route('faculty.online-attendance.index')}
-                                                    className={route().current('faculty.online-attendance.*') ? '!bg-red-50 !text-[#7a1315] dark:!bg-gray-700 dark:!text-white' : ''}
+                                                    href={route(
+                                                        "faculty.online-attendance.index",
+                                                    )}
+                                                    className={
+                                                        route().current(
+                                                            "faculty.online-attendance.*",
+                                                        )
+                                                            ? "!bg-red-50 !text-[#7a1315] dark:!bg-gray-700 dark:!text-white"
+                                                            : ""
+                                                    }
                                                 >
                                                     Online Attendance
                                                 </Dropdown.Link>
                                                 <Dropdown.Link
-                                                    href={route('faculty.undertime-requests.index')}
-                                                    className={route().current('faculty.undertime-requests.*') ? '!bg-red-50 !text-[#7a1315] dark:!bg-gray-700 dark:!text-white' : ''}
+                                                    href={route(
+                                                        "faculty.undertime-requests.index",
+                                                    )}
+                                                    className={
+                                                        route().current(
+                                                            "faculty.undertime-requests.*",
+                                                        )
+                                                            ? "!bg-red-50 !text-[#7a1315] dark:!bg-gray-700 dark:!text-white"
+                                                            : ""
+                                                    }
                                                 >
                                                     Undertime Requests
                                                 </Dropdown.Link>
@@ -149,8 +207,12 @@ export default function AuthenticatedLayout({ header, children }) {
                                 {isAdmin && (
                                     <>
                                         <NavLink
-                                            href={route('admin.schedules.index')}
-                                            active={route().current('admin.schedules.*')}
+                                            href={route(
+                                                "admin.schedules.index",
+                                            )}
+                                            active={route().current(
+                                                "admin.schedules.*",
+                                            )}
                                         >
                                             Schedules
                                         </NavLink>
@@ -161,34 +223,79 @@ export default function AuthenticatedLayout({ header, children }) {
                                                 <button
                                                     type="button"
                                                     className={
-                                                        'inline-flex items-center gap-1 border-b-2 px-1 pt-1 text-sm font-medium leading-5 transition-all duration-300 ease-in-out focus:outline-none h-16 ' +
-                                                        (route().current('admin.schedule-change-requests.*') || route().current('admin.online-requests.*') || route().current('admin.undertime-justifications.*')
-                                                            ? 'border-[#7a1315] text-gray-900 font-bold dark:border-red-500 dark:text-white'
-                                                            : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:border-gray-700 dark:hover:text-gray-300')
+                                                        "inline-flex items-center gap-1 border-b-2 px-1 pt-1 text-sm font-medium leading-5 transition-all duration-300 ease-in-out focus:outline-none h-16 " +
+                                                        (route().current(
+                                                            "admin.schedule-change-requests.*",
+                                                        ) ||
+                                                        route().current(
+                                                            "admin.online-requests.*",
+                                                        ) ||
+                                                        route().current(
+                                                            "admin.undertime-justifications.*",
+                                                        )
+                                                            ? "border-[#7a1315] text-gray-900 font-bold dark:border-red-500 dark:text-white"
+                                                            : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:border-gray-700 dark:hover:text-gray-300")
                                                     }
                                                 >
                                                     Requests
-                                                    <svg className="h-4 w-4 opacity-60" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                                        <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                                                    <svg
+                                                        className="h-4 w-4 opacity-60"
+                                                        xmlns="http://www.w3.org/2000/svg"
+                                                        viewBox="0 0 20 20"
+                                                        fill="currentColor"
+                                                    >
+                                                        <path
+                                                            fillRule="evenodd"
+                                                            d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                                                            clipRule="evenodd"
+                                                        />
                                                     </svg>
                                                 </button>
                                             </Dropdown.Trigger>
-                                            <Dropdown.Content align="left" width="48" contentClasses="py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                                            <Dropdown.Content
+                                                align="left"
+                                                width="48"
+                                                contentClasses="py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700"
+                                            >
                                                 <Dropdown.Link
-                                                    href={route('admin.schedule-change-requests.index')}
-                                                    className={route().current('admin.schedule-change-requests.*') ? '!bg-red-50 !text-[#7a1315] dark:!bg-gray-700 dark:!text-white' : ''}
+                                                    href={route(
+                                                        "admin.schedule-change-requests.index",
+                                                    )}
+                                                    className={
+                                                        route().current(
+                                                            "admin.schedule-change-requests.*",
+                                                        )
+                                                            ? "!bg-red-50 !text-[#7a1315] dark:!bg-gray-700 dark:!text-white"
+                                                            : ""
+                                                    }
                                                 >
                                                     Schedule Changes
                                                 </Dropdown.Link>
                                                 <Dropdown.Link
-                                                    href={route('admin.online-requests.index')}
-                                                    className={route().current('admin.online-requests.*') ? '!bg-red-50 !text-[#7a1315] dark:!bg-gray-700 dark:!text-white' : ''}
+                                                    href={route(
+                                                        "admin.online-requests.index",
+                                                    )}
+                                                    className={
+                                                        route().current(
+                                                            "admin.online-requests.*",
+                                                        )
+                                                            ? "!bg-red-50 !text-[#7a1315] dark:!bg-gray-700 dark:!text-white"
+                                                            : ""
+                                                    }
                                                 >
                                                     Online Class Requests
                                                 </Dropdown.Link>
                                                 <Dropdown.Link
-                                                    href={route('admin.undertime-justifications.index')}
-                                                    className={route().current('admin.undertime-justifications.*') ? '!bg-red-50 !text-[#7a1315] dark:!bg-gray-700 dark:!text-white' : ''}
+                                                    href={route(
+                                                        "admin.undertime-justifications.index",
+                                                    )}
+                                                    className={
+                                                        route().current(
+                                                            "admin.undertime-justifications.*",
+                                                        )
+                                                            ? "!bg-red-50 !text-[#7a1315] dark:!bg-gray-700 dark:!text-white"
+                                                            : ""
+                                                    }
                                                 >
                                                     Undertime Justifications
                                                 </Dropdown.Link>
@@ -196,25 +303,97 @@ export default function AuthenticatedLayout({ header, children }) {
                                         </Dropdown>
 
                                         <NavLink
-                                            href={route('admin.holidays.index')}
-                                            active={route().current('admin.holidays.*')}
+                                            href={route("admin.holidays.index")}
+                                            active={route().current(
+                                                "admin.holidays.*",
+                                            )}
                                         >
                                             Holidays
                                         </NavLink>
 
-                                        <NavLink
-                                            href={route('admin.attendance-imports.index')}
-                                            active={route().current('admin.attendance-imports.*')}
-                                        >
-                                            Attendance Imports
-                                        </NavLink>
-
-                                        <NavLink
-                                            href={route('admin.dtr-export.index')}
-                                            active={route().current('admin.dtr-export.*')}
-                                        >
-                                            DTR Export
-                                        </NavLink>
+                                        <Dropdown>
+                                            <Dropdown.Trigger>
+                                                <button
+                                                    type="button"
+                                                    className={
+                                                        "inline-flex items-center gap-1 border-b-2 px-1 pt-1 text-sm font-medium leading-5 transition-all duration-300 ease-in-out focus:outline-none h-16 " +
+                                                        (route().current(
+                                                            "admin.attendance-imports.*",
+                                                        ) ||
+                                                        route().current(
+                                                            "admin.manual-attendance.*",
+                                                        ) ||
+                                                        route().current(
+                                                            "admin.dtr-export.*",
+                                                        )
+                                                            ? "border-[#7a1315] text-gray-900 font-bold dark:border-red-500 dark:text-white"
+                                                            : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:border-gray-700 dark:hover:text-gray-300")
+                                                    }
+                                                >
+                                                    Attendance
+                                                    <svg
+                                                        className="h-4 w-4 opacity-60"
+                                                        xmlns="http://www.w3.org/2000/svg"
+                                                        viewBox="0 0 20 20"
+                                                        fill="currentColor"
+                                                    >
+                                                        <path
+                                                            fillRule="evenodd"
+                                                            d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                                                            clipRule="evenodd"
+                                                        />
+                                                    </svg>
+                                                </button>
+                                            </Dropdown.Trigger>
+                                            <Dropdown.Content
+                                                align="left"
+                                                width="56"
+                                                contentClasses="py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700"
+                                            >
+                                                <Dropdown.Link
+                                                    href={route(
+                                                        "admin.attendance-imports.index",
+                                                    )}
+                                                    className={
+                                                        route().current(
+                                                            "admin.attendance-imports.*",
+                                                        )
+                                                            ? "!bg-red-50 !text-[#7a1315] dark:!bg-gray-700 dark:!text-white"
+                                                            : ""
+                                                    }
+                                                >
+                                                    Attendance Imports
+                                                </Dropdown.Link>
+                                                <Dropdown.Link
+                                                    href={route(
+                                                        "admin.manual-attendance.index",
+                                                    )}
+                                                    className={
+                                                        route().current(
+                                                            "admin.manual-attendance.*",
+                                                        )
+                                                            ? "!bg-red-50 !text-[#7a1315] dark:!bg-gray-700 dark:!text-white"
+                                                            : ""
+                                                    }
+                                                >
+                                                    Manual Attendance
+                                                </Dropdown.Link>
+                                                <Dropdown.Link
+                                                    href={route(
+                                                        "admin.dtr-export.index",
+                                                    )}
+                                                    className={
+                                                        route().current(
+                                                            "admin.dtr-export.*",
+                                                        )
+                                                            ? "!bg-red-50 !text-[#7a1315] dark:!bg-gray-700 dark:!text-white"
+                                                            : ""
+                                                    }
+                                                >
+                                                    DTR Export
+                                                </Dropdown.Link>
+                                            </Dropdown.Content>
+                                        </Dropdown>
                                     </>
                                 )}
                             </div>
@@ -232,7 +411,9 @@ export default function AuthenticatedLayout({ header, children }) {
                                             >
                                                 {/* User Avatar Placeholder */}
                                                 <div className="h-6 w-6 rounded-full bg-gradient-to-tr from-[#7a1315] to-[#cc2127] flex items-center justify-center text-xs text-white uppercase shadow-sm">
-                                                    {user.email.charAt(0).toUpperCase()}
+                                                    {user.email
+                                                        .charAt(0)
+                                                        .toUpperCase()}
                                                 </div>
 
                                                 {user.email}
@@ -258,7 +439,7 @@ export default function AuthenticatedLayout({ header, children }) {
                                             Manage Account
                                         </div>
                                         <Dropdown.Link
-                                            href={route('profile.edit')}
+                                            href={route("profile.edit")}
                                             className="font-medium"
                                         >
                                             Profile Settings
@@ -296,8 +477,8 @@ export default function AuthenticatedLayout({ header, children }) {
                                     <path
                                         className={
                                             !showingNavigationDropdown
-                                                ? 'inline-flex'
-                                                : 'hidden'
+                                                ? "inline-flex"
+                                                : "hidden"
                                         }
                                         strokeLinecap="round"
                                         strokeLinejoin="round"
@@ -307,8 +488,8 @@ export default function AuthenticatedLayout({ header, children }) {
                                     <path
                                         className={
                                             showingNavigationDropdown
-                                                ? 'inline-flex'
-                                                : 'hidden'
+                                                ? "inline-flex"
+                                                : "hidden"
                                         }
                                         strokeLinecap="round"
                                         strokeLinejoin="round"
@@ -324,8 +505,8 @@ export default function AuthenticatedLayout({ header, children }) {
                 {/* Mobile Dropdown Menu */}
                 <div
                     className={
-                        (showingNavigationDropdown ? 'block' : 'hidden') +
-                        ' sm:hidden border-t border-gray-200 dark:border-gray-800 absolute w-full bg-white dark:bg-gray-900 shadow-xl dark:shadow-2xl'
+                        (showingNavigationDropdown ? "block" : "hidden") +
+                        " sm:hidden border-t border-gray-200 dark:border-gray-800 absolute w-full bg-white dark:bg-gray-900 shadow-xl dark:shadow-2xl"
                     }
                 >
                     <div className="space-y-1 pb-3 pt-2">
@@ -339,16 +520,18 @@ export default function AuthenticatedLayout({ header, children }) {
                         {isFaculty && (
                             <>
                                 <ResponsiveNavLink
-                                    href={route('faculty.schedule')}
-                                    active={route().current('faculty.schedule')}
+                                    href={route("faculty.schedule")}
+                                    active={route().current("faculty.schedule")}
                                 >
                                     Schedule
                                 </ResponsiveNavLink>
 
                                 {/* ── Attendance group ───────────── */}
                                 <ResponsiveNavLink
-                                    href={route('faculty.attendance')}
-                                    active={route().current('faculty.attendance')}
+                                    href={route("faculty.attendance")}
+                                    active={route().current(
+                                        "faculty.attendance",
+                                    )}
                                 >
                                     Attendance
                                 </ResponsiveNavLink>
@@ -356,30 +539,61 @@ export default function AuthenticatedLayout({ header, children }) {
                                 {/* ── Requests group ─────────────── */}
                                 <div>
                                     <button
-                                        onClick={() => setMobileFacultyRequestsOpen(!mobileFacultyRequestsOpen)}
+                                        onClick={() =>
+                                            setMobileFacultyRequestsOpen(
+                                                !mobileFacultyRequestsOpen,
+                                            )
+                                        }
                                         className={
-                                            'flex w-full items-center justify-between border-l-4 py-2 pe-4 ps-3 text-start text-base font-medium transition-all duration-300 ' +
-                                            (route().current('faculty.schedule-change-requests.*') || route().current('faculty.online-attendance.*')
-                                                ? 'border-[#7a1315] bg-red-50 text-[#7a1315] dark:border-red-500 dark:bg-red-900/20 dark:text-red-400'
-                                                : 'border-transparent text-gray-600 hover:border-gray-300 hover:bg-gray-50 hover:text-gray-800 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-200')
+                                            "flex w-full items-center justify-between border-l-4 py-2 pe-4 ps-3 text-start text-base font-medium transition-all duration-300 " +
+                                            (route().current(
+                                                "faculty.schedule-change-requests.*",
+                                            ) ||
+                                            route().current(
+                                                "faculty.online-attendance.*",
+                                            )
+                                                ? "border-[#7a1315] bg-red-50 text-[#7a1315] dark:border-red-500 dark:bg-red-900/20 dark:text-red-400"
+                                                : "border-transparent text-gray-600 hover:border-gray-300 hover:bg-gray-50 hover:text-gray-800 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-200")
                                         }
                                     >
                                         Requests
-                                        <svg className={'h-4 w-4 transition-transform duration-200 ' + (mobileFacultyRequestsOpen ? 'rotate-180' : '')} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                            <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                                        <svg
+                                            className={
+                                                "h-4 w-4 transition-transform duration-200 " +
+                                                (mobileFacultyRequestsOpen
+                                                    ? "rotate-180"
+                                                    : "")
+                                            }
+                                            xmlns="http://www.w3.org/2000/svg"
+                                            viewBox="0 0 20 20"
+                                            fill="currentColor"
+                                        >
+                                            <path
+                                                fillRule="evenodd"
+                                                d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                                                clipRule="evenodd"
+                                            />
                                         </svg>
                                     </button>
                                     {mobileFacultyRequestsOpen && (
                                         <div className="bg-gray-50 dark:bg-gray-800/50 ps-4">
                                             <ResponsiveNavLink
-                                                href={route('faculty.schedule-change-requests.index')}
-                                                active={route().current('faculty.schedule-change-requests.*')}
+                                                href={route(
+                                                    "faculty.schedule-change-requests.index",
+                                                )}
+                                                active={route().current(
+                                                    "faculty.schedule-change-requests.*",
+                                                )}
                                             >
                                                 Change Schedule
                                             </ResponsiveNavLink>
                                             <ResponsiveNavLink
-                                                href={route('faculty.online-attendance.index')}
-                                                active={route().current('faculty.online-attendance.*')}
+                                                href={route(
+                                                    "faculty.online-attendance.index",
+                                                )}
+                                                active={route().current(
+                                                    "faculty.online-attendance.*",
+                                                )}
                                             >
                                                 Online Attendance
                                             </ResponsiveNavLink>
@@ -392,8 +606,10 @@ export default function AuthenticatedLayout({ header, children }) {
                         {isAdmin && (
                             <>
                                 <ResponsiveNavLink
-                                    href={route('admin.schedules.index')}
-                                    active={route().current('admin.schedules.*')}
+                                    href={route("admin.schedules.index")}
+                                    active={route().current(
+                                        "admin.schedules.*",
+                                    )}
                                 >
                                     Schedules
                                 </ResponsiveNavLink>
@@ -401,36 +617,74 @@ export default function AuthenticatedLayout({ header, children }) {
                                 {/* ── Admin Requests group ─────────── */}
                                 <div>
                                     <button
-                                        onClick={() => setMobileAdminRequestsOpen(!mobileAdminRequestsOpen)}
+                                        onClick={() =>
+                                            setMobileAdminRequestsOpen(
+                                                !mobileAdminRequestsOpen,
+                                            )
+                                        }
                                         className={
-                                            'flex w-full items-center justify-between border-l-4 py-2 pe-4 ps-3 text-start text-base font-medium transition-all duration-300 ' +
-                                            (route().current('admin.schedule-change-requests.*') || route().current('admin.online-requests.*') || route().current('admin.undertime-justifications.*')
-                                                ? 'border-[#7a1315] bg-red-50 text-[#7a1315] dark:border-red-500 dark:bg-red-900/20 dark:text-red-400'
-                                                : 'border-transparent text-gray-600 hover:border-gray-300 hover:bg-gray-50 hover:text-gray-800 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-200')
+                                            "flex w-full items-center justify-between border-l-4 py-2 pe-4 ps-3 text-start text-base font-medium transition-all duration-300 " +
+                                            (route().current(
+                                                "admin.schedule-change-requests.*",
+                                            ) ||
+                                            route().current(
+                                                "admin.online-requests.*",
+                                            ) ||
+                                            route().current(
+                                                "admin.undertime-justifications.*",
+                                            )
+                                                ? "border-[#7a1315] bg-red-50 text-[#7a1315] dark:border-red-500 dark:bg-red-900/20 dark:text-red-400"
+                                                : "border-transparent text-gray-600 hover:border-gray-300 hover:bg-gray-50 hover:text-gray-800 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-200")
                                         }
                                     >
                                         Requests
-                                        <svg className={'h-4 w-4 transition-transform duration-200 ' + (mobileAdminRequestsOpen ? 'rotate-180' : '')} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                            <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                                        <svg
+                                            className={
+                                                "h-4 w-4 transition-transform duration-200 " +
+                                                (mobileAdminRequestsOpen
+                                                    ? "rotate-180"
+                                                    : "")
+                                            }
+                                            xmlns="http://www.w3.org/2000/svg"
+                                            viewBox="0 0 20 20"
+                                            fill="currentColor"
+                                        >
+                                            <path
+                                                fillRule="evenodd"
+                                                d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                                                clipRule="evenodd"
+                                            />
                                         </svg>
                                     </button>
                                     {mobileAdminRequestsOpen && (
                                         <div className="bg-gray-50 dark:bg-gray-800/50 ps-4">
                                             <ResponsiveNavLink
-                                                href={route('admin.schedule-change-requests.index')}
-                                                active={route().current('admin.schedule-change-requests.*')}
+                                                href={route(
+                                                    "admin.schedule-change-requests.index",
+                                                )}
+                                                active={route().current(
+                                                    "admin.schedule-change-requests.*",
+                                                )}
                                             >
                                                 Schedule Changes
                                             </ResponsiveNavLink>
                                             <ResponsiveNavLink
-                                                href={route('admin.online-requests.index')}
-                                                active={route().current('admin.online-requests.*')}
+                                                href={route(
+                                                    "admin.online-requests.index",
+                                                )}
+                                                active={route().current(
+                                                    "admin.online-requests.*",
+                                                )}
                                             >
                                                 Online Class Requests
                                             </ResponsiveNavLink>
                                             <ResponsiveNavLink
-                                                href={route('admin.undertime-justifications.index')}
-                                                active={route().current('admin.undertime-justifications.*')}
+                                                href={route(
+                                                    "admin.undertime-justifications.index",
+                                                )}
+                                                active={route().current(
+                                                    "admin.undertime-justifications.*",
+                                                )}
                                             >
                                                 Undertime Justifications
                                             </ResponsiveNavLink>
@@ -439,25 +693,90 @@ export default function AuthenticatedLayout({ header, children }) {
                                 </div>
 
                                 <ResponsiveNavLink
-                                    href={route('admin.holidays.index')}
-                                    active={route().current('admin.holidays.*')}
+                                    href={route("admin.holidays.index")}
+                                    active={route().current("admin.holidays.*")}
                                 >
                                     Holidays
                                 </ResponsiveNavLink>
 
-                                <ResponsiveNavLink
-                                    href={route('admin.attendance-imports.index')}
-                                    active={route().current('admin.attendance-imports.*')}
-                                >
-                                    Attendance Imports
-                                </ResponsiveNavLink>
+                                <div>
+                                    <button
+                                        onClick={() =>
+                                            setMobileAdminAttendanceOpen(
+                                                !mobileAdminAttendanceOpen,
+                                            )
+                                        }
+                                        className={
+                                            "flex w-full items-center justify-between border-l-4 py-2 pe-4 ps-3 text-start text-base font-medium transition-all duration-300 " +
+                                            (route().current(
+                                                "admin.attendance-imports.*",
+                                            ) ||
+                                            route().current(
+                                                "admin.manual-attendance.*",
+                                            ) ||
+                                            route().current(
+                                                "admin.dtr-export.*",
+                                            )
+                                                ? "border-[#7a1315] bg-red-50 text-[#7a1315] dark:border-red-500 dark:bg-red-900/20 dark:text-red-400"
+                                                : "border-transparent text-gray-600 hover:border-gray-300 hover:bg-gray-50 hover:text-gray-800 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-200")
+                                        }
+                                    >
+                                        Attendance
+                                        <svg
+                                            className={
+                                                "h-4 w-4 transition-transform duration-200 " +
+                                                (mobileAdminAttendanceOpen
+                                                    ? "rotate-180"
+                                                    : "")
+                                            }
+                                            xmlns="http://www.w3.org/2000/svg"
+                                            viewBox="0 0 20 20"
+                                            fill="currentColor"
+                                        >
+                                            <path
+                                                fillRule="evenodd"
+                                                d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                                                clipRule="evenodd"
+                                            />
+                                        </svg>
+                                    </button>
+                                    {mobileAdminAttendanceOpen && (
+                                        <div className="bg-gray-50 dark:bg-gray-800/50 ps-4">
+                                            <ResponsiveNavLink
+                                                href={route(
+                                                    "admin.attendance-imports.index",
+                                                )}
+                                                active={route().current(
+                                                    "admin.attendance-imports.*",
+                                                )}
+                                            >
+                                                Attendance Imports
+                                            </ResponsiveNavLink>
 
-                                <ResponsiveNavLink
-                                    href={route('admin.dtr-export.index')}
-                                    active={route().current('admin.dtr-export.*')}
-                                >
-                                    DTR Export
-                                </ResponsiveNavLink>
+                                            <ResponsiveNavLink
+                                                href={route(
+                                                    "admin.manual-attendance.index",
+                                                )}
+                                                active={route().current(
+                                                    "admin.manual-attendance.*",
+                                                )}
+                                            >
+                                                Manual Attendance
+                                            </ResponsiveNavLink>
+
+                                            <ResponsiveNavLink
+                                                href={route(
+                                                    "admin.dtr-export.index",
+                                                )}
+                                                active={route().current(
+                                                    "admin.dtr-export.*",
+                                                )}
+                                            >
+                                                DTR Export
+                                            </ResponsiveNavLink>
+                                        </div>
+                                    )}
+                                </div>
                             </>
                         )}
                     </div>
@@ -478,7 +797,7 @@ export default function AuthenticatedLayout({ header, children }) {
                         </div>
 
                         <div className="mt-3 space-y-1">
-                            <ResponsiveNavLink href={route('profile.edit')}>
+                            <ResponsiveNavLink href={route("profile.edit")}>
                                 Profile Settings
                             </ResponsiveNavLink>
                             <ResponsiveNavLink

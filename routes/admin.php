@@ -1,17 +1,18 @@
 <?php
 
-use App\Http\Controllers\Admin\AdminDashboardController;
-use App\Http\Controllers\Admin\AdminHolidayController;
 use App\Http\Controllers\Admin\AdminAttendanceImportController;
+use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\AdminDtrExportController;
 use App\Http\Controllers\Admin\AdminDtrExportPageController;
+use App\Http\Controllers\Admin\AdminHolidayController;
+use App\Http\Controllers\Admin\AdminManualAttendanceController;
 use App\Http\Controllers\Admin\AdminNewPasswordController;
-use App\Http\Controllers\Admin\AdminPasswordResetLinkController;
-use App\Http\Controllers\Admin\AdminScheduleController;
-use App\Http\Controllers\Admin\AdminScheduleChangeRequestController;
 use App\Http\Controllers\Admin\AdminOnlineRequestController;
-use App\Http\Controllers\Admin\AdminUndertimeJustificationController;
+use App\Http\Controllers\Admin\AdminPasswordResetLinkController;
+use App\Http\Controllers\Admin\AdminScheduleChangeRequestController;
+use App\Http\Controllers\Admin\AdminScheduleController;
 use App\Http\Controllers\Admin\AdminSessionController;
+use App\Http\Controllers\Admin\AdminUndertimeJustificationController;
 use Illuminate\Support\Facades\Route;
 
 // ── Admin Guest routes (no auth required) ──────────────────────────────────
@@ -171,4 +172,11 @@ Route::middleware(['auth.admin'])->prefix('admin')->group(function () {
 
     Route::get('/attendance-imports/template', [AdminAttendanceImportController::class, 'downloadTemplate'])
         ->name('admin.attendance-imports.template');
+
+    // ── Manual Attendance Entry ───────────────────────────────────────────
+    Route::get('/manual-attendance', [AdminManualAttendanceController::class, 'index'])
+        ->name('admin.manual-attendance.index');
+
+    Route::post('/manual-attendance', [AdminManualAttendanceController::class, 'store'])
+        ->name('admin.manual-attendance.store');
 });
