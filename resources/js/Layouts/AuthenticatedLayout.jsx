@@ -132,6 +132,9 @@ export default function AuthenticatedLayout({ header, children }) {
                                                         ) ||
                                                         route().current(
                                                             "faculty.undertime-requests.*",
+                                                        ) ||
+                                                        route().current(
+                                                            "faculty.manual-attendance-requests.*",
                                                         )
                                                             ? "border-[#7a1315] text-gray-900 font-bold dark:border-red-500 dark:text-white"
                                                             : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:border-gray-700 dark:hover:text-gray-300")
@@ -198,6 +201,20 @@ export default function AuthenticatedLayout({ header, children }) {
                                                     }
                                                 >
                                                     Undertime Requests
+                                                </Dropdown.Link>
+                                                <Dropdown.Link
+                                                    href={route(
+                                                        "faculty.manual-attendance-requests.index",
+                                                    )}
+                                                    className={
+                                                        route().current(
+                                                            "faculty.manual-attendance-requests.*",
+                                                        )
+                                                            ? "!bg-red-50 !text-[#7a1315] dark:!bg-gray-700 dark:!text-white"
+                                                            : ""
+                                                    }
+                                                >
+                                                    Manual Attendance
                                                 </Dropdown.Link>
                                             </Dropdown.Content>
                                         </Dropdown>
