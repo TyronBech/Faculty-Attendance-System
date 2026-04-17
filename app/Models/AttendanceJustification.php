@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Storage;
 
 class AttendanceJustification extends Model
 {
@@ -12,7 +13,10 @@ class AttendanceJustification extends Model
         'attendance_record_id',
         'faculty_id',
         'type',
+        'requested_time_in',
+        'requested_time_out',
         'justification',
+        'attachment_path',
         'status',
         'reviewed_by',
         'reviewed_at',
@@ -22,8 +26,21 @@ class AttendanceJustification extends Model
     protected function casts(): array
     {
         return [
+            'requested_time_in' => 'datetime',
+            'requested_time_out' => 'datetime',
             'reviewed_at' => 'datetime',
         ];
+    }
+
+    public function getAttachmentUrl(): ?string
+    {
+        if (!$this->attachment_path) {
+            return null;
+        }
+
+        /** @var \Illuminate\Contracts\Filesystem\Filesystem $disk */
+        $disk = Storage::disk('public');
+        return $disk->url($this->attachment_path);
     }
 
     public function attendanceRecord(): \Illuminate\Database\Eloquent\Relations\BelongsTo

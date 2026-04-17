@@ -529,7 +529,7 @@ export default function Schedule({ weeklySchedule, internalSchedule, facultyName
                                     <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1">Load Credits</p>
                                     <div className="flex items-center gap-2 text-gray-900 dark:text-white">
                                         <svg className="h-4 w-4 text-amber-500" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 6.375c0 2.278-1.435 4.172-3.375 4.172-1.94 0-3.375-1.894-3.375-4.172C13.5 4.097 14.935 2.203 16.875 2.203c1.94 0 3.375 1.894 3.375 4.172zM3.375 6.375C3.375 4.097 4.81 2.203 6.75 2.203c1.94 0 3.375 1.894 3.375 4.172S8.69 10.547 6.75 10.547C4.81 10.547 3.375 8.653 3.375 6.375zM3.75 12a.75.75 0 00-.75.75v8.25a.75.75 0 00.75.75h16.5a.75.75 0 00.75-.75V12.75a.75.75 0 00-.75-.75H3.75z" />
                                         </svg>
                                         <span className="text-sm font-black whitespace-nowrap">{formatHours(selectedSchedule.hours || selectedSchedule.requiredHours)}</span>
                                     </div>
