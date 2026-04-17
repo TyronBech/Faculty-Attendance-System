@@ -14,6 +14,7 @@ use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Tests\TestCase;
 
 class AdminAttendanceImportManagementTest extends TestCase
@@ -209,9 +210,13 @@ class AdminAttendanceImportManagementTest extends TestCase
 
         $response->assertOk();
 
-        $tempPath = tempnam(sys_get_temp_dir(), 'attendance-template-') . '.xlsx';
-        file_put_contents($tempPath, $response->getContent());
-        $spreadsheet = IOFactory::load($tempPath);
+        $binaryResponse = $response->baseResponse;
+        $this->assertInstanceOf(BinaryFileResponse::class, $binaryResponse);
+
+        $downloadedFile = $binaryResponse->getFile();
+        $this->assertNotNull($downloadedFile);
+
+        $spreadsheet = IOFactory::load($downloadedFile->getPathname());
         $sheet = $spreadsheet->getActiveSheet();
 
         $this->assertSame('log_datetime', $sheet->getCell('B9')->getValue());
@@ -235,8 +240,8 @@ class AdminAttendanceImportManagementTest extends TestCase
     {
         $department = Department::factory()->create();
         $user = User::create([
-            'username' => 'faculty.' . strtolower(str_replace('-', '', $biometricId)),
-            'email' => strtolower($biometricId) . '@example.com',
+            'username' => 'faculty.'.strtolower(str_replace('-', '', $biometricId)),
+            'email' => strtolower($biometricId).'@example.com',
             'password' => 'password',
             'is_active' => true,
         ]);
@@ -244,7 +249,7 @@ class AdminAttendanceImportManagementTest extends TestCase
         return Faculty::create([
             'user_id' => $user->id,
             'department_id' => $department->id,
-            'faculty_code' => 'FC' . substr(preg_replace('/\D/', '', $biometricId), -4),
+            'faculty_code' => 'FC'.substr(preg_replace('/\D/', '', $biometricId), -4),
             'biometric_id' => $biometricId,
             'first_name' => 'Test',
             'last_name' => 'Faculty',
@@ -254,7 +259,7 @@ class AdminAttendanceImportManagementTest extends TestCase
 
     private function makeSpreadsheetUpload(array $rows, bool $formatDateColumnAsExcelDate = false): UploadedFile
     {
-        $spreadsheet = new Spreadsheet();
+        $spreadsheet = new Spreadsheet;
         $sheet = $spreadsheet->getActiveSheet();
 
         $sheet->fromArray([
@@ -282,7 +287,7 @@ class AdminAttendanceImportManagementTest extends TestCase
             $sheet->setCellValue("D{$rowNumber}", $row[3]);
         }
 
-        $tempPath = tempnam(sys_get_temp_dir(), 'attendance-import-test-') . '.xlsx';
+        $tempPath = tempnam(sys_get_temp_dir(), 'attendance-import-test-').'.xlsx';
         (new Xlsx($spreadsheet))->save($tempPath);
         $spreadsheet->disconnectWorksheets();
 
