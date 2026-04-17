@@ -16,7 +16,8 @@ export default function AuthenticatedLayout({ header, children }) {
     const isAdmin =
         roles.includes("super_admin") ||
         roles.includes("admin") ||
-        roles.includes("hr_staff");
+        roles.includes("hr_staff") ||
+        roles.includes("head_academic_program");
     const dashboardRoute = isAdmin
         ? "admin.dashboard"
         : isFaculty

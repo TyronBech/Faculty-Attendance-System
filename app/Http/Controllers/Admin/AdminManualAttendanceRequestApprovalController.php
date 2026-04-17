@@ -186,9 +186,9 @@ class AdminManualAttendanceRequestApprovalController extends Controller
                 'faculty.user:id,email',
                 'attendanceRecord:id,faculty_id,schedule_detail_id,internal_schedule_id,attendance_date,actual_time_in,actual_time_out,official_time_in,official_time_out,operational_time_in,operational_time_out,status',
                 'attendanceRecord.scheduleDetail:id,schedule_id,day,start_time,end_time,course_code,subject_desc,room_code,hours_required',
-                'attendanceRecord.scheduleDetail.schedule:id,academic_year,semester',
+                'attendanceRecord.scheduleDetail.schedule:id,academic_year,semester,effective_from,effective_until,status',
                 'attendanceRecord.internalSchedule:id,schedule_id,faculty_id,day_of_week,device_time_in,device_time_out,is_operational,required_hours',
-                'attendanceRecord.internalSchedule.schedule:id,academic_year,semester',
+                'attendanceRecord.internalSchedule.schedule:id,academic_year,semester,effective_from,effective_until,status',
                 'reviewer:id,email',
             ])
             ->orderByDesc('created_at');
