@@ -10,6 +10,7 @@ use App\Http\Controllers\Admin\AdminManualAttendanceRequestApprovalController;
 use App\Http\Controllers\Admin\AdminNewPasswordController;
 use App\Http\Controllers\Admin\AdminOnlineRequestController;
 use App\Http\Controllers\Admin\AdminPasswordResetLinkController;
+use App\Http\Controllers\Admin\AdminProfileController;
 use App\Http\Controllers\Admin\AdminScheduleChangeRequestController;
 use App\Http\Controllers\Admin\AdminScheduleController;
 use App\Http\Controllers\Admin\AdminSessionController;
@@ -43,6 +44,12 @@ Route::middleware(['auth.admin'])->prefix('admin')->group(function () {
 
     Route::post('/logout', [AdminSessionController::class, 'destroy'])
         ->name('admin.logout');
+
+    Route::get('/profile', [AdminProfileController::class, 'edit'])
+        ->name('admin.profile.edit');
+
+    Route::patch('/profile', [AdminProfileController::class, 'update'])
+        ->name('admin.profile.update');
 
     // ── Dashboard ──────────────────────────────────────────────────────────
     Route::get('/dashboard', [AdminDashboardController::class, 'index'])

@@ -22,7 +22,12 @@ export default function AuthenticatedLayout({ header, children }) {
         : isFaculty
           ? "faculty.dashboard"
           : "dashboard";
+    const profileRoute = isAdmin ? "admin.profile.edit" : "profile.edit";
     const logoutRoute = isAdmin ? "admin.logout" : "logout";
+    const displayName = auth.display_name ?? user.username ?? user.email;
+    const avatarInitial =
+        displayName?.charAt(0)?.toUpperCase() ??
+        user.email.charAt(0).toUpperCase();
     const dashboardActive = isAdmin
         ? route().current("admin.dashboard")
         : isFaculty
@@ -445,12 +450,10 @@ export default function AuthenticatedLayout({ header, children }) {
                                             >
                                                 {/* User Avatar Placeholder */}
                                                 <div className="h-6 w-6 rounded-full bg-gradient-to-tr from-[#7a1315] to-[#cc2127] flex items-center justify-center text-xs text-white uppercase shadow-sm">
-                                                    {user.email
-                                                        .charAt(0)
-                                                        .toUpperCase()}
+                                                    {avatarInitial}
                                                 </div>
 
-                                                {user.email}
+                                                {displayName}
 
                                                 <svg
                                                     className="-me-0.5 ms-1 h-4 w-4 opacity-70"
@@ -473,7 +476,7 @@ export default function AuthenticatedLayout({ header, children }) {
                                             Manage Account
                                         </div>
                                         <Dropdown.Link
-                                            href={route("profile.edit")}
+                                            href={route(profileRoute)}
                                             className="font-medium"
                                         >
                                             Profile Settings
@@ -831,11 +834,11 @@ export default function AuthenticatedLayout({ header, children }) {
                     <div className="border-t border-gray-200 dark:border-gray-800 pb-1 pt-4 bg-gray-50 dark:bg-gray-800/50">
                         <div className="px-4 flex items-center gap-3 mb-3">
                             <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-[#7a1315] to-[#cc2127] flex items-center justify-center text-sm font-bold text-white uppercase shadow-sm">
-                                {user.email.charAt(0).toUpperCase()}
+                                {avatarInitial}
                             </div>
                             <div>
                                 <div className="text-base font-bold text-gray-800 dark:text-gray-100">
-                                    {user.email}
+                                    {displayName}
                                 </div>
                                 <div className="text-sm font-medium text-gray-500 dark:text-gray-400">
                                     {user.email}
@@ -844,7 +847,7 @@ export default function AuthenticatedLayout({ header, children }) {
                         </div>
 
                         <div className="mt-3 space-y-1">
-                            <ResponsiveNavLink href={route("profile.edit")}>
+                            <ResponsiveNavLink href={route(profileRoute)}>
                                 Profile Settings
                             </ResponsiveNavLink>
                             <ResponsiveNavLink

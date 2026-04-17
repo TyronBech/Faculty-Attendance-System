@@ -166,7 +166,7 @@ export default function AdminDashboard({
     greeting,
 }) {
     const { auth } = usePage().props;
-    const userName = auth.user.username ?? auth.user.email.split('@')[0];
+    const userName = auth.display_name ?? auth.user.username ?? auth.user.email.split('@')[0];
 
     const [statsData, setStatsData] = useState(stats);
     const [timedIn, setTimedIn] = useState(timedInFaculties);
