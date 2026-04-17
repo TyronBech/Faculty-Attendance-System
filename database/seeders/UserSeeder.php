@@ -2,8 +2,9 @@
 
 namespace Database\Seeders;
 
-use App\Services\FlssBackendClient;
+use App\Models\Admin;
 use App\Models\User;
+use App\Services\FlssBackendClient;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -22,41 +23,107 @@ class UserSeeder extends Seeder
             // ─── Admin / HR accounts ───────────────────────────────────────────
             $admins = [
                 [
-                    'username'          => 'super_admin',
-                    'email'             => 'superadmin@university.edu',
-                    'password'          => Hash::make('password'),
-                    'is_active'         => true,
-                    'email_verified_at' => now(),
+                    'role' => 'super_admin',
+                    'user' => [
+                        'username' => 'super_admin',
+                        'email' => 'superadmin@university.edu',
+                        'password' => Hash::make('password'),
+                        'is_active' => true,
+                        'email_verified_at' => now(),
+                    ],
+                    'profile' => [
+                        'admin_code' => 'ADM0001',
+                        'first_name' => 'Super',
+                        'middle_name' => null,
+                        'last_name' => 'Administrator',
+                        'suffix_name' => null,
+                        'phone' => '09170000001',
+                        'position_title' => 'Super Administrator',
+                        'employment_type' => 'regular',
+                        'date_hired' => now()->subYears(5)->toDateString(),
+                        'is_active' => true,
+                    ],
                 ],
                 [
-                    'username'          => 'admin',
-                    'email'             => 'admin@university.edu',
-                    'password'          => Hash::make('password'),
-                    'is_active'         => true,
-                    'email_verified_at' => now(),
+                    'role' => 'admin',
+                    'user' => [
+                        'username' => 'admin',
+                        'email' => 'admin@university.edu',
+                        'password' => Hash::make('password'),
+                        'is_active' => true,
+                        'email_verified_at' => now(),
+                    ],
+                    'profile' => [
+                        'admin_code' => 'ADM0002',
+                        'first_name' => 'Campus',
+                        'middle_name' => null,
+                        'last_name' => 'Administrator',
+                        'suffix_name' => null,
+                        'phone' => '09170000002',
+                        'position_title' => 'Campus Administrator',
+                        'employment_type' => 'regular',
+                        'date_hired' => now()->subYears(4)->toDateString(),
+                        'is_active' => true,
+                    ],
                 ],
                 [
-                    'username'          => 'hr_staff',
-                    'email'             => 'hr@university.edu',
-                    'password'          => Hash::make('password'),
-                    'is_active'         => true,
-                    'email_verified_at' => now(),
+                    'role' => 'hr_staff',
+                    'user' => [
+                        'username' => 'hr_staff',
+                        'email' => 'hr@university.edu',
+                        'password' => Hash::make('password'),
+                        'is_active' => true,
+                        'email_verified_at' => now(),
+                    ],
+                    'profile' => [
+                        'admin_code' => 'ADM0003',
+                        'first_name' => 'Human',
+                        'middle_name' => null,
+                        'last_name' => 'Resources',
+                        'suffix_name' => null,
+                        'phone' => '09170000003',
+                        'position_title' => 'HR Staff',
+                        'employment_type' => 'regular',
+                        'date_hired' => now()->subYears(3)->toDateString(),
+                        'is_active' => true,
+                    ],
                 ],
                 [
-                    'username'          => 'head_academic_program',
-                    'email'             => 'head.academic@university.edu',
-                    'password'          => Hash::make('password'),
-                    'is_active'         => true,
-                    'email_verified_at' => now(),
+                    'role' => 'head_academic_program',
+                    'user' => [
+                        'username' => 'head_academic_program',
+                        'email' => 'head.academic@university.edu',
+                        'password' => Hash::make('password'),
+                        'is_active' => true,
+                        'email_verified_at' => now(),
+                    ],
+                    'profile' => [
+                        'admin_code' => 'ADM0004',
+                        'first_name' => 'Academic',
+                        'middle_name' => null,
+                        'last_name' => 'Head',
+                        'suffix_name' => null,
+                        'phone' => '09170000004',
+                        'position_title' => 'Head Academic Program',
+                        'employment_type' => 'regular',
+                        'date_hired' => now()->subYears(6)->toDateString(),
+                        'is_active' => true,
+                    ],
                 ],
             ];
 
-            $adminRoles = ['super_admin', 'admin', 'hr_staff', 'head_academic_program'];
-
-            foreach ($admins as $index => $data) {
-                $user = User::firstOrCreate(['email' => $data['email']], $data);
-                $role = Role::where('name', $adminRoles[$index])->where('guard_name', 'admin')->firstOrFail();
+            foreach ($admins as $data) {
+                $user = User::firstOrCreate(['email' => $data['user']['email']], $data['user']);
+                $role = Role::where('name', $data['role'])->where('guard_name', 'admin')->firstOrFail();
                 $user->syncRoles([$role]);
+
+                Admin::updateOrCreate(
+                    ['user_id' => $user->id],
+                    [
+                        ...$data['profile'],
+                        'is_active' => (bool) $user->is_active,
+                    ]
+                );
             }
 
             // ─── Faculty user accounts from external API ──────────────────────
@@ -71,7 +138,7 @@ class UserSeeder extends Seeder
 
                     return [
                         'username' => $usernameBase !== '' ? $usernameBase : 'faculty_' . (int) ($item['faculty_id'] ?? 0),
-                        'email'    => $email,
+                        'email' => $email,
                     ];
                 })
                 ->filter(fn(array $u) => $u['email'] !== '')
@@ -81,10 +148,10 @@ class UserSeeder extends Seeder
                 $user = User::firstOrCreate(
                     ['email' => $data['email']],
                     [
-                        'username'          => $data['username'],
-                        'email'             => $data['email'],
-                        'password'          => Hash::make('password'),
-                        'is_active'         => true,
+                        'username' => $data['username'],
+                        'email' => $data['email'],
+                        'password' => Hash::make('password'),
+                        'is_active' => true,
                         'email_verified_at' => now(),
                     ]
                 );
@@ -129,6 +196,6 @@ class UserSeeder extends Seeder
             $records = [];
         }
 
-        return array_values(array_filter($records, fn ($record) => is_array($record)));
+        return array_values(array_filter($records, fn($record) => is_array($record)));
     }
 }

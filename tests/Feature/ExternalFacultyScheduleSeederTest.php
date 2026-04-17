@@ -25,53 +25,54 @@ class ExternalFacultyScheduleSeederTest extends TestCase
         $this->seed(DepartmentSeeder::class);
 
         $this->createUser('admin', 'admin@example.com');
-        $this->createUser('abarquezbenjamin', 'abarquezbenjamin@example.com');
-        $this->createUser('adolforodrigo', 'adolforodrigo@example.com');
+        $this->createUser('maria.delacruz', 'maria.delacruz@example.edu');
+        $this->createUser('jose.santos', 'jose.santos@example.edu');
 
-        $roomA301 = Room::create([
-            'flss_room_id' => 301,
-            'room_code' => 'A301',
-            'building_name' => 'Academic Building A',
+        $roomB201 = Room::create([
+            'flss_room_id' => 201,
+            'room_code' => 'B201',
+            'building_name' => 'Academic Building B',
         ]);
 
         Room::create([
-            'flss_room_id' => 303,
-            'room_code' => 'A303',
-            'building_name' => 'Academic Building A',
+            'flss_room_id' => 204,
+            'room_code' => 'B204',
+            'building_name' => 'Academic Building B',
         ]);
 
         $this->seed([FacultySeeder::class, ScheduleSeeder::class]);
 
-        $faculty = Faculty::where('faculty_code', 'FA019TG2026')->firstOrFail();
+        $faculty = Faculty::where('faculty_code', 'FA101TG2026')->firstOrFail();
 
-        $this->assertSame(19, $faculty->external_faculty_id);
+        $this->assertSame(101, $faculty->external_faculty_id);
         $this->assertSame('Part-Time', $faculty->faculty_type);
-        $this->assertSame(9, $faculty->assigned_units);
-        $this->assertSame('BSBA', $faculty->department?->code);
+        $this->assertSame(12, $faculty->assigned_units);
+        $this->assertSame('BSIT', $faculty->department?->code);
 
         $schedule = Schedule::where('faculty_id', $faculty->id)->firstOrFail();
-        $this->assertSame(19, $schedule->external_faculty_id);
+        $this->assertSame(101, $schedule->external_faculty_id);
 
-        $tuesdayDetail = ScheduleDetail::where('schedule_id', $schedule->id)
-            ->where('day', 'Tuesday')
+        $mondayDetail = ScheduleDetail::where('schedule_id', $schedule->id)
+            ->where('day', 'Monday')
             ->firstOrFail();
 
-        $this->assertSame('Business Management Accounting', $tuesdayDetail->course_title);
-        $this->assertSame('ACCO 018', $tuesdayDetail->course_code);
-        $this->assertSame('Business Management Accounting', $tuesdayDetail->subject_desc);
-        $this->assertSame('A301', $tuesdayDetail->room_code);
-        $this->assertSame($roomA301->id, $tuesdayDetail->room_id);
-        $this->assertSame(3.0, (float) $tuesdayDetail->hours_required);
+        $this->assertSame('Web Systems and Technologies', $mondayDetail->course_title);
+        $this->assertSame('IT 321', $mondayDetail->course_code);
+        $this->assertSame('Web Systems and Technologies', $mondayDetail->subject_desc);
+        $this->assertSame('B201', $mondayDetail->room_code);
+        $this->assertSame($roomB201->id, $mondayDetail->room_id);
+        $this->assertSame(3.0, (float) $mondayDetail->hours_required);
 
-        $saturdayDetail = ScheduleDetail::query()
-            ->where('day', 'Saturday')
+        $fridayDetail = ScheduleDetail::query()
+            ->where('schedule_id', $schedule->id)
+            ->where('day', 'Friday')
             ->firstOrFail();
 
-        $this->assertSame('Computer Programming 2', $saturdayDetail->course_title);
-        $this->assertSame('COMP 003', $saturdayDetail->course_code);
-        $this->assertSame('TBA', $saturdayDetail->room_code);
-        $this->assertNull($saturdayDetail->room_id);
-        $this->assertSame(5.0, (float) $saturdayDetail->hours_required);
+        $this->assertSame('Introduction to Computing', $fridayDetail->course_title);
+        $this->assertSame('CS 101', $fridayDetail->course_code);
+        $this->assertSame('CLAB1', $fridayDetail->room_code);
+        $this->assertNull($fridayDetail->room_id);
+        $this->assertSame(3.0, (float) $fridayDetail->hours_required);
     }
 
     public function test_schedule_seeder_updates_existing_details_when_nested_course_details_are_present(): void
@@ -80,29 +81,29 @@ class ExternalFacultyScheduleSeederTest extends TestCase
 
         $department = Department::factory()->create(['code' => 'BSBA']);
         $admin = $this->createUser('admin', 'admin@example.com');
-        $facultyUser = $this->createUser('abarquezbenjamin', 'abarquezbenjamin@example.com');
+        $facultyUser = $this->createUser('maria.delacruz', 'maria.delacruz@example.edu');
 
         Room::create([
-            'flss_room_id' => 301,
-            'room_code' => 'A301',
-            'building_name' => 'Academic Building A',
+            'flss_room_id' => 201,
+            'room_code' => 'B201',
+            'building_name' => 'Academic Building B',
         ]);
 
         $faculty = Faculty::create([
-            'external_faculty_id' => 19,
+            'external_faculty_id' => 101,
             'user_id' => $facultyUser->id,
             'department_id' => $department->id,
-            'faculty_code' => 'FA019TG2026',
-            'biometric_id' => 'BIOAPI019',
-            'first_name' => 'Benjamin',
-            'last_name' => 'Abarquez',
+            'faculty_code' => 'FA101TG2026',
+            'biometric_id' => 'BIOAPI101',
+            'first_name' => 'Maria',
+            'last_name' => 'Dela Cruz',
             'is_active' => true,
         ]);
 
         $schedule = Schedule::create([
             'faculty_id' => $faculty->id,
-            'external_faculty_id' => 19,
-            'schedule_code' => 'SCH-API-19-2026',
+            'external_faculty_id' => 101,
+            'schedule_code' => 'SCH-API-101-2026',
             'academic_year' => 2026,
             'semester' => 2,
             'effective_from' => '2026-01-01 00:00:00',
@@ -114,9 +115,9 @@ class ExternalFacultyScheduleSeederTest extends TestCase
 
         ScheduleDetail::create([
             'schedule_id' => $schedule->id,
-            'day' => 'Tuesday',
-            'start_time' => '2026-01-01 10:30:00',
-            'end_time' => '2026-01-01 13:30:00',
+            'day' => 'Monday',
+            'start_time' => '2026-01-01 08:00:00',
+            'end_time' => '2026-01-01 11:00:00',
             'course_title' => null,
             'course_code' => null,
             'room_code' => null,
@@ -127,14 +128,14 @@ class ExternalFacultyScheduleSeederTest extends TestCase
         $this->seed(ScheduleSeeder::class);
 
         $detail = ScheduleDetail::where('schedule_id', $schedule->id)
-            ->where('day', 'Tuesday')
-            ->where('start_time', '2026-01-01 10:30:00')
+            ->where('day', 'Monday')
+            ->where('start_time', '2026-01-01 08:00:00')
             ->firstOrFail();
 
-        $this->assertSame('Business Management Accounting', $detail->course_title);
-        $this->assertSame('ACCO 018', $detail->course_code);
-        $this->assertSame('Business Management Accounting', $detail->subject_desc);
-        $this->assertSame('A301', $detail->room_code);
+        $this->assertSame('Web Systems and Technologies', $detail->course_title);
+        $this->assertSame('IT 321', $detail->course_code);
+        $this->assertSame('Web Systems and Technologies', $detail->subject_desc);
+        $this->assertSame('B201', $detail->room_code);
         $this->assertSame(3.0, (float) $detail->hours_required);
     }
 

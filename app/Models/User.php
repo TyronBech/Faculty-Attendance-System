@@ -3,6 +3,7 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -13,8 +14,8 @@ use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable
 {
-    /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable, SoftDeletes, HasRoles;
+    /** @use HasFactory<UserFactory> */
+    use HasFactory, HasRoles, Notifiable, SoftDeletes;
 
     /**
      * The attributes that are mass assignable.
@@ -23,6 +24,7 @@ class User extends Authenticatable
      */
     protected $fillable = [
         'username',
+        'name',
         'email',
         'password',
         'is_active',
@@ -54,13 +56,28 @@ class User extends Authenticatable
         ];
     }
 
+    public function getNameAttribute(): ?string
+    {
+        return $this->attributes['username'] ?? null;
+    }
+
+    public function setNameAttribute(string $value): void
+    {
+        $this->attributes['username'] = $value;
+    }
+
     /* ------------------------------------------------------------------ */
-    /*  Relationships                                                     */
+    /*  Relationships */
     /* ------------------------------------------------------------------ */
 
     public function faculty(): HasOne
     {
         return $this->hasOne(Faculty::class);
+    }
+
+    public function admin(): HasOne
+    {
+        return $this->hasOne(Admin::class);
     }
 
     public function createdSchedules(): HasMany

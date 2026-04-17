@@ -36,14 +36,20 @@ class HandleInertiaRequests extends Middleware
 
         $user = null;
         if ($authenticatedUser) {
-            $user = User::with('faculty')->find($authenticatedUser->id);
+            $user = User::with(['faculty', 'admin'])->find($authenticatedUser->id);
         }
+
+        $displayName = $user?->admin?->full_name
+            ?? $user?->faculty?->full_name
+            ?? $user?->username;
 
         return [
             ...parent::share($request),
             'auth' => [
                 'user' => $user,
                 'faculty' => $user ? $user->faculty : null,
+                'admin' => $user ? $user->admin : null,
+                'display_name' => $displayName,
                 'roles' => $user ? $user->getRoleNames()->toArray() : [],
             ],
             'flash' => [

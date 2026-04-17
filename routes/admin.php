@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\AdminDtrExportController;
 use App\Http\Controllers\Admin\AdminDtrExportPageController;
 use App\Http\Controllers\Admin\AdminHolidayController;
 use App\Http\Controllers\Admin\AdminManualAttendanceController;
+use App\Http\Controllers\Admin\AdminManualAttendanceRequestApprovalController;
 use App\Http\Controllers\Admin\AdminNewPasswordController;
 use App\Http\Controllers\Admin\AdminOnlineRequestController;
 use App\Http\Controllers\Admin\AdminPasswordResetLinkController;
@@ -131,6 +132,18 @@ Route::middleware(['auth.admin'])->prefix('admin')->group(function () {
 
     Route::patch('/undertime-justifications/{justification}/reject', [AdminUndertimeJustificationController::class, 'reject'])
         ->name('admin.undertime-justifications.reject');
+
+    Route::get('/manual-attendance-requests', [AdminManualAttendanceRequestApprovalController::class, 'index'])
+        ->name('admin.manual-attendance-requests.index');
+
+    Route::get('/api/manual-attendance-requests', [AdminManualAttendanceRequestApprovalController::class, 'filter'])
+        ->name('admin.manual-attendance-requests.filter');
+
+    Route::patch('/manual-attendance-requests/{justification}/approve', [AdminManualAttendanceRequestApprovalController::class, 'approve'])
+        ->name('admin.manual-attendance-requests.approve');
+
+    Route::patch('/manual-attendance-requests/{justification}/reject', [AdminManualAttendanceRequestApprovalController::class, 'reject'])
+        ->name('admin.manual-attendance-requests.reject');
 
     // ── Holiday Management ─────────────────────────────────────────────────
     Route::get('/holidays/suggestions', [AdminHolidayController::class, 'searchSuggestions'])

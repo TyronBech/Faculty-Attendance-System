@@ -249,6 +249,9 @@ export default function AuthenticatedLayout({ header, children }) {
                                                         ) ||
                                                         route().current(
                                                             "admin.undertime-justifications.*",
+                                                        ) ||
+                                                        route().current(
+                                                            "admin.manual-attendance-requests.*",
                                                         )
                                                             ? "border-[#7a1315] text-gray-900 font-bold dark:border-red-500 dark:text-white"
                                                             : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:border-gray-700 dark:hover:text-gray-300")
@@ -315,6 +318,20 @@ export default function AuthenticatedLayout({ header, children }) {
                                                     }
                                                 >
                                                     Undertime Justifications
+                                                </Dropdown.Link>
+                                                <Dropdown.Link
+                                                    href={route(
+                                                        "admin.manual-attendance-requests.index",
+                                                    )}
+                                                    className={
+                                                        route().current(
+                                                            "admin.manual-attendance-requests.*",
+                                                        )
+                                                            ? "!bg-red-50 !text-[#7a1315] dark:!bg-gray-700 dark:!text-white"
+                                                            : ""
+                                                    }
+                                                >
+                                                    Manual Log Requests
                                                 </Dropdown.Link>
                                             </Dropdown.Content>
                                         </Dropdown>
@@ -649,6 +666,9 @@ export default function AuthenticatedLayout({ header, children }) {
                                             ) ||
                                             route().current(
                                                 "admin.undertime-justifications.*",
+                                            ) ||
+                                            route().current(
+                                                "admin.manual-attendance-requests.*",
                                             )
                                                 ? "border-[#7a1315] bg-red-50 text-[#7a1315] dark:border-red-500 dark:bg-red-900/20 dark:text-red-400"
                                                 : "border-transparent text-gray-600 hover:border-gray-300 hover:bg-gray-50 hover:text-gray-800 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-200")
@@ -704,6 +724,16 @@ export default function AuthenticatedLayout({ header, children }) {
                                                 )}
                                             >
                                                 Undertime Justifications
+                                            </ResponsiveNavLink>
+                                            <ResponsiveNavLink
+                                                href={route(
+                                                    "admin.manual-attendance-requests.index",
+                                                )}
+                                                active={route().current(
+                                                    "admin.manual-attendance-requests.*",
+                                                )}
+                                            >
+                                                Manual Log Requests
                                             </ResponsiveNavLink>
                                         </div>
                                     )}
