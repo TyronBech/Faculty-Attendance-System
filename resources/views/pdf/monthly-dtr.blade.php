@@ -6,7 +6,7 @@
     <style>
         @page {
             size: 210mm 297mm;
-            margin: 5mm 6mm;
+            margin: 7mm 12mm 7mm 12mm;
         }
 
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -24,7 +24,8 @@
 
         .page {
             width: 100%;
-            margin: 0;
+            max-width: 186mm;
+            margin: 0 auto;
             padding: 0;
         }
 
@@ -61,20 +62,20 @@
 
         /* ── MAIN TWO-COLUMN WRAPPER ── */
         .main-wrap { width: 100%; table-layout: fixed; margin-top: 1mm; }
-        .col-left  { width: 57%; vertical-align: top; padding-right: 2mm; }
-        .col-right { width: 43%; vertical-align: top; }
+        .col-left  { width: 55%; vertical-align: top; padding-right: 1.5mm; }
+        .col-right { width: 45%; vertical-align: top; }
 
         /* ── TIME LOGS TABLE ── */
-        .logs-table { width: 100%; border-collapse: collapse; border: 1.5px solid #000; }
+        .logs-table { width: 100%; max-width: 100%; border-collapse: collapse; border: 1.5px solid #000; }
         .logs-table th,
         .logs-table td {
             border: 1px solid #000;
             text-align: center;
             vertical-align: middle;
             font-size: 6pt;
-            padding: 0px 1px;
+            padding: 0px 0.5px;
             line-height: 1.0;
-            height: 6mm;
+            height: 5.5mm;
             word-wrap: break-word;
             overflow: hidden;
         }
@@ -92,9 +93,9 @@
             height: auto;
             padding: 1.5px 1px;
         }
-        .logs-table .day-cell { font-weight: 700; font-size: 6.5pt; width: 7%; }
-        .logs-table .col-time { width: 10%; }
-        .logs-table .col-mins { width: 8%; font-size: 5.5pt; }
+        .logs-table .day-cell { font-weight: 700; font-size: 6.5pt; width: 6.5%; }
+        .logs-table .col-time { width: 9%; }
+        .logs-table .col-mins { width: 7%; font-size: 5.5pt; }
 
         .holiday-cell { font-style: italic; font-size: 6.5pt; }
 
@@ -103,12 +104,12 @@
         .txt-green { color: green; }
 
         /* ── SUMMARY TABLE ── */
-        .summary-table { width: 100%; border-collapse: collapse; border: 1.5px solid #000; margin-bottom: 1.5mm; }
+        .summary-table { width: 100%; max-width: 100%; border-collapse: collapse; border: 1.5px solid #000; margin-bottom: 1.5mm; }
         .summary-table th,
         .summary-table td {
             border: 1px solid #000;
             font-size: 6.5pt;
-            padding: 1.5px 3px;
+            padding: 1px 2px;
             vertical-align: middle;
         }
         .summary-table .section-hdr {
@@ -121,12 +122,12 @@
         .summary-table .val-col   { width: 30%; text-align: center; }
 
         /* ── MANUAL ENTRY TABLE ── */
-        .manual-table { width: 100%; border-collapse: collapse; border: 1.5px solid #000; }
+        .manual-table { width: 100%; max-width: 100%; border-collapse: collapse; border: 1.5px solid #000; }
         .manual-table th,
         .manual-table td {
             border: 1px solid #000;
             font-size: 6.5pt;
-            padding: 1px 3px;
+            padding: 1px 2px;
             vertical-align: middle;
         }
         .manual-table .section-hdr {
@@ -152,14 +153,14 @@
         .in-charge-label{ text-align: center; font-size: 6.5pt; font-weight: 700; }
 
         /* ── NOTICES / LEGEND / BIOMETRIC ── */
-        .notice-box { font-size: 5.5pt; line-height: 1.3; margin-top: 1.2mm; text-align: justify; }
-        .legend     { font-size: 5.5pt; line-height: 1.35; }
-        .biometric  { font-size: 5.5pt; line-height: 1.35; }
-        .date-printed { font-size: 5.5pt; font-weight: 700; margin-top: 1mm; }
+        .notice-box { font-size: 7pt; line-height: 1.35; margin-top: 1.3mm; text-align: justify; }
+        .legend     { font-size: 6pt; line-height: 1.32; }
+        .biometric  { font-size: 6pt; line-height: 1.32; margin-top: 1.1mm; }
+        .date-printed { font-size: 7pt; font-weight: 700; margin-top: 1.7mm; }
 
         /* Bottom strip */
-        .bottom-strip { width: 100%; margin-top: 1mm; }
-        .bottom-strip td { vertical-align: top; font-size: 5.5pt; line-height: 1.35; }
+        .bottom-strip { width: 100%; max-width: 100%; margin-top: 1.8mm; }
+        .bottom-strip td { vertical-align: top; font-size: 6pt; line-height: 1.32; }
     </style>
 </head>
 <body>
@@ -368,22 +369,20 @@
     {{-- BOTTOM STRIP: Legend left, Biometric right --}}
     <table class="bottom-strip">
         <tr>
-            <td style="width:50%;">
+            <td>
                 <div class="legend">
                     <strong>Legend:</strong><br>
                     <strong>Text Color</strong><br>
-                    <span class="txt-red">RED</span> &nbsp;– Tardy/Under Time<br>
-                    <span class="txt-blue">BLUE</span> – Manual Entry<br>
-                    <span class="txt-green">GREEN</span> – Holiday/Suspended Office Hours
+                    <span class="txt-red">RED</span> - Tardy/Under Time<br>
+                    <span class="txt-blue">BLUE</span> - Manual Entry<br>
+                    <span class="txt-green">GREEN</span> - Holiday/Suspended Office Hours
                 </div>
-            </td>
-            <td style="width:50%;">
                 <div class="biometric">
                     <strong>Biometric Device Location:</strong><br>
-                    1 – Main Building (A. Mabini Campus)<br>
-                    2 – NALLRC (A. Mabini Campus)<br>
-                    3 – CEA / COC / ITech (NDC Campus)<br>
-                    4 – Hasmin (M. H. Del Pilar Campus)
+                    1 - Main Building (A. Mabini Campus)<br>
+                    2 - NALLRC (A. Mabini Campus)<br>
+                    3 - CEA / COC / ITech (NDC Campus)<br>
+                    4 - Hasmin (M. H. Del Pilar Campus)
                 </div>
             </td>
         </tr>
