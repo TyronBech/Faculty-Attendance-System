@@ -76,9 +76,9 @@ class GenerateDtrPdfJob implements ShouldQueue
             'generatedAt' => now()->format('l, F d, Y'),
         ])
             ->driver('dompdf')
-            ->paperSize(105, 297, 'mm')
+            ->paperSize(210, 297, 'mm')
             ->portrait()
-            ->margins(0, 0, 0, 0)
+            ->margins(0, 0, 0, 0, 'mm')
             ->save($outputPath);
     }
 }
