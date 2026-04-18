@@ -1,11 +1,12 @@
 <?php
-use Illuminate\Support\Facades\Route;
-use Inertia\Inertia;
+
 use App\Http\Controllers\Faculty\FacultyDashboardController;
-use App\Http\Controllers\Faculty\ScheduleChangeRequestController;
-use App\Http\Controllers\Faculty\OnlineAttendanceController;
-use App\Http\Controllers\Faculty\UndertimeRequestController;
+use App\Http\Controllers\Faculty\FacultyDtrController;
 use App\Http\Controllers\Faculty\ManualAttendanceRequestController;
+use App\Http\Controllers\Faculty\OnlineAttendanceController;
+use App\Http\Controllers\Faculty\ScheduleChangeRequestController;
+use App\Http\Controllers\Faculty\UndertimeRequestController;
+use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth', 'auth.faculty'])->group(function () {
     Route::get('/faculty/dashboard', [FacultyDashboardController::class, 'index'])->name('faculty.dashboard');
@@ -15,6 +16,11 @@ Route::middleware(['auth', 'auth.faculty'])->group(function () {
     Route::get('/faculty/attendance', [FacultyDashboardController::class, 'attendance'])->name('faculty.attendance');
     Route::post('/faculty/attendance/{id}/justification', [FacultyDashboardController::class, 'submitUndertimeJustification'])->name('faculty.attendance.justify');
     Route::post('/faculty/attendance/{id}/missing-justification', [FacultyDashboardController::class, 'submitMissingTimeJustification'])->name('faculty.attendance.missing-justify');
+    Route::get('/faculty/dtr', [FacultyDtrController::class, 'index'])->name('faculty.dtr.index');
+    Route::get('/faculty/dtr/preview', [FacultyDtrController::class, 'preview'])->name('faculty.dtr.preview');
+    Route::post('/faculty/dtr/dispatch', [FacultyDtrController::class, 'dispatch'])->name('faculty.dtr.dispatch');
+    Route::get('/faculty/dtr/status', [FacultyDtrController::class, 'status'])->name('faculty.dtr.status');
+    Route::get('/faculty/dtr/download-file', [FacultyDtrController::class, 'downloadFile'])->name('faculty.dtr.download-file');
 
     // ── Schedule Change Requests ───────────────────────────────────────────
     Route::get('/faculty/schedule-change-requests', [ScheduleChangeRequestController::class, 'index'])

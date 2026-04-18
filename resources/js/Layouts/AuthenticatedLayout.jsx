@@ -123,6 +123,15 @@ export default function AuthenticatedLayout({ header, children }) {
                                             Attendance
                                         </NavLink>
 
+                                        <NavLink
+                                            href={route("faculty.dtr.index")}
+                                            active={route().current(
+                                                "faculty.dtr.*",
+                                            )}
+                                        >
+                                            My DTR
+                                        </NavLink>
+
                                         {/* ── Requests dropdown ─────────────── */}
                                         <Dropdown>
                                             <Dropdown.Trigger>
@@ -572,6 +581,15 @@ export default function AuthenticatedLayout({ header, children }) {
                                     )}
                                 >
                                     Attendance
+                                </ResponsiveNavLink>
+
+                                <ResponsiveNavLink
+                                    href={route("faculty.dtr.index")}
+                                    active={route().current(
+                                        "faculty.dtr.*",
+                                    )}
+                                >
+                                    My DTR
                                 </ResponsiveNavLink>
 
                                 {/* ── Requests group ─────────────── */}
