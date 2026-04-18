@@ -2,34 +2,32 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import ScrollToTop from '@/Components/ScrollToTop';
 import Modal from '@/Components/Modal';
 import { Head, Link } from '@inertiajs/react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { formatHours } from '@/Utils/formatHours';
 
-const DAY_COLORS = {
-    Mon: 'from-blue-500 to-blue-600',
-    Tue: 'from-violet-500 to-violet-600',
-    Wed: 'from-emerald-500 to-emerald-600',
-    Thu: 'from-amber-500 to-amber-600',
-    Fri: 'from-rose-500 to-rose-600',
-    Sat: 'from-cyan-500 to-cyan-600',
-    Sun: 'from-gray-400 to-gray-500',
-};
-
 const ROW_STYLES = {
+    course: {
+        panel: 'bg-white/95 dark:bg-gray-800/65',
+        heading: 'text-gray-500 dark:text-gray-400',
+    },
     official: {
         labelText: 'text-emerald-700 dark:text-emerald-300',
-        cardPanel: 'border-gray-200/80 bg-white dark:border-gray-700 dark:bg-gray-800/80 dark:hover:border-emerald-500/30',
+        panel: 'bg-slate-50/60 dark:bg-slate-950/15',
     },
     internal: {
         labelText: 'text-amber-700 dark:text-amber-300',
-        cardPanel: 'border-amber-200/80 bg-white dark:border-amber-500/30 dark:bg-gray-800/80 dark:hover:border-amber-400/50',
+        panel: 'bg-slate-50/35 dark:bg-slate-950/10',
     },
 };
 
-const formatScheduleMeta = (item) => {
-    const yearSection = [item.yearLevel, item.sectionName].filter(Boolean).join('-');
-
-    return [item.programCode, yearSection].filter(Boolean).join(' ');
+const DAYS_MAP = {
+    'Sunday': 0,
+    'Monday': 1,
+    'Tuesday': 2,
+    'Wednesday': 3,
+    'Thursday': 4,
+    'Friday': 5,
+    'Saturday': 6,
 };
 
 const sortByDayAndTime = (a, b, daysArr, toMin) => {
@@ -42,58 +40,232 @@ const sortByDayAndTime = (a, b, daysArr, toMin) => {
     return toMin(a.startTime) - toMin(b.startTime);
 };
 
-const ScheduleCard = ({ item, onClick }) => {
-    const variant = item.type === 'internal' ? 'internal' : 'official';
-    const isInternal = variant === 'internal';
-    const styles = ROW_STYLES[variant];
-    const metaLabel = formatScheduleMeta(item);
-    const shortDay = item.day ? item.day.substring(0, 3) : 'Day';
+const ACTIVE_STYLES = {
+    official: 'bg-emerald-200 dark:bg-emerald-500/40 ring-2 ring-emerald-500/70',
+    internal: 'bg-emerald-200 dark:bg-emerald-500/40 ring-2 ring-emerald-500/70',
+};
+
+const EMPTY_SLOT_COPY = {
+    official: {
+        message: 'Internal schedule is currently active.',
+        hint: 'No official baseline is linked to this entry.',
+    },
+    internal: {
+        message: 'Official schedule is currently active.',
+        hint: 'No internal adjustments.',
+    },
+};
+
+const CourseCell = ({ item }) => {
+    const yearSection = [item.yearLevel, item.sectionName].filter(Boolean).join('-');
+    const programSectionLabel = [item.programCode, yearSection].filter(Boolean).join(' ');
+
+    return (
+        <div className={`flex h-full min-h-[124px] flex-col items-center justify-center gap-3 px-5 py-4 text-center ${ROW_STYLES.course.panel}`}>
+            <p className={`text-[11px] font-black uppercase tracking-[0.18em] lg:hidden ${ROW_STYLES.course.heading}`}>
+                Course
+            </p>
+            {item.code && (
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gray-500 dark:text-gray-400">
+                    {item.code}
+                </p>
+            )}
+            <h3 className="text-[15px] font-semibold leading-6 text-gray-900 dark:text-white">
+                {item.subject || 'Operational Duty'}
+            </h3>
+            {programSectionLabel && (
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {programSectionLabel}
+                </p>
+            )}
+        </div>
+    );
+};
+
+const EmptyScheduleSlot = ({ title, variant, isPastDay }) => {
+    const copy = EMPTY_SLOT_COPY[variant];
+
+    return (
+        <div className={`flex h-full min-h-[124px] flex-col items-center justify-center gap-3 px-5 py-4 ${isPastDay ? 'opacity-50' : ''}`}>
+            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400 lg:hidden">
+                {title}
+            </p>
+            <div className="flex h-full items-center justify-center text-center">
+                <div className="space-y-1">
+                    <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">
+                        {copy.message}
+                    </p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                        {copy.hint}
+                    </p>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const ScheduleSlot = ({ item, title, variant, isActive, onClick }) => {
+    const [opacity, setOpacity] = useState(1);
+    const [isCurrentlyHappening, setIsCurrentlyHappening] = useState(false);
+
+    // Parse time string "HH:MM AM/PM" to minutes since midnight
+    const parseTime = (timeStr) => {
+        if (!timeStr || typeof timeStr !== 'string') return null;
+        
+        // Match time format: "HH:MM AM/PM" or "H:MM AM/PM"
+        const match = timeStr.trim().match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+        if (!match) {
+            return null;
+        }
+
+        let [, hours, minutes, period] = match;
+        hours = parseInt(hours, 10);
+        minutes = parseInt(minutes, 10);
+
+        // Convert to 24-hour format
+        if (period.toUpperCase() === 'PM' && hours !== 12) {
+            hours += 12;
+        }
+        if (period.toUpperCase() === 'AM' && hours === 12) {
+            hours = 0;
+        }
+
+        return hours * 60 + minutes;
+    };
+
+    // Calculate opacity: 0.4 if class is done or past, 1.0 otherwise
+    // Also track if class is currently happening
+    // Updates every 10 seconds to respond to time changes in real-time
+    useEffect(() => {
+        const updateStatus = () => {
+            if (!item || !item.startTime || !item.endTime) {
+                setOpacity(1);
+                setIsCurrentlyHappening(false);
+                return;
+            }
+
+            const now = new Date();
+            const currentDayIndex = now.getDay();
+            const scheduleDayIndex = DAYS_MAP[item.day] ?? -1;
+
+            // Check if it's a past day of the week
+            const isPastDay = scheduleDayIndex !== -1 && scheduleDayIndex < currentDayIndex;
+
+            // Past days: 0.4 opacity
+            if (isPastDay) {
+                setOpacity(0.4);
+                setIsCurrentlyHappening(false);
+                return;
+            }
+
+            // Today: check if class is happening or has ended
+            if (scheduleDayIndex === currentDayIndex) {
+                const currentMinutes = now.getHours() * 60 + now.getMinutes();
+                const startMinutes = parseTime(item.startTime);
+                const endMinutes = parseTime(item.endTime);
+
+                // If time parsing failed, default to full opacity
+                if (startMinutes === null || endMinutes === null) {
+                    setOpacity(1);
+                    setIsCurrentlyHappening(false);
+                    return;
+                }
+
+                // Check if class is currently happening (between start and end time)
+                const classIsHappening = currentMinutes >= startMinutes && currentMinutes < endMinutes;
+                setIsCurrentlyHappening(classIsHappening);
+
+                // Reduce opacity if class has ended
+                if (currentMinutes >= endMinutes) {
+                    setOpacity(0.4); // Class is done
+                } else {
+                    setOpacity(1); // Class is ongoing or hasn't started
+                }
+            } else {
+                // Future days: 1.0 opacity
+                setOpacity(1);
+                setIsCurrentlyHappening(false);
+            }
+        };
+
+        // Update immediately
+        updateStatus();
+
+        // Update every 10 seconds to respond to time changes in real-time
+        const interval = setInterval(updateStatus, 10000);
+
+        return () => clearInterval(interval);
+    }, [item]);
+
+    // Calculate isPastDay for EmptyScheduleSlot
+    const today = new Date();
+    const currentDayIndex = today.getDay();
+    const scheduleDayIndex = item ? (DAYS_MAP[item.day] ?? -1) : -1;
+    const isPastDay = scheduleDayIndex !== -1 && scheduleDayIndex < currentDayIndex;
+
+    if (!item) {
+        return <EmptyScheduleSlot title={title} variant={variant} isPastDay={isPastDay} />;
+    }
+
+    const roomLabel = item.room || item.comparison?.room || 'TBA';
 
     return (
         <button
             type="button"
             onClick={() => onClick(item)}
-            className={`flex w-full flex-col rounded-[26px] border px-3.5 py-3 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${styles.cardPanel} ${isInternal ? 'border-dashed' : ''}`}
+            className={`relative flex h-full min-h-[124px] w-full flex-col items-center justify-center px-5 py-4 text-center transition-all duration-200 hover:brightness-105 ${isActive ? ACTIVE_STYLES[variant] : ROW_STYLES[variant].panel}`}
+            style={{ opacity }}
         >
-            <div className="flex items-center justify-between gap-2.5">
-                <div className="flex min-w-0 items-center gap-2.5">
-                    <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${DAY_COLORS[shortDay] ?? 'from-gray-400 to-gray-500'} text-[11px] font-bold text-white shadow-sm`}>
-                        {shortDay}
-                    </div>
-                    <div>
-                        <p className="text-[11px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">
-                            {item.day || 'Unscheduled'}
-                        </p>
+            {/* Active indicator */}
+            {isCurrentlyHappening && (
+                <div className="absolute right-3 top-3 flex items-center gap-2">
+                    <div className="relative h-2 w-2">
+                        <div className="absolute inset-0 animate-pulse rounded-full bg-emerald-500"></div>
+                        <div className="absolute inset-0 rounded-full bg-emerald-400 animate-ping opacity-75"></div>
                     </div>
                 </div>
-                {isInternal && (
-                    <span className="inline-flex shrink-0 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.18em] text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
-                        Internal
-                    </span>
-                )}
-            </div>
+            )}
 
-            <div className="mt-3 space-y-1">
-                <h4 className="text-sm font-semibold leading-snug text-gray-900 dark:text-white">
-                    {item.subject || 'Operational Duty'}
-                </h4>
+            <p className={`text-[11px] font-black uppercase tracking-[0.18em] lg:hidden ${ROW_STYLES[variant].labelText}`}>
+                {title}
+            </p>
 
-                {metaLabel && (
-                    <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400">
-                        {metaLabel}
-                    </p>
-                )}
-            </div>
+            <p className="mt-2 text-sm font-semibold text-gray-900 dark:text-white">
+                {item.day || 'Unscheduled'}
+            </p>
 
-            <p className="mt-3 text-[11px] font-medium text-gray-600 dark:text-gray-300">
+            <p className="mt-2 text-sm font-semibold leading-snug text-gray-900 dark:text-white">
                 {item.startTime} - {item.endTime}
             </p>
+
+            <div className="mt-2">
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Room: <span className="font-semibold text-gray-900 dark:text-white">{roomLabel}</span>
+                </p>
+            </div>
         </button>
+    );
+};
+
+const StatCard = ({ icon, label, value }) => {
+    return (
+        <div className="flex items-center gap-3 rounded-2xl border border-gray-200/60 bg-white px-4 py-3 shadow-sm dark:border-gray-700/60 dark:bg-gray-800/80">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600 dark:bg-slate-900/70 dark:text-slate-300">
+                {icon}
+            </div>
+            <div>
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{label}</p>
+                <p className="text-lg font-bold text-gray-900 dark:text-white">{value}</p>
+            </div>
+        </div>
     );
 };
 
 export default function Schedule({ weeklySchedule, internalSchedule, facultyName }) {
     const [selectedSchedule, setSelectedSchedule] = useState(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [filterType, setFilterType] = useState('all'); // all, official, internal
+    const [selectedDay, setSelectedDay] = useState('all');
 
     const handleCardClick = (item) => {
         setSelectedSchedule(item);
@@ -222,16 +394,62 @@ export default function Schedule({ weeklySchedule, internalSchedule, facultyName
         }
     });
 
-    const totalWeeklyHours = sortedSchedule.reduce(
-        (sum, dayData) => sum + dayData.classes.reduce((classHours, item) => classHours + item.hours, 0),
+    const comparisonRows = parallelColumns
+        .map((column) => {
+            const activeItem = column.internalItem || column.officialItem;
+
+            return {
+                ...column,
+                activeItem,
+                courseItem: column.officialItem || column.internalItem,
+                activeVariant: column.internalItem ? 'internal' : 'official',
+            };
+        })
+        .sort((a, b) => sortByDayAndTime(a.activeItem, b.activeItem, daysArr, toMin));
+
+    const activeScheduleItems = comparisonRows
+        .map((row) => row.activeItem)
+        .filter(Boolean);
+
+    const totalWeeklyHours = activeScheduleItems.reduce(
+        (sum, item) => sum + Number(item.hours ?? item.requiredHours ?? 0),
         0,
     );
+// Filter and search logic
+    const filteredRows = comparisonRows.filter((row) => {
+        const courseItem = row.courseItem;
+        const activeItem = row.activeItem;
 
-    const teachingDays = sortedSchedule.length;
+        // Filter by day
+        if (selectedDay !== 'all' && activeItem?.day !== selectedDay) {
+            return false;
+        }
+
+        // Search by course code, subject, room, or program
+        if (searchQuery.trim()) {
+            const query = searchQuery.toLowerCase();
+            const courseCode = (courseItem?.code || '').toLowerCase();
+            const subject = (courseItem?.subject || '').toLowerCase();
+            const roomLabel = (activeItem?.room || '').toLowerCase();
+            const programCode = (courseItem?.programCode || '').toLowerCase();
+
+            const matches = (
+                courseCode.includes(query)
+                || subject.includes(query)
+                || roomLabel.includes(query)
+                || programCode.includes(query)
+            );
+
+            return matches;
+        }
+
+        return true;
+    });
+    const teachingDays = new Set(activeScheduleItems.map((item) => item.day).filter(Boolean)).size;
 
     return (
         <AuthenticatedLayout>
-            <Head title="Schedule & Attendance" />
+            <Head title="Schedule" />
 
             <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
@@ -244,62 +462,108 @@ export default function Schedule({ weeklySchedule, internalSchedule, facultyName
                         </svg>
                         Back to Dashboard
                     </Link>
-                    <h1 className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white">
-                        Schedule & Attendance
-                    </h1>
+                    <h1 className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white">Schedule</h1>
                     <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                        {facultyName ? `${facultyName}'s` : 'Your'} weekly teaching schedule and attendance history.
+                        {facultyName ? `${facultyName}'s` : 'Your'} weekly teaching schedule.
                     </p>
                 </div>
 
-                <div className="flex gap-3">
-                    <div className="rounded-2xl border border-gray-200/60 bg-white px-5 py-3 text-center shadow-sm dark:border-gray-700/60 dark:bg-gray-800/80">
-                        <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Teaching Days</p>
-                        <p className="mt-0.5 text-lg font-bold text-gray-900 dark:text-white">{teachingDays}</p>
-                    </div>
-                    <div className="rounded-2xl border border-gray-200/60 bg-white px-5 py-3 text-center shadow-sm dark:border-gray-700/60 dark:bg-gray-800/80">
-                        <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Weekly Hours</p>
-                        <p className="mt-0.5 text-lg font-bold text-gray-900 dark:text-white">{formatHours(totalWeeklyHours)}</p>
-                    </div>
+                <div className="flex flex-wrap gap-3">
+                    <StatCard
+                        label="Teaching Days"
+                        value={teachingDays}
+                        icon={(
+                            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25m10.5-2.25v2.25M3 18.75V7.5A2.25 2.25 0 0 1 5.25 5.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25M3 18.75A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75M3 18.75v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+                            </svg>
+                        )}
+                    />
+                    <StatCard
+                        label="Weekly Hours"
+                        value={formatHours(totalWeeklyHours)}
+                        icon={(
+                            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2.25M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                            </svg>
+                        )}
+                    />
                 </div>
             </div>
 
-            <div className="mb-6 rounded-3xl border border-gray-200/60 bg-white/90 p-4 shadow-sm dark:border-gray-700/60 dark:bg-gray-800/70">
-                <div className="flex flex-wrap items-center gap-4">
-                    <p className={`text-xs font-black uppercase tracking-[0.22em] ${ROW_STYLES.official.labelText}`}>
-                        Official Schedule
-                    </p>
-                    <p className={`text-xs font-black uppercase tracking-[0.22em] ${ROW_STYLES.internal.labelText}`}>
-                        Internal Schedule
-                    </p>
+            <div className="mb-6 space-y-4">
+                {/* Search Bar */}
+                <div className="relative">
+                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
+                        <svg className="h-5 w-5 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.5 5.5a7.5 7.5 0 0 0 10.5 10.5Z" />
+                        </svg>
+                    </div>
+                    <input
+                        type="text"
+                        placeholder="Search courses, code, room, or program..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full rounded-2xl border border-gray-200 bg-white py-3 pl-12 pr-4 text-sm placeholder-gray-500 transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-gray-700 dark:bg-gray-800/50 dark:placeholder-gray-400 dark:focus:border-emerald-400"
+                    />
                 </div>
-                <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">
-                    Official entries are the baseline schedule. Internal entries appear below only when there is an approved mirrored change.
-                </p>
+
+                {/* Day Filter */}
+                <div className="flex gap-2">
+                    <select
+                        value={selectedDay}
+                        onChange={(e) => setSelectedDay(e.target.value)}
+                        className="rounded-full border border-gray-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-widest text-gray-700 transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:focus:border-emerald-400"
+                    >
+                        <option value="all">All Days</option>
+                        <option value="Monday">Monday</option>
+                        <option value="Tuesday">Tuesday</option>
+                        <option value="Wednesday">Wednesday</option>
+                        <option value="Thursday">Thursday</option>
+                        <option value="Friday">Friday</option>
+                        <option value="Saturday">Saturday</option>
+                        <option value="Sunday">Sunday</option>
+                    </select>
+                </div>
             </div>
 
             <div>
-                {parallelColumns.length > 0 ? (
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                        {parallelColumns.map((column) => (
-                            <div
-                                key={column.key}
-                                className="flex flex-col rounded-3xl border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-800"
-                            >
-                                <div className="space-y-3">
-                                    {column.officialItem ? (
-                                        <ScheduleCard
-                                            item={column.officialItem}
-                                            onClick={handleCardClick}
-                                        />
-                                    ) : null}
+                {filteredRows.length > 0 ? (
+                    <div className="overflow-hidden rounded-3xl border border-gray-200 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+                        <div className="hidden divide-x divide-gray-200 border-b border-gray-200 bg-gray-100 dark:divide-gray-700 dark:border-gray-700 dark:bg-gray-700/40 lg:grid lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1fr)]">
+                            <p className={`flex items-center justify-center px-5 py-4 text-xs font-black uppercase tracking-[0.22em] ${ROW_STYLES.course.heading}`}>
+                                Course
+                            </p>
+                            <p className={`flex items-center justify-center px-5 py-4 text-xs font-black uppercase tracking-[0.22em] ${ROW_STYLES.official.labelText}`}>
+                                Official Schedule
+                            </p>
+                            <p className={`flex items-center justify-center px-5 py-4 text-xs font-black uppercase tracking-[0.22em] ${ROW_STYLES.internal.labelText}`}>
+                                Internal Schedule
+                            </p>
+                        </div>
 
-                                    {column.internalItem ? (
-                                        <ScheduleCard
-                                            item={column.internalItem}
-                                            onClick={handleCardClick}
-                                        />
-                                    ) : null}
+                        {filteredRows.map((row, index) => (
+                            <div
+                                key={row.key}
+                                className={`border-t border-gray-200 bg-white transition-all duration-200 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:hover:bg-gray-800/80 ${
+                                    index === filteredRows.length - 1 ? '' : ''
+                                }`}
+                            >
+                                <div className="grid lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1fr)] lg:divide-x dark:divide-gray-700">
+                                    <CourseCell item={row.courseItem} />
+                                    <ScheduleSlot
+                                        item={row.officialItem}
+                                        title="Official Schedule"
+                                        variant="official"
+                                        isActive={row.activeVariant === 'official'}
+                                        onClick={handleCardClick}
+                                    />
+                                    <ScheduleSlot
+                                        item={row.internalItem}
+                                        title="Internal Schedule"
+                                        variant="internal"
+                                        isActive={row.activeVariant === 'internal'}
+                                        onClick={handleCardClick}
+                                    />
                                 </div>
                             </div>
                         ))}
@@ -311,14 +575,34 @@ export default function Schedule({ weeklySchedule, internalSchedule, facultyName
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
                             </svg>
                         </div>
-                        <p className="mb-0.5 text-sm font-bold text-gray-600 dark:text-gray-300">No schedule found</p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">You have no official or internal classes yet.</p>
+                        <p className="mb-0.5 text-sm font-bold text-gray-600 dark:text-gray-300">
+                            {searchQuery || selectedDay !== 'all'
+                                ? 'No schedules found'
+                                : 'No schedule found'}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                            {searchQuery || selectedDay !== 'all'
+                                ? 'Try adjusting your search or day filter'
+                                : 'You have no official or internal classes yet.'}
+                        </p>
                     </div>
                 )}
             </div>
 
             <Modal show={!!selectedSchedule} onClose={() => setSelectedSchedule(null)} maxWidth="xl">
-                {selectedSchedule && (
+                {selectedSchedule && (() => {
+                    // Find the corresponding row to get paired schedule info
+                    const correspondingRow = comparisonRows.find(row => 
+                        row.officialItem?.id === selectedSchedule.id || 
+                        row.internalItem?.id === selectedSchedule.id
+                    );
+                    const pairedSchedule = correspondingRow && (
+                        selectedSchedule.type === 'official' 
+                            ? correspondingRow.internalItem 
+                            : correspondingRow.officialItem
+                    );
+
+                    return (
                     <div className="flex h-full flex-col overflow-hidden bg-white dark:bg-gray-800">
                         <div className="relative h-32 w-full overflow-hidden bg-gradient-to-br from-[#7a1315] to-[#5a0d0f] p-6">
                             <div className="flex items-center gap-3">
@@ -445,6 +729,41 @@ export default function Schedule({ weeklySchedule, internalSchedule, facultyName
                                         </div>
                                     </div>
                                 )}
+
+                                {pairedSchedule && (
+                                    <div className="mt-4 rounded-2xl border border-amber-100 bg-amber-50/30 p-5 dark:border-amber-800/30 dark:bg-amber-900/10">
+                                        <div className="mb-4 flex items-center justify-between">
+                                            <h3 className="flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.2em] text-amber-600 dark:text-amber-400">
+                                                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                                                </svg>
+                                                Internal Schedule Linked
+                                            </h3>
+                                        </div>
+                                        <div className="space-y-3">
+                                            <div className="flex items-start justify-between">
+                                                <span className="text-xs font-bold text-gray-500 dark:text-gray-400">Time</span>
+                                                <span className="text-xs font-black uppercase tabular-nums text-gray-700 dark:text-gray-300">
+                                                    {pairedSchedule.startTime} - {pairedSchedule.endTime}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-start justify-between">
+                                                <span className="text-xs font-bold text-gray-500 dark:text-gray-400">Room</span>
+                                                <span className="text-xs font-black uppercase text-amber-600 dark:text-amber-400">
+                                                    {pairedSchedule.room || 'TBA'}
+                                                </span>
+                                            </div>
+                                            {pairedSchedule.day !== selectedSchedule.day && (
+                                                <div className="border-t border-amber-100/50 pt-3 dark:border-amber-800/20">
+                                                    <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Day</p>
+                                                    <p className="text-xs font-black uppercase text-amber-600 dark:text-amber-500">
+                                                        {pairedSchedule.day}
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
@@ -458,7 +777,8 @@ export default function Schedule({ weeklySchedule, internalSchedule, facultyName
                             </button>
                         </div>
                     </div>
-                )}
+                    );
+                })()}
             </Modal>
 
             <ScrollToTop />

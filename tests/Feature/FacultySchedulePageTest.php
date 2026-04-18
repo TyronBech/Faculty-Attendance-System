@@ -18,7 +18,7 @@ class FacultySchedulePageTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_schedule_page_returns_mirrored_official_and_internal_data_for_wrapped_columns(): void
+    public function test_schedule_page_returns_mirrored_official_and_internal_data_for_comparison_rows(): void
     {
         $faculty = $this->createFaculty();
 
