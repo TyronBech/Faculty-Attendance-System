@@ -4,6 +4,7 @@ import Modal from '@/Components/Modal';
 import { Head, Link } from '@inertiajs/react';
 import { useState, useEffect } from 'react';
 import { formatHours } from '@/Utils/formatHours';
+import { getScheduleDayTimingState, SCHEDULE_WEEK_DAYS } from '@/Utils/scheduleDayStatus';
 
 const ROW_STYLES = {
     course: {
@@ -18,16 +19,6 @@ const ROW_STYLES = {
         labelText: 'text-amber-700 dark:text-amber-300',
         panel: 'bg-slate-50/35 dark:bg-slate-950/10',
     },
-};
-
-const DAYS_MAP = {
-    'Sunday': 0,
-    'Monday': 1,
-    'Tuesday': 2,
-    'Wednesday': 3,
-    'Thursday': 4,
-    'Friday': 5,
-    'Saturday': 6,
 };
 
 const sortByDayAndTime = (a, b, daysArr, toMin) => {
@@ -104,7 +95,7 @@ const EmptyScheduleSlot = ({ title, variant, isPastDay }) => {
     );
 };
 
-const ScheduleSlot = ({ item, title, variant, isActive, onClick }) => {
+const ScheduleSlot = ({ item, title, variant, isActive, onClick, referenceDay = null }) => {
     const [opacity, setOpacity] = useState(1);
     const [isCurrentlyHappening, setIsCurrentlyHappening] = useState(false);
 
@@ -145,21 +136,17 @@ const ScheduleSlot = ({ item, title, variant, isActive, onClick }) => {
             }
 
             const now = new Date();
-            const currentDayIndex = now.getDay();
-            const scheduleDayIndex = DAYS_MAP[item.day] ?? -1;
-
-            // Check if it's a past day of the week
-            const isPastDay = scheduleDayIndex !== -1 && scheduleDayIndex < currentDayIndex;
+            const dayTimingState = getScheduleDayTimingState(item.day, now);
 
             // Past days: 0.4 opacity
-            if (isPastDay) {
+            if (dayTimingState === 'past') {
                 setOpacity(0.4);
                 setIsCurrentlyHappening(false);
                 return;
             }
 
             // Today: check if class is happening or has ended
-            if (scheduleDayIndex === currentDayIndex) {
+            if (dayTimingState === 'today') {
                 const currentMinutes = now.getHours() * 60 + now.getMinutes();
                 const startMinutes = parseTime(item.startTime);
                 const endMinutes = parseTime(item.endTime);
@@ -197,11 +184,7 @@ const ScheduleSlot = ({ item, title, variant, isActive, onClick }) => {
         return () => clearInterval(interval);
     }, [item]);
 
-    // Calculate isPastDay for EmptyScheduleSlot
-    const today = new Date();
-    const currentDayIndex = today.getDay();
-    const scheduleDayIndex = item ? (DAYS_MAP[item.day] ?? -1) : -1;
-    const isPastDay = scheduleDayIndex !== -1 && scheduleDayIndex < currentDayIndex;
+    const isPastDay = getScheduleDayTimingState(item?.day ?? referenceDay) === 'past';
 
     if (!item) {
         return <EmptyScheduleSlot title={title} variant={variant} isPastDay={isPastDay} />;
@@ -295,7 +278,7 @@ export default function Schedule({ weeklySchedule, internalSchedule, facultyName
         return hours * 60 + minutes;
     };
 
-    const daysArr = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    const daysArr = SCHEDULE_WEEK_DAYS;
 
     const sortedSchedule = weeklySchedule.map((dayData) => ({
         ...dayData,
@@ -492,9 +475,9 @@ export default function Schedule({ weeklySchedule, internalSchedule, facultyName
 
             <div className="mb-6 space-y-4">
                 {/* Search Bar */}
-                <div className="relative">
+                <div className="group relative">
                     <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
-                        <svg className="h-5 w-5 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                        <svg className="h-5 w-5 text-gray-400 transition-colors group-focus-within:text-[#7a1315] dark:text-gray-500 dark:group-focus-within:text-red-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.5 5.5a7.5 7.5 0 0 0 10.5 10.5Z" />
                         </svg>
                     </div>
@@ -503,7 +486,7 @@ export default function Schedule({ weeklySchedule, internalSchedule, facultyName
                         placeholder="Search courses, code, room, or program..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full rounded-2xl border border-gray-200 bg-white py-3 pl-12 pr-4 text-sm placeholder-gray-500 transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-gray-700 dark:bg-gray-800/50 dark:placeholder-gray-400 dark:focus:border-emerald-400"
+                        className="w-full rounded-2xl border border-gray-200 bg-white py-3 pl-12 pr-4 text-sm placeholder-gray-500 shadow-sm transition-colors focus:border-[#7a1315] focus:outline-none focus:ring-2 focus:ring-[#7a1315]/20 dark:border-gray-700 dark:bg-gray-800/50 dark:placeholder-gray-400 dark:focus:border-red-500 dark:focus:ring-red-500/20"
                     />
                 </div>
 
@@ -512,7 +495,7 @@ export default function Schedule({ weeklySchedule, internalSchedule, facultyName
                     <select
                         value={selectedDay}
                         onChange={(e) => setSelectedDay(e.target.value)}
-                        className="rounded-full border border-gray-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-widest text-gray-700 transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:focus:border-emerald-400"
+                        className="rounded-full border border-gray-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-widest text-gray-700 shadow-sm transition-colors focus:border-[#7a1315] focus:outline-none focus:ring-2 focus:ring-[#7a1315]/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:focus:border-red-500 dark:focus:ring-red-500/20"
                     >
                         <option value="all">All Days</option>
                         <option value="Monday">Monday</option>
@@ -556,6 +539,7 @@ export default function Schedule({ weeklySchedule, internalSchedule, facultyName
                                         variant="official"
                                         isActive={row.activeVariant === 'official'}
                                         onClick={handleCardClick}
+                                        referenceDay={row.activeItem?.day ?? row.courseItem?.day ?? null}
                                     />
                                     <ScheduleSlot
                                         item={row.internalItem}
@@ -563,6 +547,7 @@ export default function Schedule({ weeklySchedule, internalSchedule, facultyName
                                         variant="internal"
                                         isActive={row.activeVariant === 'internal'}
                                         onClick={handleCardClick}
+                                        referenceDay={row.activeItem?.day ?? row.courseItem?.day ?? null}
                                     />
                                 </div>
                             </div>
