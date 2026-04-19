@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Faculty;
 use App\Http\Controllers\Controller;
 use App\Models\AttendanceJustification;
 use App\Models\AttendanceRecord;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -17,11 +18,13 @@ class ManualAttendanceRequestController extends Controller
     {
         $faculty = $request->user()->faculty;
 
-        if (!$faculty) {
+        if (! $faculty) {
             return Inertia::render('Faculty/ManualAttendanceRequests', [
                 'requests' => ['data' => [], 'total' => 0, 'per_page' => 10, 'current_page' => 1, 'last_page' => 1],
                 'filters' => ['status' => ''],
                 'availableDates' => [],
+                'approvedCountingRequestsCount' => 0,
+                'manualRequestLimit' => 5,
             ]);
         }
 
@@ -42,13 +45,22 @@ class ManualAttendanceRequestController extends Controller
         $requests->through(function ($req) {
             $req->attachment_url = $req->getAttachmentUrl();
             if ($req->attendanceRecord) {
-                $req->course_name = $req->attendanceRecord->scheduleDetail?->course_title 
-                    ?? $req->attendanceRecord->internalSchedule?->name 
+                $req->course_name = $req->attendanceRecord->scheduleDetail?->course_title
+                    ?? $req->attendanceRecord->internalSchedule?->name
                     ?? 'Unknown Course';
                 $req->attendance_date = $req->attendanceRecord->attendance_date->format('Y-m-d');
             }
+
             return $req;
         });
+
+        // Count all requests that count toward the 5-limit (exclude pending requests)
+        $approvedCountingRequests = AttendanceJustification::query()
+            ->where('faculty_id', $faculty->id)
+            ->where('type', 'manual_time')
+            ->where('counts_as_manual_log', true)
+            ->whereNot('status', 'pending')
+            ->count();
 
         // Get dates with missing time entries for form
         $availableDates = AttendanceRecord::query()
@@ -83,6 +95,8 @@ class ManualAttendanceRequestController extends Controller
             'requests' => $requests,
             'filters' => ['status' => $status],
             'availableDates' => $availableDates,
+            'approvedCountingRequestsCount' => $approvedCountingRequests,
+            'manualRequestLimit' => 5,
         ]);
     }
 
@@ -93,7 +107,7 @@ class ManualAttendanceRequestController extends Controller
     {
         $faculty = $request->user()->faculty;
 
-        if (!$faculty) {
+        if (! $faculty) {
             return back()->withErrors(['error' => 'Faculty profile not found.']);
         }
 
@@ -112,10 +126,10 @@ class ManualAttendanceRequestController extends Controller
             return back()->withErrors(['error' => 'Unauthorized']);
         }
 
-        // Combine date with time
-        $attendanceDate = $attendanceRecord->attendance_date;
-        $requestedTimeIn = $attendanceDate->copy()->setTimeFromTimeString($validated['requested_time_in']);
-        $requestedTimeOut = $attendanceDate->copy()->setTimeFromTimeString($validated['requested_time_out']);
+        // Combine date with time (store as datetime without timezone conversion)
+        $attendanceDate = $attendanceRecord->attendance_date->toDateString();
+        $requestedTimeIn = Carbon::createFromFormat('Y-m-d H:i', "{$attendanceDate} {$validated['requested_time_in']}", 'Asia/Manila')->setTimezone('UTC');
+        $requestedTimeOut = Carbon::createFromFormat('Y-m-d H:i', "{$attendanceDate} {$validated['requested_time_out']}", 'Asia/Manila')->setTimezone('UTC');
 
         $attachmentPath = null;
         if ($request->hasFile('attachment')) {
@@ -139,6 +153,7 @@ class ManualAttendanceRequestController extends Controller
             'justification' => $validated['justification'],
             'attachment_path' => $attachmentPath,
             'status' => 'pending',
+            'counts_as_manual_log' => false,
         ]);
 
         return back()->with('success', 'Manual attendance request submitted successfully');
@@ -171,13 +186,15 @@ class ManualAttendanceRequestController extends Controller
     {
         $faculty = $request->user()->faculty;
 
-        if (!$faculty) {
+        if (! $faculty) {
             return response()->json([
                 'data' => [],
                 'total' => 0,
                 'per_page' => 10,
                 'current_page' => 1,
                 'last_page' => 1,
+                'approvedCountingRequestsCount' => 0,
+                'manualRequestLimit' => 5,
             ]);
         }
 
@@ -194,6 +211,18 @@ class ManualAttendanceRequestController extends Controller
             ->orderBy('created_at', 'desc')
             ->paginate(10);
 
-        return response()->json($requests);
+        // Count all requests that count toward the 5-limit (exclude pending requests)
+        $approvedCountingRequests = AttendanceJustification::query()
+            ->where('faculty_id', $faculty->id)
+            ->where('type', 'manual_time')
+            ->where('counts_as_manual_log', true)
+            ->whereNot('status', 'pending')
+            ->count();
+
+        $responseData = $requests->toArray();
+        $responseData['approvedCountingRequestsCount'] = $approvedCountingRequests;
+        $responseData['manualRequestLimit'] = 5;
+
+        return response()->json($responseData);
     }
 }
