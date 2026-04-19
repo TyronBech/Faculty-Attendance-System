@@ -189,7 +189,8 @@ class AdminManualAttendanceRequestApprovalController extends Controller
                 'attendanceRecord.scheduleDetail.schedule:id,academic_year,semester,effective_from,effective_until,status',
                 'attendanceRecord.internalSchedule:id,schedule_id,faculty_id,day_of_week,device_time_in,device_time_out,is_operational,required_hours',
                 'attendanceRecord.internalSchedule.schedule:id,academic_year,semester,effective_from,effective_until,status',
-                'reviewer:id,email',
+                'reviewer:id,email,username',
+                'reviewer.admin:id,user_id,first_name,middle_name,last_name,suffix_name',
             ])
             ->orderByDesc('created_at');
 
@@ -232,7 +233,7 @@ class AdminManualAttendanceRequestApprovalController extends Controller
 
             if ($scheduleWindow !== null) {
                 $semesterLabel = "AY {$scheduleWindow['academic_year']} - Semester {$scheduleWindow['semester']}";
-                $cacheKey = $justification->faculty_id.':'.$scheduleWindow['academic_year'].':'.$scheduleWindow['semester'];
+                $cacheKey = $justification->faculty_id . ':' . $scheduleWindow['academic_year'] . ':' . $scheduleWindow['semester'];
 
                 if (! array_key_exists($cacheKey, $manualCountCache)) {
                     $manualCountCache[$cacheKey] = $this->countApprovedManualLogsInSemester(
@@ -243,6 +244,12 @@ class AdminManualAttendanceRequestApprovalController extends Controller
                 }
 
                 $usedCount = $manualCountCache[$cacheKey];
+            }
+
+            $reviewerName = $justification->reviewer?->admin?->full_name;
+
+            if (blank($reviewerName)) {
+                $reviewerName = $justification->reviewer?->username;
             }
 
             return [
@@ -264,6 +271,7 @@ class AdminManualAttendanceRequestApprovalController extends Controller
                 'status' => $justification->status,
                 'review_remarks' => $justification->review_remarks,
                 'reviewed_at' => $justification->reviewed_at?->format('M d, Y h:i A'),
+                'reviewer_name' => $reviewerName,
                 'reviewer_email' => $justification->reviewer?->email,
                 'created_at' => $justification->created_at?->format('M d, Y h:i A'),
                 'updated_at' => $justification->updated_at?->format('M d, Y h:i A'),
