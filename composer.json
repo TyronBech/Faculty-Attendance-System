@@ -13,6 +13,7 @@
         "laravel/sanctum": "^4.0",
         "laravel/tinker": "^2.10.1",
         "laravel/ui": "^4.6",
+        "milon/barcode": "^13.1",
         "phpoffice/phpspreadsheet": "^2.2",
         "spatie/browsershot": "^5.2",
         "spatie/laravel-pdf": "^2.2",

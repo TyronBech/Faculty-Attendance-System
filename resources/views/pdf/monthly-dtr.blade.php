@@ -366,10 +366,10 @@
     </tr>
     </table>
 
-    {{-- BOTTOM STRIP: Legend left, Biometric right --}}
-    <table class="bottom-strip">
+    {{-- BOTTOM STRIP: Legend left, Biometric right, Barcode bottom right --}}
+    <table class="bottom-strip" style="width:100%;">
         <tr>
-            <td>
+            <td style="width:70%; vertical-align:top;">
                 <div class="legend">
                     <strong>Legend:</strong><br>
                     <strong>Text Color</strong><br>
@@ -384,6 +384,15 @@
                     3 - CEA / COC / ITech (NDC Campus)<br>
                     4 - Hasmin (M. H. Del Pilar Campus)
                 </div>
+            </td>
+            <td style="width:30%; vertical-align:bottom; text-align:right; padding-right:2mm;">
+                {{-- Barcode: EmployeeNo as value, Code128 --}}
+                @if (!empty($barcodeImg))
+                    <div style="display:inline-block; margin-top:10mm;">
+                        <img src="{{ $barcodeImg }}" alt="Barcode" style="height:40px;">
+                        <div style="font-size:7pt; text-align:center; margin-top:2px;">{{ $employeeNo }}</div>
+                    </div>
+                @endif
             </td>
         </tr>
     </table>
