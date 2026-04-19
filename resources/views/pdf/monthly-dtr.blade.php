@@ -249,9 +249,9 @@
                     @php
                         $r = $rows[$d];
                         $isHoliday = $r['is_holiday'] ?? false;
-                        $hasTimes = ! empty($r['morning_in']) || ! empty($r['morning_out'])
-                            || ! empty($r['afternoon_in']) || ! empty($r['afternoon_out'])
-                            || ! empty($r['night_in']) || ! empty($r['night_out']);
+                        $hasTimes = ! empty($r['official_morning_in']) || ! empty($r['official_morning_out'])
+                            || ! empty($r['official_afternoon_in']) || ! empty($r['official_afternoon_out'])
+                            || ! empty($r['official_night_in']) || ! empty($r['official_night_out']);
                         $tardy = (int) ($r['tardy_minutes'] ?? 0);
                         $ut = (int) ($r['undertime_minutes'] ?? 0);
                         $isManual = $r['is_manual'] ?? false;
@@ -262,15 +262,15 @@
                         @if ($isHoliday && ! $hasTimes)
                             <td colspan="7" class="holiday-cell txt-green">HOLIDAY</td>
                         @else
-                            <td class="{{ $tdClass }}">{{ $r['morning_in'] ?? '' }}</td>
-                            <td class="{{ $tdClass }}">{{ $r['morning_out'] ?? '' }}</td>
-                            <td class="{{ $tdClass }}">{{ $r['afternoon_in'] ?? '' }}</td>
-                            <td class="{{ $tdClass }}">{{ $r['afternoon_out'] ?? '' }}</td>
-                            <td class="{{ $tdClass }}">{{ $r['night_in'] ?? '' }}</td>
-                            <td class="{{ $tdClass }}">{{ $r['night_out'] ?? '' }}</td>
+                            <td class="{{ $tdClass }}">{{ $r['official_morning_in'] ?? '' }}</td>
+                            <td class="{{ $tdClass }}">{{ $r['official_morning_out'] ?? '' }}</td>
+                            <td class="{{ $tdClass }}">{{ $r['official_afternoon_in'] ?? '' }}</td>
+                            <td class="{{ $tdClass }}">{{ $r['official_afternoon_out'] ?? '' }}</td>
+                            <td class="{{ $tdClass }}">{{ $r['official_night_in'] ?? '' }}</td>
+                            <td class="{{ $tdClass }}">{{ $r['official_night_out'] ?? '' }}</td>
                             <td class="txt-red">
                                 @if ($tardy > 0 && $ut > 0)
-                                    {{ $tardy }} / {{ $ut }}
+                                    {{ $tardy }} + {{ $ut }}
                                 @elseif ($tardy > 0)
                                     {{ $tardy }}
                                 @elseif ($ut > 0)
