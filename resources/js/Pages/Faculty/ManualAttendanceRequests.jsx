@@ -28,6 +28,20 @@ const formatTime12 = (time24) => {
     return `${h}:${m} ${ampm}`;
 };
 
+const extractTimeFromDateTime = (datetimeString) => {
+    if (!datetimeString) return '';
+    try {
+        // Parse the ISO datetime and convert to local time
+        const date = new Date(datetimeString);
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        return `${hours}:${minutes}`;
+    } catch (e) {
+        // Fallback to substring extraction
+        return datetimeString?.substring(11, 16) || '';
+    }
+};
+
 const formatDateTime = (dateString) => {
     if (!dateString) return '';
     try {
@@ -46,7 +60,13 @@ const formatDateTime = (dateString) => {
     }
 };
 
-export default function ManualAttendanceRequests({ requests: initialRequests, filters, availableDates = [] }) {
+export default function ManualAttendanceRequests({ 
+    requests: initialRequests, 
+    filters, 
+    availableDates = [],
+    approvedCountingRequestsCount = 0,
+    manualRequestLimit = 5,
+}) {
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showCancelModal, setShowCancelModal] = useState(false);
     const [selectedRequest, setSelectedRequest] = useState(null);
@@ -58,6 +78,8 @@ export default function ManualAttendanceRequests({ requests: initialRequests, fi
     const [requestsData, setRequestsData] = useState(initialRequests);
     const [isFiltering, setIsFiltering] = useState(false);
     const [currentPage, setCurrentPage] = useState(initialRequests.current_page || 1);
+    const [countingRequestsCount, setCountingRequestsCount] = useState(approvedCountingRequestsCount);
+    const [requestLimit, setRequestLimit] = useState(manualRequestLimit);
 
     // ── File preview & Modal state ───────────────────────────────
     const [previewAttachment, setPreviewAttachment] = useState(null);
@@ -157,6 +179,8 @@ export default function ManualAttendanceRequests({ requests: initialRequests, fi
             .then((data) => {
                 setRequestsData(data);
                 setCurrentPage(data.current_page || 1);
+                setCountingRequestsCount(data.approvedCountingRequestsCount || 0);
+                setRequestLimit(data.manualRequestLimit || 5);
             })
             .catch(() => {})
             .finally(() => setIsFiltering(false));
@@ -198,6 +222,38 @@ export default function ManualAttendanceRequests({ requests: initialRequests, fi
                     <PrimaryButton onClick={() => setShowCreateModal(true)}>
                         + New Request
                     </PrimaryButton>
+                </div>
+
+                {/* Request Limit Counter */}
+                <div className="rounded-lg bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border border-blue-200 dark:border-blue-800/50 p-4">
+                    <div className="flex items-center justify-between gap-4">
+                        <div>
+                            <p className="text-sm font-semibold text-blue-900 dark:text-blue-300">
+                                Approved Requests (Counting Towards Limit)
+                            </p>
+                            <p className="text-xs text-blue-700 dark:text-blue-400 mt-1">
+                                You have {countingRequestsCount} of {requestLimit} approved requests that count towards your annual limit.
+                            </p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <div className="text-right">
+                                <p className="text-2xl font-bold text-blue-900 dark:text-blue-300">
+                                    {countingRequestsCount}/{requestLimit}
+                                </p>
+                            </div>
+                            <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{
+                                background: countingRequestsCount >= requestLimit 
+                                    ? 'rgb(220, 38, 38)' 
+                                    : 'linear-gradient(135deg, rgb(59, 130, 246), rgb(99, 102, 241))',
+                            }}>
+                                <div className="w-14 h-14 rounded-full bg-white dark:bg-gray-800 flex items-center justify-center">
+                                    <p className="text-lg font-bold text-blue-600 dark:text-blue-400">
+                                        {((countingRequestsCount / requestLimit) * 100).toFixed(0)}%
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 {/* Status Filter Tabs */}
@@ -246,12 +302,26 @@ export default function ManualAttendanceRequests({ requests: initialRequests, fi
                                                     <span className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-bold ring-1 ring-inset ${STATUS_STYLES[request.status]}`}>
                                                         {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
                                                     </span>
+                                                    {request.status === 'pending' && request.counts_as_manual_log === 0 && (
+                                                        <span className="inline-flex items-center rounded-md px-2.5 py-1 text-xs font-bold text-yellow-700 bg-yellow-50 ring-1 ring-inset ring-yellow-600/20 dark:bg-yellow-400/10 dark:text-yellow-400 dark:ring-yellow-400/30">
+                                                            Not Counted (Pending)
+                                                        </span>
+                                                    )}
+                                                    {(request.status === 'approved' || request.status === 'rejected') && (
+                                                        <span className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-bold ring-1 ring-inset ${
+                                                            request.counts_as_manual_log
+                                                                ? 'text-emerald-700 bg-emerald-50 ring-emerald-600/20 dark:bg-emerald-400/10 dark:text-emerald-400 dark:ring-emerald-400/30'
+                                                                : 'text-orange-700 bg-orange-50 ring-orange-600/20 dark:bg-orange-400/10 dark:text-orange-400 dark:ring-orange-400/30'
+                                                        }`}>
+                                                            {request.counts_as_manual_log ? 'Counts Toward Limit' : 'Not Counted'}
+                                                        </span>
+                                                    )}
                                                 </div>
                                                 <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
                                                     {request.attendance_date}
                                                 </p>
                                                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                                    <span className="font-semibold text-gray-900 dark:text-white">{formatTime12(request.requested_time_in?.substring(11, 16))} - {formatTime12(request.requested_time_out?.substring(11, 16))}</span>
+                                                    <span className="font-semibold text-gray-900 dark:text-white">{formatTime12(extractTimeFromDateTime(request.requested_time_in))} - {formatTime12(extractTimeFromDateTime(request.requested_time_out))}</span>
                                                 </p>
                                                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                                                     Submitted {new Date(request.created_at).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}
@@ -330,7 +400,25 @@ export default function ManualAttendanceRequests({ requests: initialRequests, fi
                                                                 {request.review_remarks && (
                                                                     <p><span className="font-semibold">Remarks:</span> {request.review_remarks}</p>
                                                                 )}
+                                                                <p>
+                                                                    <span className="font-semibold">Counts Toward Limit:</span>{' '}
+                                                                    {request.counts_as_manual_log ? (
+                                                                        <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Yes</span>
+                                                                    ) : (
+                                                                        <span className="text-orange-600 dark:text-orange-400 font-semibold">No (Exempted)</span>
+                                                                    )}
+                                                                </p>
                                                             </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Limit status for pending requests */}
+                                                    {request.status === 'pending' && (
+                                                        <div className="rounded-xl bg-yellow-50 dark:bg-yellow-900/20 p-4 border border-yellow-100 dark:border-yellow-800/50">
+                                                            <p className="text-xs font-bold text-yellow-600 dark:text-yellow-400 uppercase tracking-wider mb-2">Pending Review</p>
+                                                            <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                                                                This request does not count toward your 5-request limit yet. Once approved or rejected by the admin, it may count depending on the admin's decision.
+                                                            </p>
                                                         </div>
                                                     )}
                                                 </div>
