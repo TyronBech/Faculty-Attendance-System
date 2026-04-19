@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\AdminDtrExportController;
 use App\Models\AttendanceAdjustment;
 use App\Models\Faculty;
 use App\Services\AttendanceToDtrService;
+use App\Support\MonthlyDtrBarcode;
 use Carbon\Carbon;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -67,13 +68,8 @@ class GenerateDtrPdfJob implements ShouldQueue
 
         $outputPath = Storage::disk('local')->path("dtr-exports/{$this->token}.pdf");
 
-        // Generate barcode HTML in PHP and pass to view
-        $employeeNo = $faculty->faculty_code ?: ($faculty->biometric_id ?: ('ID-' . $faculty->id));
-
-        $barcodeImg = '';
-        if (!empty($employeeNo)) {
-            $barcodeImg = 'data:image/png;base64,' . \Milon\Barcode\Facades\DNS1DFacade::getBarcodePNG($employeeNo, 'C128', 1.2, 40);
-        }
+        $printedAt = now();
+        $barcode = MonthlyDtrBarcode::build($faculty, $printedAt);
 
         Pdf::view('pdf.monthly-dtr', [
             'faculty' => $faculty,
@@ -81,9 +77,9 @@ class GenerateDtrPdfJob implements ShouldQueue
             'summary' => $summary,
             'manualEntries' => $manualEntries,
             'periodLabel' => $periodLabel,
-            'generatedAt' => now()->format('l, F d, Y'),
-            'employeeNo' => $employeeNo,
-            'barcodeImg' => $barcodeImg,
+            'generatedAt' => $printedAt->format('l, F d, Y'),
+            'barcodeImg' => $barcode['img'],
+            'barcodeValue' => $barcode['value'],
         ])
             ->driver('dompdf')
             ->paperSize(210, 297, 'mm')

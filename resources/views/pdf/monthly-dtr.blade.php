@@ -390,7 +390,9 @@
                 @if (!empty($barcodeImg))
                     <div style="display:inline-block; margin-top:10mm;">
                         <img src="{{ $barcodeImg }}" alt="Barcode" style="height:40px;">
-                        <div style="font-size:7pt; text-align:center; margin-top:2px;">{{ $employeeNo }}</div>
+                        <div style="font-size:6pt; text-align:center; margin-top:2px; max-width:52mm;">
+                            {{ $barcodeValue ?? $employeeNo }}
+                        </div>
                     </div>
                 @endif
             </td>
