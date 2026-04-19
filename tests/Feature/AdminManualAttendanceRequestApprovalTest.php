@@ -224,6 +224,31 @@ class AdminManualAttendanceRequestApprovalTest extends TestCase
         $response->assertJsonPath('data.0.reviewer_name', 'Ada Lovelace');
     }
 
+    public function test_filter_returns_reviewer_full_name_for_reviewed_requests(): void
+    {
+        $admin = $this->createAdminUser();
+        Admin::factory()->for($admin)->create([
+            'first_name' => 'Ada',
+            'middle_name' => null,
+            'last_name' => 'Lovelace',
+            'suffix_name' => null,
+        ]);
+
+        $context = $this->createManualRequestContext();
+        $context['request']->update([
+            'status' => 'approved',
+            'reviewed_by' => $admin->id,
+            'reviewed_at' => now(),
+            'review_remarks' => 'Reviewed by admin profile.',
+        ]);
+
+        $response = $this->actingAs($admin, 'admin')
+            ->getJson(route('admin.manual-attendance-requests.filter'));
+
+        $response->assertOk();
+        $response->assertJsonPath('data.0.reviewer_name', 'Ada Lovelace');
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -338,8 +363,8 @@ class AdminManualAttendanceRequestApprovalTest extends TestCase
     {
         $department = Department::factory()->create();
         $user = User::create([
-            'username' => 'faculty.'.strtolower(str_replace('-', '', $biometricId)),
-            'email' => strtolower($biometricId).'@example.com',
+            'username' => 'faculty.' . strtolower(str_replace('-', '', $biometricId)),
+            'email' => strtolower($biometricId) . '@example.com',
             'password' => 'password',
             'is_active' => true,
         ]);
@@ -349,7 +374,7 @@ class AdminManualAttendanceRequestApprovalTest extends TestCase
             ->for($department)
             ->create([
                 'biometric_id' => $biometricId,
-                'faculty_code' => 'FC-'.substr($biometricId, -4),
+                'faculty_code' => 'FC-' . substr($biometricId, -4),
                 'is_active' => true,
             ]);
     }
@@ -357,7 +382,7 @@ class AdminManualAttendanceRequestApprovalTest extends TestCase
     private function createAdminUser(): User
     {
         return User::create([
-            'username' => 'admin.'.fake()->unique()->numerify('###'),
+            'username' => 'admin.' . fake()->unique()->numerify('###'),
             'email' => fake()->unique()->safeEmail(),
             'password' => 'password',
             'is_active' => true,

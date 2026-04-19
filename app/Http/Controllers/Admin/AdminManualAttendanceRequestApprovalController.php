@@ -259,7 +259,7 @@ class AdminManualAttendanceRequestApprovalController extends Controller
 
             if ($scheduleWindow !== null) {
                 $semesterLabel = "AY {$scheduleWindow['academic_year']} - Semester {$scheduleWindow['semester']}";
-                $cacheKey = $justification->faculty_id.':'.$scheduleWindow['academic_year'].':'.$scheduleWindow['semester'];
+                $cacheKey = $justification->faculty_id . ':' . $scheduleWindow['academic_year'] . ':' . $scheduleWindow['semester'];
 
                 if (! array_key_exists($cacheKey, $manualCountCache)) {
                     $manualCountCache[$cacheKey] = $this->countApprovedManualLogsInSemester(
