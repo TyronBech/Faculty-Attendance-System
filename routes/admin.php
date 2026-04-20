@@ -57,23 +57,23 @@ Route::middleware(['auth.admin'])->prefix('admin')->group(function () {
         ->name('admin.dashboard');
 
     Route::get('/rbac', [AdminRbacController::class, 'index'])
-        ->middleware('check.role:super_admin,admin')
+        ->middleware('check.role:super_admin|admin,admin')
         ->name('admin.rbac.index');
 
     Route::post('/rbac/roles', [AdminRbacController::class, 'storeRole'])
-        ->middleware('check.role:super_admin,admin')
+        ->middleware('check.role:super_admin|admin,admin')
         ->name('admin.rbac.roles.store');
 
     Route::put('/rbac/roles/{role}', [AdminRbacController::class, 'updateRole'])
-        ->middleware('check.role:super_admin,admin')
+        ->middleware('check.role:super_admin|admin,admin')
         ->name('admin.rbac.roles.update');
 
     Route::delete('/rbac/roles/{role}', [AdminRbacController::class, 'destroyRole'])
-        ->middleware('check.role:super_admin,admin')
+        ->middleware('check.role:super_admin|admin,admin')
         ->name('admin.rbac.roles.destroy');
 
     Route::put('/rbac/users/{user}/roles', [AdminRbacController::class, 'updateUserRoles'])
-        ->middleware('check.role:super_admin,admin')
+        ->middleware('check.role:super_admin|admin,admin')
         ->name('admin.rbac.users.roles.update');
 
     Route::get('/api/dashboard', [AdminDashboardController::class, 'liveStats'])

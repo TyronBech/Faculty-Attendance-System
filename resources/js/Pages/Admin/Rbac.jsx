@@ -2,7 +2,7 @@ import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
 import InputError from "@/Components/InputError";
 import Modal from "@/Components/Modal";
 import { Head, router, useForm } from "@inertiajs/react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 function prettifyName(value) {
     return value
@@ -35,6 +35,14 @@ export default function Rbac({ roles, permissions, users }) {
         });
         return initial;
     });
+
+    useEffect(() => {
+        const updated = {};
+        users.forEach((user) => {
+            updated[user.id] = user.roles.map((role) => role.name);
+        });
+        setUserRolesMap(updated);
+    }, [users, roles]);
 
     const createRoleForm = useForm({
         name: "",

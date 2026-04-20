@@ -108,6 +108,10 @@ class AdminRbacController extends Controller
             abort(404);
         }
 
+        if ($role->name === 'super_admin') {
+            return back()->with('error', 'The super_admin role cannot be modified.');
+        }
+
         $validated = $request->validated();
         $affectedUsers = $role->users()->count();
 
@@ -128,7 +132,26 @@ class AdminRbacController extends Controller
         }
 
         $validated = $request->validated();
-        $user->syncRoles($validated['roles'] ?? []);
+        $incomingRoles = $validated['roles'] ?? [];
+
+        $superAdminRole = Role::query()
+            ->where('name', 'super_admin')
+            ->where('guard_name', 'admin')
+            ->first();
+
+        if ($superAdminRole && $user->hasRole($superAdminRole)) {
+            $willLoseSuperAdmin = ! in_array('super_admin', $incomingRoles, true);
+
+            if ($willLoseSuperAdmin) {
+                $remainingSuperAdmins = $superAdminRole->users()->where('users.id', '!=', $user->id)->count();
+
+                if ($remainingSuperAdmins === 0) {
+                    return back()->with('error', 'Cannot remove the super_admin role from the last remaining super admin.');
+                }
+            }
+        }
+
+        $user->syncRoles($incomingRoles);
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 

@@ -8,6 +8,7 @@ use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
+use Spatie\Permission\Models\Role as SpatieRole;
 use Tests\TestCase;
 
 class AdminRbacAccessTest extends TestCase
@@ -28,16 +29,29 @@ class AdminRbacAccessTest extends TestCase
             ->component('Admin/Rbac')
             ->has('roles')
             ->has('permissions')
+            ->has('users')
         );
     }
 
-    public function test_non_super_admin_cannot_view_the_rbac_page(): void
+    public function test_admin_role_can_view_the_rbac_page(): void
     {
         $this->seed(RolePermissionSeeder::class);
 
         $admin = $this->createAdminUserWithRole(Role::Admin->value);
 
         $response = $this->actingAs($admin, 'admin')
+            ->get(route('admin.rbac.index'));
+
+        $response->assertOk();
+    }
+
+    public function test_non_admin_role_cannot_view_the_rbac_page(): void
+    {
+        $this->seed(RolePermissionSeeder::class);
+
+        $hrStaff = $this->createAdminUserWithRole(Role::HrStaff->value);
+
+        $response = $this->actingAs($hrStaff, 'admin')
             ->get(route('admin.rbac.index'));
 
         $response->assertForbidden();
@@ -54,7 +68,13 @@ class AdminRbacAccessTest extends TestCase
     {
         $user = User::factory()->create();
         Admin::factory()->for($user)->create();
-        $user->assignRole($role);
+
+        $adminRole = SpatieRole::query()
+            ->where('name', $role)
+            ->where('guard_name', 'admin')
+            ->firstOrFail();
+
+        $user->assignRole($adminRole);
 
         return $user;
     }

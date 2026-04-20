@@ -19,7 +19,7 @@ class StoreRoleRequest extends FormRequest
                 'required',
                 'string',
                 'max:60',
-                'regex:/^[A-Za-z0-9_]+$/',
+                'regex:/^[a-z0-9_]+$/',
                 Rule::unique('roles', 'name')->where('guard_name', 'admin'),
             ],
             'permissions' => ['nullable', 'array'],
@@ -33,7 +33,7 @@ class StoreRoleRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'name.regex' => 'Role name may contain letters, numbers, and underscores only.',
+            'name.regex' => 'Role name may contain lowercase letters, numbers, and underscores only.',
         ];
     }
 }
