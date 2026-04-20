@@ -42,7 +42,7 @@ export default function Rbac({ roles, permissions, users }) {
             updated[user.id] = user.roles.map((role) => role.name);
         });
         setUserRolesMap(updated);
-    }, [users, roles]);
+    }, [users]);
 
     const createRoleForm = useForm({
         name: "",
