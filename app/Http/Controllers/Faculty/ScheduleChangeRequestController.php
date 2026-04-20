@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Faculty;
 use App\Http\Controllers\Controller;
 use App\Models\ScheduleChangeRequest;
 use App\Models\ScheduleDetail;
+use App\Models\RequestAttachment;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Carbon\Carbon;
@@ -76,17 +77,47 @@ class ScheduleChangeRequestController extends Controller
             'requested_room' => 'nullable|string|max:100',
             'effective_date' => 'required|date|after_or_equal:today',
             'reason' => 'required|string|max:1000',
-            'supporting_document' => 'required|file|mimes:pdf,jpg,jpeg,png|max:5120',
+            'attachments' => 'nullable|array',
+            'attachments.*.file' => 'required|file|mimes:pdf,jpg,jpeg,png|max:5120',
+            'attachments.*.label' => 'required|string|max:255',
         ]);
-
-        if ($request->hasFile('supporting_document')) {
-            $validated['supporting_document_path'] = $request->file('supporting_document')->store('supporting_documents', 'public');
-        }
 
         $result = $faculty->createScheduleChangeRequest($validated);
 
         if (!$result['success']) {
             return back()->withErrors([$result['error_field'] => $result['error_message']]);
+        }
+
+        // Get the newly created request
+        $scheduleChangeRequest = $faculty->scheduleChangeRequests()
+            ->where('schedule_detail_id', $validated['schedule_detail_id'])
+            ->latest()
+            ->first();
+
+        // Handle multiple file attachments
+        if (!empty($validated['attachments']) && $scheduleChangeRequest) {
+            $facultyDir = "attachments/faculty_{$faculty->id}/schedule_change_requests";
+            
+            foreach ($validated['attachments'] as $attachment) {
+                try {
+                    $file = $attachment['file'];
+                    $label = $attachment['label'];
+                    $path = $file->store("{$facultyDir}/request_{$scheduleChangeRequest->id}", 'public');
+                    
+                    if ($path) {
+                        RequestAttachment::create([
+                            'attachmentable_id' => $scheduleChangeRequest->id,
+                            'attachmentable_type' => ScheduleChangeRequest::class,
+                            'file_path' => $path,
+                            'custom_label' => $label,
+                            'mime_type' => $file->getMimeType(),
+                            'file_size' => $file->getSize(),
+                        ]);
+                    }
+                } catch (\Exception $e) {
+                    \Illuminate\Support\Facades\Log::error('Failed to save schedule change attachment: ' . $e->getMessage());
+                }
+            }
         }
 
         return back()->with('success', 'Schedule change request submitted successfully.');

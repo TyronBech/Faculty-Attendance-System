@@ -7,6 +7,7 @@ import InputError from '@/Components/InputError';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
 import DangerButton from '@/Components/DangerButton';
+import MultiFileUploader from '@/Components/MultiFileUploader';
 import { Head, Link, useForm } from '@inertiajs/react';
 import { useState, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
@@ -82,10 +83,10 @@ export default function ManualAttendanceRequests({
     const [requestLimit, setRequestLimit] = useState(manualRequestLimit);
 
     // ── File preview & Modal state ───────────────────────────────
-    const [previewAttachment, setPreviewAttachment] = useState(null);
-    const fileAttachmentRef = useRef(null);
     const [previewModalUrl, setPreviewModalUrl] = useState(null);
     const [showPreviewModal, setShowPreviewModal] = useState(false);
+    const [attachmentFiles, setAttachmentFiles] = useState([]);
+    const [fileUploadError, setFileUploadError] = useState(null);
 
     // ── Toggle expanded state ────────────────────────────────
     const toggleExpanded = (requestId) => {
@@ -106,37 +107,42 @@ export default function ManualAttendanceRequests({
         requested_time_in: '',
         requested_time_out: '',
         justification: '',
-        attachment: null,
     });
 
-    const handleFileChange = (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
+    const handleFilesChange = (files) => {
+        setAttachmentFiles(files);
+        setFileUploadError(null);
+    };
 
-        createForm.setData('attachment', file);
-        createForm.clearErrors('attachment');
-
-        if (file.type.startsWith('image/')) {
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-                setPreviewAttachment(ev.target.result);
-            };
-            reader.readAsDataURL(file);
-        } else {
-            setPreviewAttachment('document');
-        }
+    const handleFileUploadError = (error) => {
+        setFileUploadError(error);
     };
 
     const handleCreate = (e) => {
         e.preventDefault();
 
+        // Create FormData to handle multiple files
+        const formData = new FormData();
+        formData.append('attendance_record_id', createForm.data.attendance_record_id);
+        formData.append('requested_time_in', createForm.data.requested_time_in);
+        formData.append('requested_time_out', createForm.data.requested_time_out);
+        formData.append('justification', createForm.data.justification);
+
+        // Append all files
+        attachmentFiles.forEach((file, index) => {
+            formData.append(`attachments[${index}]`, file);
+        });
+
+        // Post using Inertia router
         createForm.post(route('faculty.manual-attendance-requests.store'), {
+            data: formData,
             preserveScroll: true,
             forceFormData: true,
             onSuccess: () => {
                 setShowCreateModal(false);
                 createForm.reset();
-                setPreviewAttachment(null);
+                setAttachmentFiles([]);
+                setFileUploadError(null);
                 setSelectedDate(availableDates && availableDates.length > 0 ? availableDates[0] : null);
                 fetchRequests(filterStatus, 1);
             },
@@ -572,46 +578,15 @@ export default function ManualAttendanceRequests({
 
                                 {/* File Upload Section */}
                                 <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
-                                    <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-                                        Supporting Document
-                                    </h3>
-                                    
-                                    <div>
-                                        <InputLabel htmlFor="attachment" value="Attach Document (Optional)" />
-                                        <div className="mt-2">
-                                            <label htmlFor="attachment" className="flex items-center justify-center w-full px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-gray-400 dark:border-gray-600 dark:hover:border-gray-500 transition-colors bg-gray-50 dark:bg-gray-700/50">
-                                                <div className="text-center">
-                                                    <svg className="mx-auto h-8 w-8 text-gray-400 dark:text-gray-500" stroke="currentColor" fill="none" viewBox="0 0 48 48">
-                                                        <path d="M28 8H12a4 4 0 00-4 4v20a4 4 0 004 4h24a4 4 0 004-4V20m-8-12v12m0 0l-4-4m4 4l4-4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                                                    </svg>
-                                                    <p className="mt-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-                                                        {createForm.data.attachment ? createForm.data.attachment.name : 'Click to upload or drag and drop'}
-                                                    </p>
-                                                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                                                        PDF, DOC, DOCX, JPG, PNG (Max 5MB)
-                                                    </p>
-                                                </div>
-                                                <input
-                                                    ref={fileAttachmentRef}
-                                                    id="attachment"
-                                                    type="file"
-                                                    onChange={handleFileChange}
-                                                    accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                                                    className="hidden"
-                                                />
-                                            </label>
-                                        </div>
-                                        <InputError message={createForm.errors.attachment} />
-                                        {previewAttachment && (
-                                            <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-700 rounded">
-                                                {previewAttachment === 'document' ? (
-                                                    <p className="text-sm text-gray-600 dark:text-gray-400">✓ Document ready to upload</p>
-                                                ) : (
-                                                    <img src={previewAttachment} alt="Preview" className="max-h-32 rounded" />
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
+                                    <MultiFileUploader
+                                        label="Supporting Documents"
+                                        description="Upload supporting files (5MB per file)"
+                                        value={attachmentFiles}
+                                        onChange={handleFilesChange}
+                                        onError={handleFileUploadError}
+                                        error={fileUploadError}
+                                        disabled={createForm.processing}
+                                    />
                                 </div>
 
                                 {/* Submit Buttons */}

@@ -6,6 +6,7 @@ import InputError from '@/Components/InputError';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
 import DangerButton from '@/Components/DangerButton';
+import MultiFileUploader from '@/Components/MultiFileUploader';
 import { Head, Link, useForm } from '@inertiajs/react';
 import { useState, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
@@ -61,46 +62,48 @@ export default function UndertimeRequests({ requests: initialRequests, filters, 
     const [currentPage, setCurrentPage] = useState(initialRequests.current_page || 1);
 
     // ── File preview & Modal state ───────────────────────────────
-    const [previewAttachment, setPreviewAttachment] = useState(null);
-    const fileAttachmentRef = useRef(null);
     const [previewModalUrl, setPreviewModalUrl] = useState(null);
     const [showPreviewModal, setShowPreviewModal] = useState(false);
+    const [attachmentFiles, setAttachmentFiles] = useState([]);
+    const [fileUploadError, setFileUploadError] = useState(null);
 
     // ── Create form ──────────────────────────────────────────
     const createForm = useForm({
         attendance_record_id: selectedSchedule?.id || '',
         reason: '',
-        attachment: null,
     });
 
-    const handleFileChange = (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
+    const handleFilesChange = (files) => {
+        setAttachmentFiles(files);
+        setFileUploadError(null);
+    };
 
-        createForm.setData('attachment', file);
-        createForm.clearErrors('attachment');
-
-        if (file.type.startsWith('image/')) {
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-                setPreviewAttachment(ev.target.result);
-            };
-            reader.readAsDataURL(file);
-        } else {
-            setPreviewAttachment('document');
-        }
+    const handleFileUploadError = (error) => {
+        setFileUploadError(error);
     };
 
     const handleCreate = (e) => {
         e.preventDefault();
-        
+
+        // Create FormData to handle multiple files
+        const formData = new FormData();
+        formData.append('attendance_record_id', createForm.data.attendance_record_id);
+        formData.append('reason', createForm.data.reason);
+
+        // Append all files
+        attachmentFiles.forEach((file, index) => {
+            formData.append(`attachments[${index}]`, file);
+        });
+
         createForm.post(route('faculty.undertime-requests.store'), {
+            data: formData,
             preserveScroll: true,
             forceFormData: true,
             onSuccess: () => {
                 setShowCreateModal(false);
                 createForm.reset();
-                setPreviewAttachment(null);
+                setAttachmentFiles([]);
+                setFileUploadError(null);
                 setSelectedSchedule(schedulesWithUndertime && schedulesWithUndertime.length > 0 ? schedulesWithUndertime[0] : null);
                 fetchRequests(filterStatus, 1);
             },
@@ -378,37 +381,15 @@ export default function UndertimeRequests({ requests: initialRequests, filters, 
                                 </div>
 
                                 {/* Attachment */}
-                                <div>
-                                    <InputLabel value="Attachment (Optional)" />
-                                    <div
-                                        onClick={() => fileAttachmentRef.current?.click()}
-                                        className="mt-2 flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-700 p-3 cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition-colors bg-gray-50 dark:bg-gray-800"
-                                    >
-                                        {previewAttachment === 'document' ? (
-                                            <div className="text-center text-blue-600 dark:text-blue-400">
-                                                <p className="text-xs font-bold">{createForm.data.attachment?.name}</p>
-                                                <p className="text-xs mt-1 opacity-70">Click to change</p>
-                                            </div>
-                                        ) : previewAttachment ? (
-                                            <img src={previewAttachment} alt="Preview" className="max-h-20 rounded object-contain" />
-                                        ) : (
-                                            <>
-                                                <svg className="h-5 w-5 text-gray-400 mb-1" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
-                                                </svg>
-                                                <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">Upload file</p>
-                                                <p className="text-xs text-gray-400 dark:text-gray-500">PDF, JPG, PNG (max 5MB)</p>
-                                            </>
-                                        )}
-                                    </div>
-                                    <input
-                                        ref={fileAttachmentRef}
-                                        type="file"
-                                        className="hidden"
-                                        onChange={handleFileChange}
-                                        accept=".pdf,.jpg,.jpeg,.png"
-                                    />
-                                </div>
+                                <MultiFileUploader
+                                    label="Supporting Documents"
+                                    description="Upload supporting files (5MB per file)"
+                                    value={attachmentFiles}
+                                    onChange={handleFilesChange}
+                                    onError={handleFileUploadError}
+                                    error={fileUploadError}
+                                    disabled={createForm.processing}
+                                />
                             </div>
 
                             {/* Footer */}

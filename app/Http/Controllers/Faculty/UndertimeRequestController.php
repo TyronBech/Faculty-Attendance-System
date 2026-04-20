@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Faculty;
 use App\Http\Controllers\Controller;
 use App\Models\UndertimeRequest;
 use App\Models\AttendanceRecord;
+use App\Models\RequestAttachment;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
@@ -161,7 +162,9 @@ class UndertimeRequestController extends Controller
         $validated = $request->validate([
             'attendance_record_id' => 'nullable|exists:attendance_records,id',
             'reason' => 'required|string|max:1000',
-            'attachment' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
+            'attachments' => 'nullable|array',
+            'attachments.*.file' => 'required|file|mimes:pdf,jpg,jpeg,png|max:5120',
+            'attachments.*.label' => 'required|string|max:255',
         ]);
 
         // If attendance_record_id is provided, verify it belongs to this faculty
@@ -180,23 +183,34 @@ class UndertimeRequestController extends Controller
             'status' => 'pending',
         ]);
 
-        // Handle file attachment
-        if ($request->hasFile('attachment') && $request->file('attachment')->isValid()) {
-            try {
-                $file = $request->file('attachment');
-                $path = $file->store('undertime_attachments', 'public');
-                if ($path) {
-                    $undertimeRequest->attachment_path = $path;
+        $undertimeRequest->save();
+
+        // Handle multiple file attachments
+        if (!empty($validated['attachments'])) {
+            $facultyDir = "attachments/faculty_{$faculty->id}/undertime_requests";
+            
+            foreach ($validated['attachments'] as $attachment) {
+                try {
+                    $file = $attachment['file'];
+                    $label = $attachment['label'];
+                    $path = $file->store("{$facultyDir}/request_{$undertimeRequest->id}", 'public');
+                    
+                    if ($path) {
+                        RequestAttachment::create([
+                            'attachmentable_id' => $undertimeRequest->id,
+                            'attachmentable_type' => UndertimeRequest::class,
+                            'file_path' => $path,
+                            'custom_label' => $label,
+                            'mime_type' => $file->getMimeType(),
+                            'file_size' => $file->getSize(),
+                        ]);
+                    }
+                } catch (\Exception $e) {
+                    Log::error('Failed to save undertime attachment: ' . $e->getMessage());
                 }
-            } catch (\Exception $e) {
-                // Log error but don't fail the request
-                Log::error('Failed to save undertime attachment: ' . $e->getMessage());
             }
         }
 
-        $undertimeRequest->save();
-
-        // Return redirect to index page, trigger success callback
         return redirect(route('faculty.undertime-requests.index'))->with('success', 'Undertime request submitted successfully.');
     }
 
@@ -215,6 +229,13 @@ class UndertimeRequestController extends Controller
             return back()->withErrors(['error' => 'Can only cancel pending requests.']);
         }
 
+        // Delete associated attachments
+        foreach ($undertimeRequest->attachments as $attachment) {
+            $attachment->deleteFile();
+            $attachment->delete();
+        }
+
+        // Keep legacy support for old attachment_path field
         if ($undertimeRequest->attachment_path && Storage::disk('public')->exists($undertimeRequest->attachment_path)) {
             Storage::disk('public')->delete($undertimeRequest->attachment_path);
         }

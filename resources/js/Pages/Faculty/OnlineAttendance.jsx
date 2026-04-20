@@ -7,6 +7,7 @@ import InputError from '@/Components/InputError';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
 import DangerButton from '@/Components/DangerButton';
+import MultiFileUploader from '@/Components/MultiFileUploader';
 import { Head, Link, useForm } from '@inertiajs/react';
 import { useState, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
@@ -69,6 +70,8 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
     // ── File preview state ───────────────────────────────────
     const [previewIn, setPreviewIn] = useState(null);
     const [previewOut, setPreviewOut] = useState(null);
+    const [supportingDocuments, setSupportingDocuments] = useState([]);
+    const [documentUploadError, setDocumentUploadError] = useState(null);
     const [attendanceCheck, setAttendanceCheck] = useState({ checked: false, canSubmit: true, hasAttendance: false, hasPendingRequest: false });
     const fileInRef = useRef(null);
     const fileOutRef = useRef(null);
@@ -131,6 +134,15 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
         reader.readAsDataURL(file);
     };
 
+    const handleDocumentsChange = (files) => {
+        setSupportingDocuments(files);
+        setDocumentUploadError(null);
+    };
+
+    const handleDocumentUploadError = (error) => {
+        setDocumentUploadError(error);
+    };
+
     const handleCreate = (e) => {
         if (e) e.preventDefault();
 
@@ -150,8 +162,34 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
             force: forceArg ? '1' : '0'
         }));
 
+        // Create FormData to handle files properly including supporting documents
+        const formData = new FormData();
+        
+        // Add form data
+        formData.append('schedule_detail_id', createForm.data.schedule_detail_id);
+        formData.append('class_type', createForm.data.class_type);
+        formData.append('attendance_date', createForm.data.attendance_date);
+        formData.append('time_in', createForm.data.time_in);
+        formData.append('time_out', createForm.data.time_out);
+        formData.append('remarks', createForm.data.remarks);
+        formData.append('force', forceArg ? '1' : '0');
+        
+        // Add required screenshots
+        if (createForm.data.screenshot_in) {
+            formData.append('screenshot_in', createForm.data.screenshot_in);
+        }
+        if (createForm.data.screenshot_out) {
+            formData.append('screenshot_out', createForm.data.screenshot_out);
+        }
+        
+        // Add supporting documents
+        supportingDocuments.forEach((file, index) => {
+            formData.append(`supporting_documents[${index}]`, file);
+        });
+
         // Now call post() on the createForm object
         createForm.post(route('faculty.online-attendance.store'), {
+            data: formData,
             forceFormData: true,
             preserveScroll: true,
             onSuccess: () => {
@@ -160,6 +198,8 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
                 createForm.reset();
                 setPreviewIn(null);
                 setPreviewOut(null);
+                setSupportingDocuments([]);
+                setDocumentUploadError(null);
                 fetchRequests(filterStatus, 1);
             },
             onError: () => {
@@ -174,6 +214,8 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
         createForm.clearErrors();
         setPreviewIn(null);
         setPreviewOut(null);
+        setSupportingDocuments([]);
+        setDocumentUploadError(null);
         setAttendanceCheck({ checked: false, canSubmit: true, hasAttendance: false, hasPendingRequest: false });
         setShowCreateModal(true);
     };
@@ -540,6 +582,19 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
                                 placeholder="Any additional notes about this online class..."
                             />
                             <InputError message={createForm.errors.remarks} />
+                        </div>
+
+                        {/* Additional Supporting Documents */}
+                        <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+                            <MultiFileUploader
+                                label="Additional Supporting Documents"
+                                description="Upload supporting files (5MB per file) - Optional"
+                                value={supportingDocuments}
+                                onChange={handleDocumentsChange}
+                                onError={handleDocumentUploadError}
+                                error={documentUploadError}
+                                disabled={createForm.processing}
+                            />
                         </div>
                     </div>
 

@@ -7,6 +7,7 @@ import InputError from '@/Components/InputError';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
 import DangerButton from '@/Components/DangerButton';
+import MultiFileUploader from '@/Components/MultiFileUploader';
 import { Head, Link, useForm } from '@inertiajs/react';
 import { useState, useCallback, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
@@ -60,8 +61,8 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
     const [currentPage, setCurrentPage] = useState(initialRequests.current_page || 1);
 
     // ── File preview & Modal state ───────────────────────────────
-    const [previewDoc, setPreviewDoc] = useState(null);
-    const fileDocRef = useRef(null);
+    const [supportingDocuments, setSupportingDocuments] = useState([]);
+    const [documentUploadError, setDocumentUploadError] = useState(null);
     const [previewModalUrl, setPreviewModalUrl] = useState(null);
     const [showPreviewModal, setShowPreviewModal] = useState(false);
 
@@ -74,7 +75,6 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
         requested_room: '',
         effective_date: '',
         reason: '',
-        supporting_document: null,
     });
 
     const selectedDetail = scheduleDetails.find(
@@ -138,34 +138,42 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
 
     const hasConflict = conflicts.length > 0;
 
-    const handleFileChange = (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
+    const handleDocumentsChange = (files) => {
+        setSupportingDocuments(files);
+        setDocumentUploadError(null);
+    };
 
-        createForm.setData('supporting_document', file);
-        createForm.clearErrors('supporting_document');
-
-        if (file.type.startsWith('image/')) {
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-                setPreviewDoc(ev.target.result);
-            };
-            reader.readAsDataURL(file);
-        } else {
-            // Signal it's a document (PDF, doc), show a generic state instead of image preview
-            setPreviewDoc('document');
-        }
+    const handleDocumentUploadError = (error) => {
+        setDocumentUploadError(error);
     };
 
     const handleCreate = (e) => {
         e.preventDefault();
+
+        // Create FormData to handle multiple files
+        const formData = new FormData();
+        formData.append('schedule_detail_id', createForm.data.schedule_detail_id);
+        formData.append('requested_day_of_week', createForm.data.requested_day_of_week);
+        formData.append('requested_time_in', createForm.data.requested_time_in);
+        formData.append('requested_time_out', createForm.data.requested_time_out);
+        formData.append('requested_room', createForm.data.requested_room);
+        formData.append('effective_date', createForm.data.effective_date);
+        formData.append('reason', createForm.data.reason);
+
+        // Append all files
+        supportingDocuments.forEach((file, index) => {
+            formData.append(`supporting_documents[${index}]`, file);
+        });
+
         createForm.post(route('faculty.schedule-change-requests.store'), {
+            data: formData,
             preserveScroll: true,
             forceFormData: true,
             onSuccess: () => {
                 setShowCreateModal(false);
                 createForm.reset();
-                setPreviewDoc(null);
+                setSupportingDocuments([]);
+                setDocumentUploadError(null);
                 setConflicts([]);
                 // Refresh the list via AJAX
                 fetchRequests(filterStatus, 1);
@@ -480,40 +488,17 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
                         </div>
 
                         <div>
-                            <InputLabel value="Supporting Document" />
-                            <div
-                                onClick={() => fileDocRef.current?.click()}
-                                className="mt-1 flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-700 p-6 cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition-colors bg-gray-50 dark:bg-gray-900"
-                            >
-                                {previewDoc === 'document' ? (
-                                    <div className="flex flex-col items-center text-blue-600 dark:text-blue-400">
-                                        <svg className="h-10 w-10 mb-2" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-                                        </svg>
-                                        <p className="text-sm font-bold">{createForm.data.supporting_document?.name}</p>
-                                        <p className="text-xs mt-1 text-blue-500/70">Click to change file</p>
-                                    </div>
-                                ) : previewDoc ? (
-                                    <img src={previewDoc} alt="Document Preview" className="max-h-36 rounded-lg object-contain" />
-                                ) : (
-                                    <>
-                                        <svg className="h-8 w-8 text-gray-400 dark:text-gray-500 mb-2" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
-                                        </svg>
-                                        <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">Click to upload Supporting Document</p>
-                                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">PDF, JPG, PNG or WebP (max 5MB)</p>
-                                    </>
-                                )}
-                            </div>
-                            <input
-                                ref={fileDocRef}
-                                id="supporting_document"
-                                type="file"
-                                className="hidden"
-                                onChange={handleFileChange}
-                                accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp"
+                            <InputLabel value="Supporting Documents" />
+                            <MultiFileUploader
+                                label=""
+                                description="Upload supporting files (5MB per file)"
+                                value={supportingDocuments}
+                                onChange={handleDocumentsChange}
+                                onError={handleDocumentUploadError}
+                                error={documentUploadError}
+                                disabled={createForm.processing}
+                                className="mt-1"
                             />
-                            <InputError message={createForm.errors.supporting_document} />
                         </div>
 
                         {/* Conflict warning */}
