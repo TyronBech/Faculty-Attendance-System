@@ -32,9 +32,9 @@ class CheckPermission
     {
         // Resolve which guard to use
         $guardName = $guard ?? Auth::getDefaultDriver();
-        $user      = User::id(Auth::guard($guardName)->id())->first();
+        $user = Auth::guard($guardName)->user();
 
-        if (! $user) {
+        if (! $user instanceof User) {
             return $this->unauthenticated($request, $guardName);
         }
 
