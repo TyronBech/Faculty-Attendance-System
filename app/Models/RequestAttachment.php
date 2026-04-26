@@ -2,10 +2,12 @@
 
 namespace App\Models;
 
+use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
 class RequestAttachment extends Model
@@ -29,7 +31,7 @@ class RequestAttachment extends Model
     }
 
     /* ------------------------------------------------------------------ */
-    /*  Relationships                                                     */
+    /*  Relationships */
     /* ------------------------------------------------------------------ */
 
     public function attachmentable(): MorphTo
@@ -38,7 +40,7 @@ class RequestAttachment extends Model
     }
 
     /* ------------------------------------------------------------------ */
-    /*  Methods                                                           */
+    /*  Methods */
     /* ------------------------------------------------------------------ */
 
     /**
@@ -50,10 +52,18 @@ class RequestAttachment extends Model
             return null;
         }
 
-        /** @var \Illuminate\Contracts\Filesystem\Filesystem $disk */
+        /** @var Filesystem $disk */
         $disk = Storage::disk('public');
 
         return $disk->url($this->file_path);
+    }
+
+    /**
+     * Alias for getUrl for consistency across models
+     */
+    public function getDownloadUrl(): ?string
+    {
+        return $this->getUrl();
     }
 
     /**
@@ -67,9 +77,11 @@ class RequestAttachment extends Model
 
         try {
             Storage::disk('public')->delete($this->file_path);
+
             return true;
         } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::error('Failed to delete attachment file: ' . $e->getMessage());
+            Log::error('Failed to delete attachment file: '.$e->getMessage());
+
             return false;
         }
     }

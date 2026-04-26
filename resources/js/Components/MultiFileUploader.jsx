@@ -31,12 +31,30 @@ export default function MultiFileUploader({
         if (bytes === 0) return '0 Bytes';
         const k = 1024;
         const sizes = ['Bytes', 'KB', 'MB'];
-        const i = Math.floor(Math.log(bytes, k));
-        return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     };
 
     const calculateTotalSize = (files) => {
         return files.reduce((total, file) => total + (file.size || 0), 0);
+    };
+
+    const handlePreview = (file) => {
+        if (!(file instanceof File)) return;
+        
+        try {
+            const url = URL.createObjectURL(file);
+            const win = window.open(url, '_blank');
+            if (win) {
+                win.focus();
+            } else {
+                alert('Please allow popups to preview files.');
+            }
+            // We don't revoke immediately because the new tab needs it.
+            // Browsers usually clean up blob URLs when the origin page is closed.
+        } catch (e) {
+            console.error('Preview failed:', e);
+        }
     };
 
     const validateFiles = (filesToAdd) => {
@@ -187,9 +205,15 @@ export default function MultiFileUploader({
                         {localFiles.map((file, index) => (
                             <li
                                 key={`${file.name}-${index}`}
-                                className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-800"
+                                className="group flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                             >
-                                <div className="flex flex-1 items-center gap-3 min-w-0">
+                                <button
+                                    type="button"
+                                    onClick={() => handlePreview(file)}
+                                    className="flex flex-1 items-center gap-3 min-w-0 text-left"
+                                    title="Click to preview"
+                                    disabled={disabled}
+                                >
                                     {file.type.startsWith('image/') ? (
                                         <svg
                                             className="h-5 w-5 flex-shrink-0 text-blue-500"
@@ -222,14 +246,14 @@ export default function MultiFileUploader({
                                         </svg>
                                     )}
                                     <div className="min-w-0">
-                                        <p className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">
+                                        <p className="truncate text-sm font-medium text-gray-900 dark:text-gray-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
                                             {file.name}
                                         </p>
                                         <p className="text-xs text-gray-600 dark:text-gray-400">
                                             {formatFileSize(file.size)}
                                         </p>
                                     </div>
-                                </div>
+                                </button>
                                 <button
                                     type="button"
                                     onClick={() => removeFile(index)}

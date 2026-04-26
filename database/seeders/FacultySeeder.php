@@ -7,6 +7,7 @@ use App\Models\Faculty;
 use App\Models\User;
 use App\Services\FlssBackendClient;
 use Illuminate\Database\Seeder;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\DB;
 
 class FacultySeeder extends Seeder
@@ -55,20 +56,20 @@ class FacultySeeder extends Seeder
                     ['faculty_code' => $facultyCode],
                     [
                         'external_faculty_id' => ($item['faculty_id'] ?? null) !== null ? (int) $item['faculty_id'] : null,
-                        'user_id'         => $userIds[$email],
-                        'department_id'   => $departmentId,
-                        'faculty_code'    => $facultyCode,
-                        'biometric_id'    => 'BIOAPI' . str_pad((string) ($item['faculty_id'] ?? 0), 3, '0', STR_PAD_LEFT),
-                        'first_name'      => (string) ($item['first_name'] ?? ''),
-                        'middle_name'     => $item['middle_name'] ?: null,
-                        'last_name'       => (string) ($item['last_name'] ?? ''),
-                        'suffix_name'     => $item['suffix_name'] ?: null,
-                        'faculty_type'    => $facultyTypeRaw !== '' ? $facultyTypeRaw : null,
-                        'assigned_units'  => (int) ($item['assigned_units'] ?? 0),
-                        'phone'           => null,
+                        'user_id' => $userIds[$email],
+                        'department_id' => $departmentId,
+                        'faculty_code' => $facultyCode,
+                        'biometric_id' => 'BIOAPI'.str_pad((string) ($item['faculty_id'] ?? 0), 3, '0', STR_PAD_LEFT),
+                        'first_name' => (string) ($item['first_name'] ?? ''),
+                        'middle_name' => $item['middle_name'] ?: null,
+                        'last_name' => (string) ($item['last_name'] ?? ''),
+                        'suffix_name' => $item['suffix_name'] ?: null,
+                        'faculty_type' => $facultyTypeRaw !== '' ? $facultyTypeRaw : null,
+                        'assigned_units' => (int) ($item['assigned_units'] ?? 0),
+                        'phone' => null,
                         'employment_type' => str_contains(strtolower($facultyTypeRaw), 'part') ? 'part_time' : 'regular',
-                        'date_hired'      => null,
-                        'is_active'       => true,
+                        'date_hired' => null,
+                        'is_active' => true,
                     ]
                 );
             }
@@ -105,10 +106,15 @@ class FacultySeeder extends Seeder
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function parseApiResponse(\Illuminate\Http\Client\Response $response, string $type): array
+    private function parseApiResponse(Response $response, string $type): array
     {
         if (! $response->successful()) {
-            throw new \RuntimeException("External {$type} schedules API request failed while seeding faculties. HTTP " . $response->status());
+            if ($type === 'temporary') {
+                logger()->warning("External temporary schedules API returned {$response->status()}. Skipping temporary seeding.");
+
+                return [];
+            }
+            throw new \RuntimeException("External {$type} schedules API request failed while seeding faculties. HTTP ".$response->status());
         }
 
         $payload = $response->json();

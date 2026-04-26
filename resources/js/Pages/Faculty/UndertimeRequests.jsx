@@ -7,7 +7,7 @@ import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
 import DangerButton from '@/Components/DangerButton';
 import MultiFileUploader from '@/Components/MultiFileUploader';
-import { Head, Link, useForm } from '@inertiajs/react';
+import { Head, Link, useForm, router } from '@inertiajs/react';
 import { useState, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
 
@@ -90,15 +90,16 @@ export default function UndertimeRequests({ requests: initialRequests, filters, 
         formData.append('attendance_record_id', createForm.data.attendance_record_id);
         formData.append('reason', createForm.data.reason);
 
-        // Append all files
+        // Append all files in the format expected by the backend
         attachmentFiles.forEach((file, index) => {
-            formData.append(`attachments[${index}]`, file);
+            formData.append(`attachments[${index}][file]`, file);
+            formData.append(`attachments[${index}][label]`, file.name);
         });
 
-        createForm.post(route('faculty.undertime-requests.store'), {
-            data: formData,
+        router.post(route('faculty.undertime-requests.store'), formData, {
             preserveScroll: true,
-            forceFormData: true,
+            onStart: () => createForm.processing = true,
+            onFinish: () => createForm.processing = false,
             onSuccess: () => {
                 setShowCreateModal(false);
                 createForm.reset();
@@ -282,7 +283,7 @@ export default function UndertimeRequests({ requests: initialRequests, filters, 
                  CREATE MODAL - SIDE BY SIDE
                 ═══════════════════════════════════════════════════ */}
             <Modal show={showCreateModal} onClose={() => setShowCreateModal(false)} maxWidth="4xl">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-0 h-[75vh] overflow-hidden">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-0 h-[80vh] max-h-[800px] overflow-hidden rounded-2xl bg-white dark:bg-gray-800">
                     {/* Left: Schedule Selection */}
                     <div className="flex flex-col h-full overflow-hidden bg-gray-50 dark:bg-gray-900/30 border-r border-gray-100 dark:border-gray-700">
                         <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
@@ -338,13 +339,13 @@ export default function UndertimeRequests({ requests: initialRequests, filters, 
                     </div>
 
                     {/* Right: Request Form */}
-                    <div className="flex flex-col h-full">
+                    <div className="flex flex-col h-full overflow-hidden bg-white dark:bg-gray-800">
                         <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
                             <h3 className="text-sm font-bold text-gray-900 dark:text-white">Request Details</h3>
                         </div>
                         
-                        <form onSubmit={handleCreate} className="flex flex-col flex-1 min-h-0">
-                            <div className="px-6 py-5 space-y-5 overflow-y-auto flex-1">
+                        <form onSubmit={handleCreate} className="flex flex-col flex-1 overflow-hidden">
+                            <div className="px-6 py-6 space-y-6 overflow-y-auto flex-1 custom-scrollbar">
                                 {/* Schedule Context */}
                                 {selectedSchedule && (
                                     <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
@@ -383,7 +384,7 @@ export default function UndertimeRequests({ requests: initialRequests, filters, 
                                 {/* Attachment */}
                                 <MultiFileUploader
                                     label="Supporting Documents"
-                                    description="Upload supporting files (5MB per file)"
+                                    description="Upload supporting documents (e.g., class attendance, class screenshots). Max 5MB per file."
                                     value={attachmentFiles}
                                     onChange={handleFilesChange}
                                     onError={handleFileUploadError}
@@ -571,19 +572,33 @@ function RequestCard({ req, onCancel, onPreviewAttachment }) {
                                 <p className="text-sm text-gray-700 dark:text-gray-300">{req.justification}</p>
                             </div>
 
-                            {/* Attachment preview button */}
-                            {req.attachment_path && (
-                                <div className="flex items-center gap-2">
-                                    <button
-                                        type="button"
-                                        onClick={(event) => handleActionClick(event, () => onPreviewAttachment(req.attachment_url))}
-                                        className="inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
-                                    >
-                                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375m0 0H5.625c-.621 0-1.125-.504-1.125-1.125v-9.75m7.5 10.375v-6.375m0 6.375H9.375" />
-                                        </svg>
-                                        View Attachment
-                                    </button>
+                            {/* Attachments Section */}
+                            {req.attachments_data && req.attachments_data.length > 0 && (
+                                <div className="space-y-3">
+                                    <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Supporting Documents</p>
+                                    <div className="flex flex-wrap gap-3">
+                                        {req.attachments_data.map((attachment, idx) => (
+                                            <button
+                                                key={attachment.id || idx}
+                                                type="button"
+                                                onClick={(event) => handleActionClick(event, () => onPreviewAttachment(attachment.url))}
+                                                className="group relative flex flex-col items-center justify-center rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-2 hover:border-blue-400 dark:hover:border-blue-500 transition-all w-24 h-24"
+                                            >
+                                                {attachment.url.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? (
+                                                    <img src={attachment.url} alt={attachment.custom_label} className="w-full h-full object-cover rounded-lg opacity-80 group-hover:opacity-100" />
+                                                ) : (
+                                                    <div className="flex flex-col items-center justify-center text-gray-400 group-hover:text-blue-500">
+                                                        <svg className="h-8 w-8 mb-1" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                                                        </svg>
+                                                    </div>
+                                                )}
+                                                <span className="mt-1 text-[10px] font-medium text-gray-500 dark:text-gray-400 truncate w-full text-center">
+                                                    {attachment.custom_label || 'File'}
+                                                </span>
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
                             )}
 

@@ -40,14 +40,49 @@ class AttendanceJustification extends Model
 
     public function getAttachmentUrl(): ?string
     {
-        if (! $this->attachment_path) {
-            return null;
+        if ($this->attachment_path) {
+            /** @var FilesystemAdapter $disk */
+            $disk = Storage::disk('public');
+
+            return $disk->url($this->attachment_path);
         }
 
-        /** @var FilesystemAdapter $disk */
-        $disk = Storage::disk('public');
+        $firstAttachment = $this->attachments()->first();
 
-        return $disk->url($this->attachment_path);
+        return $firstAttachment ? $firstAttachment->getDownloadUrl() : null;
+    }
+
+    /**
+     * Get all attachments with their URLs
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function getAttachmentsData(): array
+    {
+        $data = [];
+
+        // Legacy single attachment
+        if ($this->attachment_path) {
+            $data[] = [
+                'id' => 'legacy',
+                'file_path' => $this->attachment_path,
+                'custom_label' => 'Supporting Document',
+                'url' => Storage::disk('public')->url($this->attachment_path),
+            ];
+        }
+
+        // New multiple attachments
+        foreach ($this->attachments as $attachment) {
+            $data[] = [
+                'id' => $attachment->id,
+                'file_path' => $attachment->file_path,
+                'custom_label' => $attachment->custom_label,
+                'url' => $attachment->getDownloadUrl(),
+                'mime_type' => $attachment->mime_type,
+            ];
+        }
+
+        return $data;
     }
 
     public function attendanceRecord(): BelongsTo
