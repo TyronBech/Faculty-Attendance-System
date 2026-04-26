@@ -18,7 +18,12 @@ class FacultySeeder extends Seeder
     {
         DB::beginTransaction();
         try {
-            $records = $this->fetchFacultySchedulesFromApi();
+            $officialRecords = $this->fetchFacultySchedulesFromApi();
+            $temporaryRecords = $this->fetchTemporaryFacultySchedulesFromApi();
+
+            // Merge records, temporary records take precedence or are just added
+            // Since we use updateOrCreate, it should handle duplicates correctly
+            $records = array_merge($officialRecords, $temporaryRecords);
 
             // Resolve department IDs by code
             $deptIds = Department::pluck('id', 'code');
@@ -83,13 +88,32 @@ class FacultySeeder extends Seeder
         $client = app(FlssBackendClient::class);
         $response = $client->getFacultySchedules(['per_page' => 500]);
 
+        return $this->parseApiResponse($response, 'official');
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function fetchTemporaryFacultySchedulesFromApi(): array
+    {
+        $client = app(FlssBackendClient::class);
+        $response = $client->getTemporaryFacultySchedules(['per_page' => 500]);
+
+        return $this->parseApiResponse($response, 'temporary');
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function parseApiResponse(\Illuminate\Http\Client\Response $response, string $type): array
+    {
         if (! $response->successful()) {
-            throw new \RuntimeException('External schedules API request failed while seeding faculties. HTTP ' . $response->status());
+            throw new \RuntimeException("External {$type} schedules API request failed while seeding faculties. HTTP " . $response->status());
         }
 
         $payload = $response->json();
         if (! is_array($payload)) {
-            throw new \RuntimeException('External schedules API returned an invalid JSON payload while seeding faculties.');
+            throw new \RuntimeException("External {$type} schedules API returned an invalid JSON payload while seeding faculties.");
         }
 
         $records = data_get($payload, 'parttime_faculty_schedules');

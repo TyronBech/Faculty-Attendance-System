@@ -20,7 +20,10 @@ class ScheduleSeeder extends Seeder
     {
         DB::beginTransaction();
         try {
-            $records = $this->fetchFacultySchedulesFromApi();
+            $officialRecords = $this->fetchFacultySchedulesFromApi();
+            $temporaryRecords = $this->fetchTemporaryFacultySchedulesFromApi();
+
+            $records = array_merge($officialRecords, $temporaryRecords);
 
             $adminUser = User::where('username', 'admin')->first();
 
@@ -124,13 +127,32 @@ class ScheduleSeeder extends Seeder
         $client = app(FlssBackendClient::class);
         $response = $client->getFacultySchedules(['per_page' => 500]);
 
+        return $this->parseApiResponse($response, 'official');
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function fetchTemporaryFacultySchedulesFromApi(): array
+    {
+        $client = app(FlssBackendClient::class);
+        $response = $client->getTemporaryFacultySchedules(['per_page' => 500]);
+
+        return $this->parseApiResponse($response, 'temporary');
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function parseApiResponse(\Illuminate\Http\Client\Response $response, string $type): array
+    {
         if (! $response->successful()) {
-            throw new \RuntimeException('External schedules API request failed while seeding schedules. HTTP ' . $response->status());
+            throw new \RuntimeException("External {$type} schedules API request failed while seeding schedules. HTTP " . $response->status());
         }
 
         $payload = $response->json();
         if (! is_array($payload)) {
-            throw new \RuntimeException('External schedules API returned an invalid JSON payload while seeding schedules.');
+            throw new \RuntimeException("External {$type} schedules API returned an invalid JSON payload while seeding schedules.");
         }
 
         $records = data_get($payload, 'parttime_faculty_schedules');
