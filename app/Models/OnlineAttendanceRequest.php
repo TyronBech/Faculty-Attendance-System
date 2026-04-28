@@ -6,7 +6,7 @@ use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -43,7 +43,7 @@ class OnlineAttendanceRequest extends Model
     }
 
     /* ------------------------------------------------------------------ */
-    /*  Relationships                                                     */
+    /*  Relationships */
     /* ------------------------------------------------------------------ */
 
     public function faculty(): BelongsTo
@@ -66,8 +66,13 @@ class OnlineAttendanceRequest extends Model
         return $this->belongsTo(User::class, 'reviewed_by');
     }
 
+    public function attachments(): MorphMany
+    {
+        return $this->morphMany(RequestAttachment::class, 'attachmentable');
+    }
+
     /* ------------------------------------------------------------------ */
-    /*  Scopes                                                            */
+    /*  Scopes */
     /* ------------------------------------------------------------------ */
 
     public function scopePending($query)
@@ -86,7 +91,7 @@ class OnlineAttendanceRequest extends Model
     }
 
     /* ------------------------------------------------------------------ */
-    /*  Faculty Query: paginated own requests                             */
+    /*  Faculty Query: paginated own requests */
     /* ------------------------------------------------------------------ */
 
     /**
@@ -98,7 +103,7 @@ class OnlineAttendanceRequest extends Model
         $page = (int) $request->query('page', 1);
         $status = $request->query('status', '');
 
-        $query = static::with(['scheduleDetail.schedule', 'internalSchedule', 'reviewedBy'])
+        $query = static::with(['scheduleDetail.schedule', 'internalSchedule', 'reviewedBy', 'attachments'])
             ->where('faculty_id', $facultyId)
             ->orderBy('created_at', 'desc');
 
@@ -119,8 +124,8 @@ class OnlineAttendanceRequest extends Model
                 'id' => $req->id,
                 'class_type' => $req->class_type,
                 'attendance_date' => $req->attendance_date?->format('M d, Y'),
-                'time_in' => Carbon::parse($req->time_in)->format('h:i A'),
-                'time_out' => Carbon::parse($req->time_out)->format('h:i A'),
+                'time_in' => $req->time_in ? Carbon::parse($req->time_in)->format('h:i A') : 'N/A',
+                'time_out' => $req->time_out ? Carbon::parse($req->time_out)->format('h:i A') : 'N/A',
                 'screenshot_in' => $req->screenshot_in ? Storage::url($req->screenshot_in) : null,
                 'screenshot_out' => $req->screenshot_out ? Storage::url($req->screenshot_out) : null,
                 'remarks' => $req->remarks,
@@ -133,8 +138,9 @@ class OnlineAttendanceRequest extends Model
                 'is_official' => $detail !== null,
                 'type' => $detail ? 'Official Class' : 'Internal Duty',
                 'day' => $detail?->day ?? $internal?->day_of_week,
-                'start_time' => Carbon::parse($req->time_in)->format('h:i A'),
-                'end_time' => Carbon::parse($req->time_out)->format('h:i A'),
+                'start_time' => $req->time_in ? Carbon::parse($req->time_in)->format('h:i A') : 'N/A',
+                'end_time' => $req->time_out ? Carbon::parse($req->time_out)->format('h:i A') : 'N/A',
+                'attachments_data' => $req->getAttachmentsData(),
                 'reviewed_by' => $req->reviewedBy?->email ?? null,
                 'reviewed_at' => $req->reviewed_at?->format('M d, Y h:i A'),
                 'review_remarks' => $req->review_remarks,
@@ -177,7 +183,7 @@ class OnlineAttendanceRequest extends Model
             'reviewed_by',
             'reviewed_at',
             'review_remarks',
-            'created_at'
+            'created_at',
         ])
             ->with([
                 'faculty:id,first_name,last_name,user_id',
@@ -185,7 +191,8 @@ class OnlineAttendanceRequest extends Model
                 'scheduleDetail:id,course_code,subject_desc,day',
                 'scheduleDetail.schedule:id',
                 'internalSchedule',
-                'reviewedBy:id,email'
+                'reviewedBy:id,email',
+                'attachments',
             ])
             ->orderBy('created_at', 'desc');
 
@@ -250,6 +257,7 @@ class OnlineAttendanceRequest extends Model
                 'day' => $detail?->day ?? $internal?->day_of_week ?? 'N/A',
                 'start_time' => Carbon::parse($req->time_in)->format('h:i A'),
                 'end_time' => $req->time_out ? Carbon::parse($req->time_out)->format('h:i A') : 'N/A',
+                'attachments_data' => $req->getAttachmentsData(),
                 'reviewed_by' => $req->reviewedBy?->email ?? null,
                 'reviewed_at' => $req->reviewed_at?->format('M d, Y h:i A'),
                 'review_remarks' => $req->review_remarks,
@@ -264,5 +272,58 @@ class OnlineAttendanceRequest extends Model
             'current_page' => $page,
             'last_page' => (int) ceil($total / max($perPage, 1)),
         ];
+    }
+
+    /**
+     * Get the first attachment URL if it exists
+     */
+    public function getAttachmentUrl(): ?string
+    {
+        $firstAttachment = $this->attachments()->first();
+
+        return $firstAttachment ? $firstAttachment->getDownloadUrl() : null;
+    }
+
+    /**
+     * Get all attachments with their URLs
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function getAttachmentsData(): array
+    {
+        $data = [];
+
+        // Legacy single attachment (screenshot_in)
+        if ($this->screenshot_in) {
+            $data[] = [
+                'id' => 'screenshot_in',
+                'file_path' => $this->screenshot_in,
+                'custom_label' => 'Screenshot (In)',
+                'url' => Storage::url($this->screenshot_in),
+            ];
+        }
+
+        // Legacy single attachment (screenshot_out)
+        if ($this->screenshot_out) {
+            $data[] = [
+                'id' => 'screenshot_out',
+                'file_path' => $this->screenshot_out,
+                'custom_label' => 'Screenshot (Out)',
+                'url' => Storage::url($this->screenshot_out),
+            ];
+        }
+
+        // New multiple attachments
+        foreach ($this->attachments as $attachment) {
+            $data[] = [
+                'id' => $attachment->id,
+                'file_path' => $attachment->file_path,
+                'custom_label' => $attachment->custom_label,
+                'url' => $attachment->getDownloadUrl(),
+                'mime_type' => $attachment->mime_type,
+            ];
+        }
+
+        return $data;
     }
 }
