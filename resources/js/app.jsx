@@ -20,7 +20,6 @@ createInertiaApp({
 
         root.render(
             <>
-                <meta name="csrf-token" content={props.csrf_token} />
                 <Loader />
                 <App {...props} />
                 <Toaster

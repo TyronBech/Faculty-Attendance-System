@@ -8,7 +8,7 @@ import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
 import DangerButton from '@/Components/DangerButton';
 import MultiFileUploader from '@/Components/MultiFileUploader';
-import { Head, Link, useForm, router } from '@inertiajs/react';
+import { Head, Link, useForm, usePage, router } from '@inertiajs/react';
 import { useState, useCallback, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
 
@@ -100,7 +100,7 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
         conflictTimerRef.current = setTimeout(() => {
             setIsCheckingConflict(true);
 
-            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+            const { csrf_token } = usePage().props;
 
             fetch(route('faculty.schedule-change-requests.check-conflict'), {
                 method: 'POST',
@@ -109,7 +109,7 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
                     'Content-Type': 'application/json',
                     'Accept': 'application/json',
                     'X-Requested-With': 'XMLHttpRequest',
-                    'X-CSRF-TOKEN': csrfToken,
+                    'X-CSRF-TOKEN': csrf_token,
                 },
                 body: JSON.stringify({
                     schedule_detail_id: schedule_detail_id || null,
@@ -379,7 +379,7 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
                             >
                                 <option value="">— Choose a schedule —</option>
                                 {scheduleDetails.map((d) => (
-                                       <option key={d.id} value={d.id}>
+                                    <option key={d.id} value={d.id}>
                                         [{d.schedule_code}] {d.day_of_week} · {formatTime12(d.time_in)}–{formatTime12(d.time_out)} · {d.subject_code} - {d.subject_desc} · {[d.program_code, (d.year_level || d.section_name) ? [d.year_level, d.section_name].filter(Boolean).join('-') : null].filter(Boolean).join(' ')} ({d.room}) {d.is_changed ? ' (Internal)' : ''}
                                     </option>
                                 ))}
