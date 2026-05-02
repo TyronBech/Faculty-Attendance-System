@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\AdminActivityLogController;
 use App\Http\Controllers\Admin\AdminAttendanceImportController;
 use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\AdminDtrExportController;
@@ -55,6 +56,9 @@ Route::middleware(['auth.admin'])->prefix('admin')->group(function () {
     // ── Dashboard ──────────────────────────────────────────────────────────
     Route::get('/dashboard', [AdminDashboardController::class, 'index'])
         ->name('admin.dashboard');
+
+    Route::get('/activity-logs', [AdminActivityLogController::class, 'index'])
+        ->name('admin.activity-logs.index');
 
     Route::get('/rbac', [AdminRbacController::class, 'index'])
         ->middleware('check.role:super_admin|admin,admin')

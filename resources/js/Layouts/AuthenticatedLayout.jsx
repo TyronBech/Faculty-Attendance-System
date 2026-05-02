@@ -372,6 +372,17 @@ export default function AuthenticatedLayout({ header, children }) {
                                             Holidays
                                         </NavLink>
 
+                                        <NavLink
+                                            href={route(
+                                                "admin.activity-logs.index",
+                                            )}
+                                            active={route().current(
+                                                "admin.activity-logs.*",
+                                            )}
+                                        >
+                                            Activity Logs
+                                        </NavLink>
+
                                         <Dropdown>
                                             <Dropdown.Trigger>
                                                 <button
@@ -789,6 +800,15 @@ export default function AuthenticatedLayout({ header, children }) {
                                     active={route().current("admin.holidays.*")}
                                 >
                                     Holidays
+                                </ResponsiveNavLink>
+
+                                <ResponsiveNavLink
+                                    href={route("admin.activity-logs.index")}
+                                    active={route().current(
+                                        "admin.activity-logs.*",
+                                    )}
+                                >
+                                    Activity Logs
                                 </ResponsiveNavLink>
 
                                 <div>
