@@ -29,7 +29,7 @@ class SystemSetting extends Model
     }
 
     /* ------------------------------------------------------------------ */
-    /*  Relationships                                                     */
+    /*  Relationships */
     /* ------------------------------------------------------------------ */
 
     public function updatedBy(): BelongsTo
@@ -38,7 +38,7 @@ class SystemSetting extends Model
     }
 
     /* ------------------------------------------------------------------ */
-    /*  Helpers                                                           */
+    /*  Helpers */
     /* ------------------------------------------------------------------ */
 
     public static function currentAcademicYear(): int
@@ -47,7 +47,7 @@ class SystemSetting extends Model
 
         if ($value !== '') {
             preg_match_all('/\d{4}/', $value, $matches);
-            if (!empty($matches[0])) {
+            if (! empty($matches[0])) {
                 return (int) end($matches[0]);
             }
 
@@ -69,5 +69,17 @@ class SystemSetting extends Model
         }
 
         return $semester;
+    }
+
+    public static function manualAttendanceRequestLimit(): int
+    {
+        $value = static::where('setting_key', 'manual_attendance_request_limit')->value('setting_value');
+        $limit = (int) $value;
+
+        if ($limit < 1) {
+            return 5;
+        }
+
+        return $limit;
     }
 }

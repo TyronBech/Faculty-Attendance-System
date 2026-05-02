@@ -3,6 +3,7 @@ import ScrollToTop from "@/Components/ScrollToTop";
 import Modal from "@/Components/Modal";
 import InputLabel from "@/Components/InputLabel";
 import InputError from "@/Components/InputError";
+import TextInput from "@/Components/TextInput";
 import SecondaryButton from "@/Components/SecondaryButton";
 import Pagination from "@/Components/Pagination";
 import { Head, useForm } from "@inertiajs/react";
@@ -327,10 +328,17 @@ export default function ManualAttendanceRequestApproval({
     const [showApproveModal, setShowApproveModal] = useState(false);
     const [showRejectModal, setShowRejectModal] = useState(false);
     const [selectedRequest, setSelectedRequest] = useState(null);
+    const [currentManualLogLimit, setCurrentManualLogLimit] = useState(
+        manualLogLimit ?? 5,
+    );
 
     const approveForm = useForm({
         review_remarks: "",
         count_manual_log: true,
+    });
+
+    const limitForm = useForm({
+        manual_request_limit: String(manualLogLimit ?? 5),
     });
 
     const rejectForm = useForm({
@@ -370,6 +378,7 @@ export default function ManualAttendanceRequestApproval({
                 .then((data) => {
                     setRequestsData(data.data ?? []);
                     setPaginator(data.pagination ?? initialPaginator);
+                    setCurrentManualLogLimit(data.manualLogLimit ?? 5);
                     setExpandedCards({});
                 })
                 .catch(() => {
@@ -488,6 +497,20 @@ export default function ManualAttendanceRequestApproval({
         }));
     };
 
+    const handleLimitUpdate = (event) => {
+        event.preventDefault();
+
+        limitForm.patch(route("admin.manual-attendance-requests.limit.update"), {
+            preserveScroll: true,
+            onSuccess: () => {
+                const nextLimit = Number(limitForm.data.manual_request_limit);
+
+                setCurrentManualLogLimit(nextLimit);
+                fetchRequests(filterStatus, searchQuery, paginator.current_page);
+            },
+        });
+    };
+
     return (
         <AuthenticatedLayout>
             <Head title="Manual Attendance Requests — Admin" />
@@ -503,22 +526,81 @@ export default function ManualAttendanceRequestApproval({
                     </p>
                 </div>
 
-                <div className="flex items-center gap-2 rounded-xl bg-amber-50 dark:bg-amber-400/10 border border-amber-200 dark:border-amber-400/30 px-4 py-2.5 text-sm font-bold text-amber-700 dark:text-amber-400 shadow-sm">
-                    <svg
-                        className="h-4 w-4"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        strokeWidth={2}
-                        stroke="currentColor"
+                <div className="flex flex-col sm:items-end gap-3">
+                    <div className="flex items-center gap-2 rounded-xl bg-amber-50 dark:bg-amber-400/10 border border-amber-200 dark:border-amber-400/30 px-4 py-2.5 text-sm font-bold text-amber-700 dark:text-amber-400 shadow-sm">
+                        <svg
+                            className="h-4 w-4"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            strokeWidth={2}
+                            stroke="currentColor"
+                        >
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+                            />
+                        </svg>
+                        {pendingCount} pending{" "}
+                        {pendingCount === 1 ? "request" : "requests"}
+                    </div>
+
+                    <form
+                        onSubmit={handleLimitUpdate}
+                        className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/80 px-4 py-3 shadow-sm"
                     >
-                        <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
-                        />
-                    </svg>
-                    {pendingCount} pending{" "}
-                    {pendingCount === 1 ? "request" : "requests"}
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                            <div>
+                                <InputLabel
+                                    htmlFor="manual_request_limit"
+                                    value="Manual Request Limit"
+                                />
+                                <TextInput
+                                    id="manual_request_limit"
+                                    type="text"
+                                    inputMode="numeric"
+                                    pattern="[0-9]*"
+                                    value={limitForm.data.manual_request_limit}
+                                    onChange={(event) =>
+                                        limitForm.setData(
+                                            "manual_request_limit",
+                                            event.target.value.replace(
+                                                /\D/g,
+                                                "",
+                                            ),
+                                        )
+                                    }
+                                    className="mt-2 block w-28"
+                                />
+                                <InputError
+                                    message={
+                                        limitForm.errors.manual_request_limit
+                                    }
+                                    className="mt-2"
+                                />
+                            </div>
+
+                            <div className="flex items-center gap-3">
+                                <p className="text-xs text-gray-500 dark:text-gray-400">
+                                    Current cap: {currentManualLogLimit} counted
+                                    requests per semester.
+                                </p>
+                                <button
+                                    type="submit"
+                                    disabled={
+                                        limitForm.processing ||
+                                        limitForm.data.manual_request_limit ===
+                                            ""
+                                    }
+                                    className="inline-flex items-center gap-1.5 rounded-xl bg-gray-900 dark:bg-gray-100 px-4 py-2.5 text-xs font-bold text-white dark:text-gray-900 hover:bg-gray-700 dark:hover:bg-gray-300 transition-colors disabled:opacity-50"
+                                >
+                                    {limitForm.processing
+                                        ? "Saving..."
+                                        : "Save Limit"}
+                                </button>
+                            </div>
+                        </div>
+                    </form>
                 </div>
             </div>
 
@@ -732,7 +814,7 @@ export default function ManualAttendanceRequestApproval({
                                 className={`rounded-xl border px-4 py-3 ${
                                     Number(
                                         selectedRequest.used_manual_logs ?? 0,
-                                    ) >= Number(manualLogLimit ?? 5)
+                                    ) >= Number(currentManualLogLimit)
                                         ? "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800/50 text-red-800 dark:text-red-300"
                                         : "bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800/50 text-amber-800 dark:text-amber-300"
                                 }`}
@@ -740,12 +822,11 @@ export default function ManualAttendanceRequestApproval({
                                 <p className="text-xs font-semibold">
                                     {selectedRequest.semester_label}:{" "}
                                     {selectedRequest.used_manual_logs ?? 0}/
-                                    {manualLogLimit ?? 5} counted manual logs
-                                    used.
+                                    {currentManualLogLimit} counted manual
+                                    logs used.
                                 </p>
                             </div>
                         )}
-
                         <label className="flex items-start gap-3 rounded-xl border border-gray-200 dark:border-gray-700 p-3 bg-gray-50 dark:bg-gray-800/60">
                             <input
                                 type="checkbox"

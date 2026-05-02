@@ -99,6 +99,7 @@ class AdminProfileTest extends TestCase
             'first_name' => 'Maria',
             'middle_name' => null,
             'last_name' => 'Reyes',
+            'suffix_name' => null,
         ]);
 
         $user = User::query()

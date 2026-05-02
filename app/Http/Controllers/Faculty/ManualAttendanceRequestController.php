@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Faculty;
 use App\Http\Controllers\Controller;
 use App\Models\AttendanceJustification;
 use App\Models\AttendanceRecord;
+use App\Models\SystemSetting;
 use App\Models\RequestAttachment;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -19,6 +20,7 @@ class ManualAttendanceRequestController extends Controller
     public function index(Request $request)
     {
         $faculty = $request->user()->faculty;
+        $manualRequestLimit = SystemSetting::manualAttendanceRequestLimit();
 
         if (! $faculty) {
             return Inertia::render('Faculty/ManualAttendanceRequests', [
@@ -26,7 +28,7 @@ class ManualAttendanceRequestController extends Controller
                 'filters' => ['status' => ''],
                 'availableDates' => [],
                 'approvedCountingRequestsCount' => 0,
-                'manualRequestLimit' => 5,
+                'manualRequestLimit' => $manualRequestLimit,
             ]);
         }
 
@@ -57,7 +59,7 @@ class ManualAttendanceRequestController extends Controller
             return $req;
         });
 
-        // Count all requests that count toward the 5-limit (exclude pending requests)
+        // Count all requests that count toward the configured limit (exclude pending requests)
         $approvedCountingRequests = AttendanceJustification::query()
             ->where('faculty_id', $faculty->id)
             ->where('type', 'manual_time')
@@ -99,7 +101,7 @@ class ManualAttendanceRequestController extends Controller
             'filters' => ['status' => $status],
             'availableDates' => $availableDates,
             'approvedCountingRequestsCount' => $approvedCountingRequests,
-            'manualRequestLimit' => 5,
+            'manualRequestLimit' => $manualRequestLimit,
         ]);
     }
 
@@ -202,6 +204,7 @@ class ManualAttendanceRequestController extends Controller
     public function filter(Request $request)
     {
         $faculty = $request->user()->faculty;
+        $manualRequestLimit = SystemSetting::manualAttendanceRequestLimit();
 
         if (! $faculty) {
             return response()->json([
@@ -211,7 +214,7 @@ class ManualAttendanceRequestController extends Controller
                 'current_page' => 1,
                 'last_page' => 1,
                 'approvedCountingRequestsCount' => 0,
-                'manualRequestLimit' => 5,
+                'manualRequestLimit' => $manualRequestLimit,
             ]);
         }
 
@@ -250,7 +253,7 @@ class ManualAttendanceRequestController extends Controller
 
         $responseData = $requests->toArray();
         $responseData['approvedCountingRequestsCount'] = $approvedCountingRequests;
-        $responseData['manualRequestLimit'] = 5;
+        $responseData['manualRequestLimit'] = $manualRequestLimit;
 
         return response()->json($responseData);
     }
