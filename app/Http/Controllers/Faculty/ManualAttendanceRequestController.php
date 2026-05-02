@@ -5,7 +5,10 @@ namespace App\Http\Controllers\Faculty;
 use App\Http\Controllers\Controller;
 use App\Models\AttendanceJustification;
 use App\Models\AttendanceRecord;
+use App\Models\RequestAttachment;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 
 class ManualAttendanceRequestController extends Controller
@@ -17,11 +20,13 @@ class ManualAttendanceRequestController extends Controller
     {
         $faculty = $request->user()->faculty;
 
-        if (!$faculty) {
+        if (! $faculty) {
             return Inertia::render('Faculty/ManualAttendanceRequests', [
                 'requests' => ['data' => [], 'total' => 0, 'per_page' => 10, 'current_page' => 1, 'last_page' => 1],
                 'filters' => ['status' => ''],
                 'availableDates' => [],
+                'approvedCountingRequestsCount' => 0,
+                'manualRequestLimit' => 5,
             ]);
         }
 
@@ -34,21 +39,31 @@ class ManualAttendanceRequestController extends Controller
             $query->where('status', $status);
         }
 
-        $requests = $query->with(['attendanceRecord.scheduleDetail', 'attendanceRecord.internalSchedule', 'reviewer'])
+        $requests = $query->with(['attendanceRecord.scheduleDetail', 'attendanceRecord.internalSchedule', 'reviewer', 'attachments'])
             ->orderBy('created_at', 'desc')
             ->paginate(10);
 
         // Add formatted data
         $requests->through(function ($req) {
             $req->attachment_url = $req->getAttachmentUrl();
+            $req->attachments_data = $req->getAttachmentsData();
             if ($req->attendanceRecord) {
-                $req->course_name = $req->attendanceRecord->scheduleDetail?->course_title 
-                    ?? $req->attendanceRecord->internalSchedule?->name 
+                $req->course_name = $req->attendanceRecord->scheduleDetail?->course_title
+                    ?? $req->attendanceRecord->internalSchedule?->name
                     ?? 'Unknown Course';
                 $req->attendance_date = $req->attendanceRecord->attendance_date->format('Y-m-d');
             }
+
             return $req;
         });
+
+        // Count all requests that count toward the 5-limit (exclude pending requests)
+        $approvedCountingRequests = AttendanceJustification::query()
+            ->where('faculty_id', $faculty->id)
+            ->where('type', 'manual_time')
+            ->where('counts_as_manual_log', true)
+            ->whereNot('status', 'pending')
+            ->count();
 
         // Get dates with missing time entries for form
         $availableDates = AttendanceRecord::query()
@@ -83,6 +98,8 @@ class ManualAttendanceRequestController extends Controller
             'requests' => $requests,
             'filters' => ['status' => $status],
             'availableDates' => $availableDates,
+            'approvedCountingRequestsCount' => $approvedCountingRequests,
+            'manualRequestLimit' => 5,
         ]);
     }
 
@@ -93,7 +110,7 @@ class ManualAttendanceRequestController extends Controller
     {
         $faculty = $request->user()->faculty;
 
-        if (!$faculty) {
+        if (! $faculty) {
             return back()->withErrors(['error' => 'Faculty profile not found.']);
         }
 
@@ -102,7 +119,9 @@ class ManualAttendanceRequestController extends Controller
             'requested_time_in' => 'required|date_format:H:i',
             'requested_time_out' => 'required|date_format:H:i|after:requested_time_in',
             'justification' => 'required|string|max:1000',
-            'attachment' => 'nullable|file|max:5120|mimes:pdf,doc,docx,jpg,jpeg,png',
+            'attachments' => 'nullable|array',
+            'attachments.*.file' => 'required|file|max:5120|mimes:pdf,doc,docx,jpg,jpeg,png',
+            'attachments.*.label' => 'required|string|max:255',
         ]);
 
         $attendanceRecord = AttendanceRecord::find($validated['attendance_record_id']);
@@ -112,34 +131,47 @@ class ManualAttendanceRequestController extends Controller
             return back()->withErrors(['error' => 'Unauthorized']);
         }
 
-        // Combine date with time
-        $attendanceDate = $attendanceRecord->attendance_date;
-        $requestedTimeIn = $attendanceDate->copy()->setTimeFromTimeString($validated['requested_time_in']);
-        $requestedTimeOut = $attendanceDate->copy()->setTimeFromTimeString($validated['requested_time_out']);
+        // Combine date with time (store as datetime without timezone conversion)
+        $attendanceDate = $attendanceRecord->attendance_date->toDateString();
+        $requestedTimeIn = Carbon::createFromFormat('Y-m-d H:i', "{$attendanceDate} {$validated['requested_time_in']}", 'Asia/Manila')->setTimezone('UTC');
+        $requestedTimeOut = Carbon::createFromFormat('Y-m-d H:i', "{$attendanceDate} {$validated['requested_time_out']}", 'Asia/Manila')->setTimezone('UTC');
 
-        $attachmentPath = null;
-        if ($request->hasFile('attachment')) {
-            try {
-                $file = $request->file('attachment');
-                $path = $file->store('manual-attendance-requests', 'public');
-                if ($path) {
-                    $attachmentPath = $path;
-                }
-            } catch (\Exception $e) {
-                return back()->withErrors(['attachment' => 'Failed to upload attachment']);
-            }
-        }
-
-        AttendanceJustification::create([
+        $justification = AttendanceJustification::create([
             'faculty_id' => $faculty->id,
             'attendance_record_id' => $attendanceRecord->id,
             'type' => 'manual_time',
             'requested_time_in' => $requestedTimeIn,
             'requested_time_out' => $requestedTimeOut,
             'justification' => $validated['justification'],
-            'attachment_path' => $attachmentPath,
             'status' => 'pending',
+            'counts_as_manual_log' => false,
         ]);
+
+        // Handle multiple file attachments
+        if (! empty($validated['attachments'])) {
+            $facultyDir = "attachments/faculty_{$faculty->id}/manual_attendance_requests";
+
+            foreach ($validated['attachments'] as $attachment) {
+                try {
+                    $file = $attachment['file'];
+                    $label = $attachment['label'];
+                    $path = $file->store("{$facultyDir}/request_{$justification->id}", 'public');
+
+                    if ($path) {
+                        RequestAttachment::create([
+                            'attachmentable_id' => $justification->id,
+                            'attachmentable_type' => AttendanceJustification::class,
+                            'file_path' => $path,
+                            'custom_label' => $label,
+                            'mime_type' => $file->getMimeType(),
+                            'file_size' => $file->getSize(),
+                        ]);
+                    }
+                } catch (\Exception $e) {
+                    Log::error('Failed to save manual attendance attachment: '.$e->getMessage());
+                }
+            }
+        }
 
         return back()->with('success', 'Manual attendance request submitted successfully');
     }
@@ -171,13 +203,15 @@ class ManualAttendanceRequestController extends Controller
     {
         $faculty = $request->user()->faculty;
 
-        if (!$faculty) {
+        if (! $faculty) {
             return response()->json([
                 'data' => [],
                 'total' => 0,
                 'per_page' => 10,
                 'current_page' => 1,
                 'last_page' => 1,
+                'approvedCountingRequestsCount' => 0,
+                'manualRequestLimit' => 5,
             ]);
         }
 
@@ -190,10 +224,34 @@ class ManualAttendanceRequestController extends Controller
             $query->where('status', $status);
         }
 
-        $requests = $query->with(['attendanceRecord.scheduleDetail', 'attendanceRecord.internalSchedule', 'reviewer'])
+        $requests = $query->with(['attendanceRecord.scheduleDetail', 'attendanceRecord.internalSchedule', 'reviewer', 'attachments'])
             ->orderBy('created_at', 'desc')
             ->paginate(10);
 
-        return response()->json($requests);
+        $requests->through(function ($req) {
+            $req->attachment_url = $req->getAttachmentUrl();
+            $req->attachments_data = $req->getAttachmentsData();
+            if ($req->attendanceRecord) {
+                $req->course_name = $req->attendanceRecord->scheduleDetail?->course_title
+                    ?? $req->attendanceRecord->internalSchedule?->name
+                    ?? 'N/A';
+            }
+
+            return $req;
+        });
+
+        // Count all requests that count toward the 5-limit (exclude pending requests)
+        $approvedCountingRequests = AttendanceJustification::query()
+            ->where('faculty_id', $faculty->id)
+            ->where('type', 'manual_time')
+            ->where('counts_as_manual_log', true)
+            ->whereNot('status', 'pending')
+            ->count();
+
+        $responseData = $requests->toArray();
+        $responseData['approvedCountingRequestsCount'] = $approvedCountingRequests;
+        $responseData['manualRequestLimit'] = 5;
+
+        return response()->json($responseData);
     }
 }

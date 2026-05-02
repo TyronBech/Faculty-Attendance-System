@@ -7,7 +7,8 @@ import InputError from '@/Components/InputError';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
 import DangerButton from '@/Components/DangerButton';
-import { Head, Link, useForm } from '@inertiajs/react';
+import MultiFileUploader from '@/Components/MultiFileUploader';
+import { Head, Link, useForm, router } from '@inertiajs/react';
 import { useState, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
 
@@ -28,6 +29,20 @@ const formatTime12 = (time24) => {
     return `${h}:${m} ${ampm}`;
 };
 
+const extractTimeFromDateTime = (datetimeString) => {
+    if (!datetimeString) return '';
+    try {
+        // Parse the ISO datetime and convert to local time
+        const date = new Date(datetimeString);
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        return `${hours}:${minutes}`;
+    } catch (e) {
+        // Fallback to substring extraction
+        return datetimeString?.substring(11, 16) || '';
+    }
+};
+
 const formatDateTime = (dateString) => {
     if (!dateString) return '';
     try {
@@ -46,7 +61,13 @@ const formatDateTime = (dateString) => {
     }
 };
 
-export default function ManualAttendanceRequests({ requests: initialRequests, filters, availableDates = [] }) {
+export default function ManualAttendanceRequests({ 
+    requests: initialRequests, 
+    filters, 
+    availableDates = [],
+    approvedCountingRequestsCount = 0,
+    manualRequestLimit = 5,
+}) {
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showCancelModal, setShowCancelModal] = useState(false);
     const [selectedRequest, setSelectedRequest] = useState(null);
@@ -58,12 +79,14 @@ export default function ManualAttendanceRequests({ requests: initialRequests, fi
     const [requestsData, setRequestsData] = useState(initialRequests);
     const [isFiltering, setIsFiltering] = useState(false);
     const [currentPage, setCurrentPage] = useState(initialRequests.current_page || 1);
+    const [countingRequestsCount, setCountingRequestsCount] = useState(approvedCountingRequestsCount);
+    const [requestLimit, setRequestLimit] = useState(manualRequestLimit);
 
     // ── File preview & Modal state ───────────────────────────────
-    const [previewAttachment, setPreviewAttachment] = useState(null);
-    const fileAttachmentRef = useRef(null);
     const [previewModalUrl, setPreviewModalUrl] = useState(null);
     const [showPreviewModal, setShowPreviewModal] = useState(false);
+    const [attachmentFiles, setAttachmentFiles] = useState([]);
+    const [fileUploadError, setFileUploadError] = useState(null);
 
     // ── Toggle expanded state ────────────────────────────────
     const toggleExpanded = (requestId) => {
@@ -84,37 +107,42 @@ export default function ManualAttendanceRequests({ requests: initialRequests, fi
         requested_time_in: '',
         requested_time_out: '',
         justification: '',
-        attachment: null,
     });
 
-    const handleFileChange = (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
+    const handleFilesChange = (files) => {
+        setAttachmentFiles(files);
+        setFileUploadError(null);
+    };
 
-        createForm.setData('attachment', file);
-        createForm.clearErrors('attachment');
-
-        if (file.type.startsWith('image/')) {
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-                setPreviewAttachment(ev.target.result);
-            };
-            reader.readAsDataURL(file);
-        } else {
-            setPreviewAttachment('document');
-        }
+    const handleFileUploadError = (error) => {
+        setFileUploadError(error);
     };
 
     const handleCreate = (e) => {
         e.preventDefault();
 
-        createForm.post(route('faculty.manual-attendance-requests.store'), {
+        // Create FormData to handle multiple files
+        const formData = new FormData();
+        formData.append('attendance_record_id', createForm.data.attendance_record_id);
+        formData.append('requested_time_in', createForm.data.requested_time_in);
+        formData.append('requested_time_out', createForm.data.requested_time_out);
+        formData.append('justification', createForm.data.justification);
+
+        // Append all files in the format expected by the backend
+        attachmentFiles.forEach((file, index) => {
+            formData.append(`attachments[${index}][file]`, file);
+            formData.append(`attachments[${index}][label]`, file.name);
+        });
+
+        router.post(route('faculty.manual-attendance-requests.store'), formData, {
             preserveScroll: true,
-            forceFormData: true,
+            onStart: () => createForm.processing = true,
+            onFinish: () => createForm.processing = false,
             onSuccess: () => {
                 setShowCreateModal(false);
                 createForm.reset();
-                setPreviewAttachment(null);
+                setAttachmentFiles([]);
+                setFileUploadError(null);
                 setSelectedDate(availableDates && availableDates.length > 0 ? availableDates[0] : null);
                 fetchRequests(filterStatus, 1);
             },
@@ -157,6 +185,8 @@ export default function ManualAttendanceRequests({ requests: initialRequests, fi
             .then((data) => {
                 setRequestsData(data);
                 setCurrentPage(data.current_page || 1);
+                setCountingRequestsCount(data.approvedCountingRequestsCount || 0);
+                setRequestLimit(data.manualRequestLimit || 5);
             })
             .catch(() => {})
             .finally(() => setIsFiltering(false));
@@ -198,6 +228,38 @@ export default function ManualAttendanceRequests({ requests: initialRequests, fi
                     <PrimaryButton onClick={() => setShowCreateModal(true)}>
                         + New Request
                     </PrimaryButton>
+                </div>
+
+                {/* Request Limit Counter */}
+                <div className="rounded-lg bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border border-blue-200 dark:border-blue-800/50 p-4">
+                    <div className="flex items-center justify-between gap-4">
+                        <div>
+                            <p className="text-sm font-semibold text-blue-900 dark:text-blue-300">
+                                Approved Requests (Counting Towards Limit)
+                            </p>
+                            <p className="text-xs text-blue-700 dark:text-blue-400 mt-1">
+                                You have {countingRequestsCount} of {requestLimit} approved requests that count towards your annual limit.
+                            </p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <div className="text-right">
+                                <p className="text-2xl font-bold text-blue-900 dark:text-blue-300">
+                                    {countingRequestsCount}/{requestLimit}
+                                </p>
+                            </div>
+                            <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{
+                                background: countingRequestsCount >= requestLimit 
+                                    ? 'rgb(220, 38, 38)' 
+                                    : 'linear-gradient(135deg, rgb(59, 130, 246), rgb(99, 102, 241))',
+                            }}>
+                                <div className="w-14 h-14 rounded-full bg-white dark:bg-gray-800 flex items-center justify-center">
+                                    <p className="text-lg font-bold text-blue-600 dark:text-blue-400">
+                                        {((countingRequestsCount / requestLimit) * 100).toFixed(0)}%
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 {/* Status Filter Tabs */}
@@ -246,12 +308,26 @@ export default function ManualAttendanceRequests({ requests: initialRequests, fi
                                                     <span className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-bold ring-1 ring-inset ${STATUS_STYLES[request.status]}`}>
                                                         {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
                                                     </span>
+                                                    {request.status === 'pending' && request.counts_as_manual_log === 0 && (
+                                                        <span className="inline-flex items-center rounded-md px-2.5 py-1 text-xs font-bold text-yellow-700 bg-yellow-50 ring-1 ring-inset ring-yellow-600/20 dark:bg-yellow-400/10 dark:text-yellow-400 dark:ring-yellow-400/30">
+                                                            Not Counted (Pending)
+                                                        </span>
+                                                    )}
+                                                    {(request.status === 'approved' || request.status === 'rejected') && (
+                                                        <span className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-bold ring-1 ring-inset ${
+                                                            request.counts_as_manual_log
+                                                                ? 'text-emerald-700 bg-emerald-50 ring-emerald-600/20 dark:bg-emerald-400/10 dark:text-emerald-400 dark:ring-emerald-400/30'
+                                                                : 'text-orange-700 bg-orange-50 ring-orange-600/20 dark:bg-orange-400/10 dark:text-orange-400 dark:ring-orange-400/30'
+                                                        }`}>
+                                                            {request.counts_as_manual_log ? 'Counts Toward Limit' : 'Not Counted'}
+                                                        </span>
+                                                    )}
                                                 </div>
                                                 <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
                                                     {request.attendance_date}
                                                 </p>
                                                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                                    <span className="font-semibold text-gray-900 dark:text-white">{formatTime12(request.requested_time_in?.substring(11, 16))} - {formatTime12(request.requested_time_out?.substring(11, 16))}</span>
+                                                    <span className="font-semibold text-gray-900 dark:text-white">{formatTime12(extractTimeFromDateTime(request.requested_time_in))} - {formatTime12(extractTimeFromDateTime(request.requested_time_out))}</span>
                                                 </p>
                                                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                                                     Submitted {new Date(request.created_at).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}
@@ -302,23 +378,37 @@ export default function ManualAttendanceRequests({ requests: initialRequests, fi
                                                         </div>
                                                     )}
 
-                                                    {/* Attachment preview button */}
-                                                    {request.attachment_url && (
-                                                        <div className="flex items-center gap-2">
-                                                            <button
-                                                                type="button"
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    setPreviewModalUrl(request.attachment_url);
-                                                                    setShowPreviewModal(true);
-                                                                }}
-                                                                className="inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
-                                                            >
-                                                                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375m0 0H5.625c-.621 0-1.125-.504-1.125-1.125v-9.75m7.5 10.375v-6.375m0 6.375H9.375" />
-                                                                </svg>
-                                                                View Attachment
-                                                            </button>
+                                                    {/* Attachments Section */}
+                                                    {request.attachments_data && request.attachments_data.length > 0 && (
+                                                        <div className="space-y-3 mt-4">
+                                                            <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Supporting Documents</p>
+                                                            <div className="flex flex-wrap gap-3">
+                                                                {request.attachments_data.map((attachment, idx) => (
+                                                                    <button
+                                                                        key={attachment.id || idx}
+                                                                        type="button"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            setPreviewModalUrl(attachment.url);
+                                                                            setShowPreviewModal(true);
+                                                                        }}
+                                                                        className="group relative flex flex-col items-center justify-center rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-2 hover:border-blue-400 dark:hover:border-blue-500 transition-all w-24 h-24"
+                                                                    >
+                                                                        {attachment.url.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? (
+                                                                            <img src={attachment.url} alt={attachment.custom_label} className="w-full h-full object-cover rounded-lg opacity-80 group-hover:opacity-100" />
+                                                                        ) : (
+                                                                            <div className="flex flex-col items-center justify-center text-gray-400 group-hover:text-blue-500">
+                                                                                <svg className="h-8 w-8 mb-1" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                                                                                </svg>
+                                                                            </div>
+                                                                        )}
+                                                                        <span className="mt-1 text-[10px] font-medium text-gray-500 dark:text-gray-400 truncate w-full text-center">
+                                                                            {attachment.custom_label || 'File'}
+                                                                        </span>
+                                                                    </button>
+                                                                ))}
+                                                            </div>
                                                         </div>
                                                     )}
 
@@ -330,7 +420,25 @@ export default function ManualAttendanceRequests({ requests: initialRequests, fi
                                                                 {request.review_remarks && (
                                                                     <p><span className="font-semibold">Remarks:</span> {request.review_remarks}</p>
                                                                 )}
+                                                                <p>
+                                                                    <span className="font-semibold">Counts Toward Limit:</span>{' '}
+                                                                    {request.counts_as_manual_log ? (
+                                                                        <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Yes</span>
+                                                                    ) : (
+                                                                        <span className="text-orange-600 dark:text-orange-400 font-semibold">No (Exempted)</span>
+                                                                    )}
+                                                                </p>
                                                             </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Limit status for pending requests */}
+                                                    {request.status === 'pending' && (
+                                                        <div className="rounded-xl bg-yellow-50 dark:bg-yellow-900/20 p-4 border border-yellow-100 dark:border-yellow-800/50">
+                                                            <p className="text-xs font-bold text-yellow-600 dark:text-yellow-400 uppercase tracking-wider mb-2">Pending Review</p>
+                                                            <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                                                                This request does not count toward your 5-request limit yet. Once approved or rejected by the admin, it may count depending on the admin's decision.
+                                                            </p>
                                                         </div>
                                                     )}
                                                 </div>
@@ -484,46 +592,15 @@ export default function ManualAttendanceRequests({ requests: initialRequests, fi
 
                                 {/* File Upload Section */}
                                 <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
-                                    <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-                                        Supporting Document
-                                    </h3>
-                                    
-                                    <div>
-                                        <InputLabel htmlFor="attachment" value="Attach Document (Optional)" />
-                                        <div className="mt-2">
-                                            <label htmlFor="attachment" className="flex items-center justify-center w-full px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-gray-400 dark:border-gray-600 dark:hover:border-gray-500 transition-colors bg-gray-50 dark:bg-gray-700/50">
-                                                <div className="text-center">
-                                                    <svg className="mx-auto h-8 w-8 text-gray-400 dark:text-gray-500" stroke="currentColor" fill="none" viewBox="0 0 48 48">
-                                                        <path d="M28 8H12a4 4 0 00-4 4v20a4 4 0 004 4h24a4 4 0 004-4V20m-8-12v12m0 0l-4-4m4 4l4-4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                                                    </svg>
-                                                    <p className="mt-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-                                                        {createForm.data.attachment ? createForm.data.attachment.name : 'Click to upload or drag and drop'}
-                                                    </p>
-                                                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                                                        PDF, DOC, DOCX, JPG, PNG (Max 5MB)
-                                                    </p>
-                                                </div>
-                                                <input
-                                                    ref={fileAttachmentRef}
-                                                    id="attachment"
-                                                    type="file"
-                                                    onChange={handleFileChange}
-                                                    accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                                                    className="hidden"
-                                                />
-                                            </label>
-                                        </div>
-                                        <InputError message={createForm.errors.attachment} />
-                                        {previewAttachment && (
-                                            <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-700 rounded">
-                                                {previewAttachment === 'document' ? (
-                                                    <p className="text-sm text-gray-600 dark:text-gray-400">✓ Document ready to upload</p>
-                                                ) : (
-                                                    <img src={previewAttachment} alt="Preview" className="max-h-32 rounded" />
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
+                                    <MultiFileUploader
+                                        label="Supporting Documents"
+                                        description="Upload supporting documents (e.g., class attendance, class screenshots). Max 5MB per file."
+                                        value={attachmentFiles}
+                                        onChange={handleFilesChange}
+                                        onError={handleFileUploadError}
+                                        error={fileUploadError}
+                                        disabled={createForm.processing}
+                                    />
                                 </div>
 
                                 {/* Submit Buttons */}

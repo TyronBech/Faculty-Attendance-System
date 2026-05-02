@@ -2,10 +2,11 @@
 
 namespace App\Models;
 
-use Carbon\Carbon;
+use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Storage;
 
@@ -35,7 +36,7 @@ class UndertimeRequest extends Model
     }
 
     /* ------------------------------------------------------------------ */
-    /*  Relationships                                                     */
+    /*  Relationships */
     /* ------------------------------------------------------------------ */
 
     public function faculty(): BelongsTo
@@ -53,8 +54,13 @@ class UndertimeRequest extends Model
         return $this->belongsTo(User::class, 'reviewed_by');
     }
 
+    public function attachments(): MorphMany
+    {
+        return $this->morphMany(RequestAttachment::class, 'attachmentable');
+    }
+
     /* ------------------------------------------------------------------ */
-    /*  Scopes                                                            */
+    /*  Scopes */
     /* ------------------------------------------------------------------ */
 
     public function scopePending($query)
@@ -78,21 +84,57 @@ class UndertimeRequest extends Model
     }
 
     /* ------------------------------------------------------------------ */
-    /*  Methods                                                           */
+    /*  Methods */
     /* ------------------------------------------------------------------ */
 
     /**
-     * Get the attachment URL if it exists
+     * Get the first attachment URL if it exists
      */
     public function getAttachmentUrl(): ?string
     {
-        if (!$this->attachment_path) {
-            return null;
+        if ($this->attachment_path) {
+            /** @var Filesystem $disk */
+            $disk = Storage::disk('public');
+
+            return $disk->url($this->attachment_path);
         }
 
-        /** @var \Illuminate\Contracts\Filesystem\Filesystem $disk */
-        $disk = Storage::disk('public');
-        return $disk->url($this->attachment_path);
+        $firstAttachment = $this->attachments()->first();
+
+        return $firstAttachment ? $firstAttachment->getDownloadUrl() : null;
+    }
+
+    /**
+     * Get all attachments with their URLs
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function getAttachmentsData(): array
+    {
+        $data = [];
+
+        // Legacy single attachment
+        if ($this->attachment_path) {
+            $data[] = [
+                'id' => 'legacy',
+                'file_path' => $this->attachment_path,
+                'custom_label' => 'Supporting Document',
+                'url' => Storage::disk('public')->url($this->attachment_path),
+            ];
+        }
+
+        // New multiple attachments
+        foreach ($this->attachments as $attachment) {
+            $data[] = [
+                'id' => $attachment->id,
+                'file_path' => $attachment->file_path,
+                'custom_label' => $attachment->custom_label,
+                'url' => $attachment->getDownloadUrl(),
+                'mime_type' => $attachment->mime_type,
+            ];
+        }
+
+        return $data;
     }
 
     /**
@@ -105,4 +147,3 @@ class UndertimeRequest extends Model
         }
     }
 }
-

@@ -234,7 +234,7 @@ function RequestCard({
                                         <span className="font-semibold">
                                             Reviewed by:
                                         </span>{" "}
-                                        {request.reviewer_email ?? "N/A"}
+                                        {request.reviewer_name ?? "N/A"}
                                     </p>
                                     <p>
                                         <span className="font-semibold">
@@ -442,9 +442,6 @@ export default function ManualAttendanceRequestApproval({
                         searchQuery,
                         paginator.current_page,
                     );
-                    toast.success(
-                        "Manual attendance request approved successfully.",
-                    );
                 },
                 onError: () => {
                     toast.error("Failed to approve manual attendance request.");
@@ -476,7 +473,6 @@ export default function ManualAttendanceRequestApproval({
                         searchQuery,
                         paginator.current_page,
                     );
-                    toast.success("Manual attendance request rejected.");
                 },
                 onError: () => {
                     toast.error("Failed to reject manual attendance request.");
