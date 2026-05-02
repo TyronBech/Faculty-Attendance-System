@@ -96,6 +96,7 @@
         .logs-table .day-cell { font-weight: 700; font-size: 6.5pt; width: 6.5%; }
         .logs-table .col-time { width: 9%; }
         .logs-table .col-mins { width: 7%; font-size: 5.5pt; }
+        .logs-table .col-hours { width: 8%; font-size: 5.5pt; }
 
         .holiday-cell { font-style: italic; font-size: 6.5pt; }
 
@@ -177,6 +178,8 @@
     $manualList = $manualEntries ?? [];
     $filledManual = count($manualList);
     $manualBlank = max(0, $totalDays - 7 - $filledManual);
+    $totalHoursRendered = collect($rows)->sum('total_hours_rendered');
+    $totalRequiredHours = collect($rows)->sum('required_hours');
 @endphp
 <div class="page">
 
@@ -229,12 +232,14 @@
         <td class="col-left">
             <table class="logs-table">
                 <tbody>
-                <tr><th colspan="8" class="section-hdr">TIME LOGS</th></tr>
+                <tr><th colspan="10" class="section-hdr">TIME LOGS</th></tr>
                 <tr>
                     <th class="day-cell sub-hdr" rowspan="2">Day</th>
                     <th colspan="2" class="sub-hdr">Morning</th>
                     <th colspan="2" class="sub-hdr">Afternoon</th>
                     <th colspan="2" class="sub-hdr">Night</th>
+                    <th class="col-hours sub-hdr" rowspan="2">Total<br>Hours</th>
+                    <th class="col-hours sub-hdr" rowspan="2">Required<br>Hours</th>
                     <th class="col-mins sub-hdr" rowspan="2">Minutes<br>Tardy&nbsp;/&nbsp;UT</th>
                 </tr>
                 <tr>
@@ -260,7 +265,7 @@
                     <tr>
                         <td class="day-cell">{{ $r['day'] }}</td>
                         @if ($isHoliday && ! $hasTimes)
-                            <td colspan="7" class="holiday-cell txt-green">HOLIDAY</td>
+                            <td colspan="9" class="holiday-cell txt-green">HOLIDAY</td>
                         @else
                             <td class="{{ $tdClass }}">{{ $r['official_morning_in'] ?? '' }}</td>
                             <td class="{{ $tdClass }}">{{ $r['official_morning_out'] ?? '' }}</td>
@@ -268,6 +273,8 @@
                             <td class="{{ $tdClass }}">{{ $r['official_afternoon_out'] ?? '' }}</td>
                             <td class="{{ $tdClass }}">{{ $r['official_night_in'] ?? '' }}</td>
                             <td class="{{ $tdClass }}">{{ $r['official_night_out'] ?? '' }}</td>
+                            <td class="{{ $tdClass }}">{{ number_format((float) ($r['total_hours_rendered'] ?? 0), 2) }}</td>
+                            <td class="{{ $tdClass }}">{{ number_format((float) ($r['required_hours'] ?? 0), 2) }}</td>
                             <td class="txt-red">
                                 @if ($tardy > 0 && $ut > 0)
                                     {{ $tardy }} + {{ $ut }}
@@ -301,6 +308,14 @@
             {{-- SUMMARY --}}
             <table class="summary-table">
                 <tr><th colspan="2" class="section-hdr">SUMMARY</th></tr>
+                <tr>
+                    <td class="label-col">Total Hours Rendered:</td>
+                    <td class="val-col">{{ number_format((float) ($summary['totalHoursRendered'] ?? $totalHoursRendered), 2) }}</td>
+                </tr>
+                <tr>
+                    <td class="label-col">Total Required Hours:</td>
+                    <td class="val-col">{{ number_format((float) ($summary['totalRequiredHours'] ?? $totalRequiredHours), 2) }}</td>
+                </tr>
                 <tr>
                     <td class="label-col">No. of Days Absent:</td>
                     <td class="val-col">{{ $summary['daysAbsent'] ?? 0 }}</td>

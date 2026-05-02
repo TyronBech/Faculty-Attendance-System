@@ -46,6 +46,7 @@ class MonthlyDtrPdfTemplateTest extends TestCase
                 'timesOvertimeNight' => 0,
                 'totalOvertimeNightMinutes' => 0,
                 'totalHoursRendered' => 0,
+                'totalRequiredHours' => 0,
             ],
             'manualEntries' => [],
             'periodLabel' => 'March 2026',
@@ -55,6 +56,8 @@ class MonthlyDtrPdfTemplateTest extends TestCase
         ])->render();
 
         $this->assertStringContainsString('TIME LOGS', $html);
+        $this->assertStringContainsString('Total Hours', $html);
+        $this->assertStringContainsString('Required', $html);
         $this->assertStringContainsString('SUMMARY', $html);
         $this->assertStringContainsString('MANUAL ENTRY', $html);
         $this->assertStringContainsString('DELA CRUZ', $html);

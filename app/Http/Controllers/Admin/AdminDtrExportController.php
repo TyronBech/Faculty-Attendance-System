@@ -23,8 +23,8 @@ class AdminDtrExportController extends Controller
     {
         $validated = $request->validate([
             'faculty_id' => ['required', 'integer', 'exists:faculties,id'],
-            'month'      => ['required', 'integer', 'between:1,12'],
-            'year'       => ['required', 'integer', 'between:2000,2100'],
+            'month' => ['required', 'integer', 'between:1,12'],
+            'year' => ['required', 'integer', 'between:2000,2100'],
         ]);
 
         $faculty = Faculty::query()
@@ -32,11 +32,11 @@ class AdminDtrExportController extends Controller
             ->findOrFail($validated['faculty_id']);
 
         $month = (int) $validated['month'];
-        $year  = (int) $validated['year'];
+        $year = (int) $validated['year'];
 
         $conversion = $service->convertToDtr($faculty->id, $month, $year);
-        $attendance  = $conversion['attendance'] ?? [];
-        $summary     = $conversion['summary']    ?? [];
+        $attendance = $conversion['attendance'] ?? [];
+        $summary = $conversion['summary'] ?? [];
 
         $rows = $this->buildRows($attendance, $month, $year);
 
@@ -44,13 +44,13 @@ class AdminDtrExportController extends Controller
 
         return response()->json([
             'faculty' => [
-                'id'         => $faculty->id,
-                'full_name'  => $faculty->full_name,
+                'id' => $faculty->id,
+                'full_name' => $faculty->full_name,
                 'department' => $faculty->department?->name ?? 'N/A',
             ],
             'periodLabel' => $periodLabel,
-            'rows'        => $rows,
-            'summary'     => $summary,
+            'rows' => $rows,
+            'summary' => $summary,
         ]);
     }
 
@@ -60,14 +60,14 @@ class AdminDtrExportController extends Controller
     public function previewBatch(Request $request, AttendanceToDtrService $service): JsonResponse
     {
         $validated = $request->validate([
-            'faculty_ids'   => ['required', 'array', 'min:1'],
+            'faculty_ids' => ['required', 'array', 'min:1'],
             'faculty_ids.*' => ['required', 'integer', 'exists:faculties,id'],
-            'month'         => ['required', 'integer', 'between:1,12'],
-            'year'          => ['required', 'integer', 'between:2000,2100'],
+            'month' => ['required', 'integer', 'between:1,12'],
+            'year' => ['required', 'integer', 'between:2000,2100'],
         ]);
 
         $month = (int) $validated['month'];
-        $year  = (int) $validated['year'];
+        $year = (int) $validated['year'];
 
         $faculties = Faculty::query()
             ->with('department:id,name')
@@ -80,25 +80,25 @@ class AdminDtrExportController extends Controller
 
         $previews = $faculties->map(function (Faculty $faculty) use ($service, $month, $year) {
             $conversion = $service->convertToDtr($faculty->id, $month, $year);
-            $attendance  = $conversion['attendance'] ?? [];
-            $summary     = $conversion['summary']    ?? [];
+            $attendance = $conversion['attendance'] ?? [];
+            $summary = $conversion['summary'] ?? [];
 
             $rows = $this->buildRows($attendance, $month, $year);
 
             return [
                 'faculty' => [
-                    'id'         => $faculty->id,
-                    'full_name'  => $faculty->full_name,
+                    'id' => $faculty->id,
+                    'full_name' => $faculty->full_name,
                     'department' => $faculty->department?->name ?? 'N/A',
                 ],
-                'rows'    => $rows,
+                'rows' => $rows,
                 'summary' => $summary,
             ];
         })->values();
 
         return response()->json([
             'periodLabel' => $periodLabel,
-            'previews'    => $previews,
+            'previews' => $previews,
         ]);
     }
 
@@ -109,15 +109,15 @@ class AdminDtrExportController extends Controller
     {
         $validated = $request->validate([
             'faculty_id' => ['required', 'integer', 'exists:faculties,id'],
-            'month'      => ['required', 'integer', 'between:1,12'],
-            'year'       => ['required', 'integer', 'between:2000,2100'],
+            'month' => ['required', 'integer', 'between:1,12'],
+            'year' => ['required', 'integer', 'between:2000,2100'],
         ]);
 
         $faculty = Faculty::query()
             ->with('department:id,name')
             ->findOrFail($validated['faculty_id']);
 
-        $token    = Str::uuid()->toString();
+        $token = Str::uuid()->toString();
         $safeName = str_replace(' ', '_', strtolower(trim($faculty->full_name)));
         $fileName = "dtr_{$safeName}_{$validated['year']}_{$validated['month']}.pdf";
 
@@ -130,9 +130,9 @@ class AdminDtrExportController extends Controller
         );
 
         return response()->json([
-            'token'    => $token,
+            'token' => $token,
             'fileName' => $fileName,
-            'message'  => 'PDF generation started.',
+            'message' => 'PDF generation started.',
         ]);
     }
 
@@ -142,13 +142,13 @@ class AdminDtrExportController extends Controller
     public function dispatchBatch(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'faculty_ids'   => ['required', 'array', 'min:1'],
+            'faculty_ids' => ['required', 'array', 'min:1'],
             'faculty_ids.*' => ['required', 'integer', 'exists:faculties,id'],
-            'month'         => ['required', 'integer', 'between:1,12'],
-            'year'          => ['required', 'integer', 'between:2000,2100'],
+            'month' => ['required', 'integer', 'between:1,12'],
+            'year' => ['required', 'integer', 'between:2000,2100'],
         ]);
 
-        $token    = Str::uuid()->toString();
+        $token = Str::uuid()->toString();
         $fileName = "dtr_export_{$validated['year']}_{$validated['month']}.zip";
 
         GenerateDtrBatchZipJob::dispatch(
@@ -159,9 +159,9 @@ class AdminDtrExportController extends Controller
         );
 
         return response()->json([
-            'token'    => $token,
+            'token' => $token,
             'fileName' => $fileName,
-            'message'  => 'Batch PDF generation started.',
+            'message' => 'Batch PDF generation started.',
         ]);
     }
 
@@ -170,7 +170,7 @@ class AdminDtrExportController extends Controller
      */
     public function status(Request $request): JsonResponse
     {
-        $token     = $request->query('token');
+        $token = $request->query('token');
         $extension = $request->query('extension', 'pdf');
         $extension = in_array($extension, ['pdf', 'zip'], true) ? $extension : 'pdf';
 
@@ -190,8 +190,8 @@ class AdminDtrExportController extends Controller
      */
     public function downloadFile(Request $request): BinaryFileResponse|JsonResponse
     {
-        $token     = $request->query('token');
-        $fileName  = $request->query('fileName', 'dtr.pdf');
+        $token = $request->query('token');
+        $fileName = $request->query('fileName', 'dtr.pdf');
         $extension = $request->query('extension');
 
         if (! $token) {
@@ -201,7 +201,7 @@ class AdminDtrExportController extends Controller
         $extension = $extension
             ?? (strtolower(pathinfo($fileName, PATHINFO_EXTENSION)) ?: 'pdf');
         $extension = in_array($extension, ['pdf', 'zip'], true) ? $extension : 'pdf';
-        $path      = "dtr-exports/{$token}.{$extension}";
+        $path = "dtr-exports/{$token}.{$extension}";
 
         if (! Storage::disk('local')->exists($path)) {
             return response()->json(['error' => 'File not ready yet.'], 404);
@@ -221,112 +221,118 @@ class AdminDtrExportController extends Controller
     public function buildRows(array $attendance, int $month, int $year): array
     {
         $daysInMonth = Carbon::create($year, $month, 1)->daysInMonth;
-        $rows        = [];
+        $rows = [];
 
         for ($day = 1; $day <= $daysInMonth; $day++) {
-            $dayData     = $attendance[$day] ?? ['status' => 'none', 'record' => null, 'holidays' => []];
-            $record      = $dayData['record'] ?? null;
+            $dayData = $attendance[$day] ?? ['status' => 'none', 'records' => [], 'holidays' => []];
+            $records = $dayData['records'] ?? [];
             $officialDate = Carbon::create($year, $month, $day);
 
-            // ── Official times ────────────────────────────────────────────
-            //
-            // Always read from $record->official_time_in/out — these are the
-            // already-adjusted values produced by AttendanceToDtrService
-            // (original schedule times ± late/undertime deltas for moved
-            // change-request entries, or plain scheduled times otherwise).
-            // We no longer fall back to scheduleDetail->start_time/end_time
-            // because that would bypass the delta adjustment.
-            $officialMorningIn    = $this->timeForPeriod($record?->official_time_in,  'morning');
-            $officialMorningOut   = $this->timeForPeriod($record?->official_time_out, 'morning');
-            $officialAfternoonIn  = $this->timeForPeriod($record?->official_time_in,  'afternoon');
-            $officialAfternoonOut = $this->timeForPeriod($record?->official_time_out, 'afternoon');
-            $officialNightIn      = $this->timeForPeriod($record?->official_time_in,  'night');
-            $officialNightOut     = $this->timeForPeriod($record?->official_time_out, 'night');
+            $sortedRecords = collect($records)
+                ->sortBy(function ($record) {
+                    $rawOfficial = $record?->raw_official_time_in ?? $record?->official_time_in;
 
-            // ── Actual times ──────────────────────────────────────────────
-            //
-            // Use raw_actual_time_in/out (preserved before any conversion in
-            // AttendanceToDtrService) so the Actual tab always shows the real
-            // biometric clock times.
-            $rawActualTimeIn  = $record?->raw_actual_time_in  ?? $record?->actual_time_in;
-            $rawActualTimeOut = $record?->raw_actual_time_out ?? $record?->actual_time_out;
+                    return $rawOfficial ? Carbon::parse($rawOfficial)->timestamp : PHP_INT_MAX;
+                })
+                ->values()
+                ->all();
 
-            $actualMorningIn    = $this->timeForPeriod($rawActualTimeIn,  'morning');
-            $actualMorningOut   = $this->timeForPeriod($rawActualTimeOut, 'morning');
-            $actualAfternoonIn  = $this->timeForPeriod($rawActualTimeIn,  'afternoon');
-            $actualAfternoonOut = $this->timeForPeriod($rawActualTimeOut, 'afternoon');
-            $actualNightIn      = $this->timeForPeriod($rawActualTimeIn,  'night');
-            $actualNightOut     = $this->timeForPeriod($rawActualTimeOut, 'night');
+            $slots = array_slice($sortedRecords, 0, 3);
 
-            $actualDateSource = $rawActualTimeIn ?: $rawActualTimeOut;
-            $actualDate       = $actualDateSource ? Carbon::parse($actualDateSource) : null;
-            $actualDay        = $actualDate?->day ?? $day;
-            $actualDayShift   = $actualDate
-                ? $officialDate->diffInDays($actualDate->copy()->startOfDay(), false)
+            $slotMap = [
+                'morning' => $slots[0] ?? null,
+                'afternoon' => $slots[1] ?? null,
+                'night' => $slots[2] ?? null,
+            ];
+
+            $officialTimes = [];
+            $internalTimes = [];
+
+            foreach ($slotMap as $slot => $record) {
+                $officialTimes[$slot] = [
+                    'in' => $this->formatTime($record?->dtr_official_time_in ?? $record?->official_time_in),
+                    'out' => $this->formatTime($record?->dtr_official_time_out ?? $record?->official_time_out),
+                ];
+
+                $internalTimes[$slot] = [
+                    'in' => $this->formatTime($record?->dtr_operational_time_in ?? $record?->operational_time_in),
+                    'out' => $this->formatTime($record?->dtr_operational_time_out ?? $record?->operational_time_out),
+                ];
+            }
+
+            $primaryRecord = $slots[0] ?? null;
+            $internalDateSource = $primaryRecord?->operational_time_in
+                ?? $primaryRecord?->operational_time_out
+                ?? $primaryRecord?->actual_time_in
+                ?? $primaryRecord?->actual_time_out;
+            $internalDate = $internalDateSource ? Carbon::parse($internalDateSource) : null;
+            $internalDay = $internalDate?->day ?? $day;
+            $internalDayShift = $internalDate
+                ? $officialDate->diffInDays($internalDate->copy()->startOfDay(), false)
                 : 0;
 
+            $tardyMinutes = collect($records)
+                ->sum(fn ($record) => (int) ($record?->computed_late_minutes ?? $record?->late_minutes ?? 0));
+            $undertimeMinutes = collect($records)
+                ->sum(fn ($record) => (int) ($record?->computed_undertime_minutes ?? $record?->undertime_minutes ?? 0));
+            $totalHoursRendered = collect($records)
+                ->sum(fn ($record) => (float) ($record?->computed_total_hours_rendered ?? 0));
+            $requiredHours = collect($records)
+                ->sum(fn ($record) => (float) ($record?->required_hours ?? 0));
+            $isManual = collect($records)->contains(fn ($record) => (bool) ($record?->is_manual_entry ?? false));
+
             $rows[] = [
-                'day'              => $day,
-                'official_day'     => $day,
-                'actual_day'       => $actualDay,
-                'actual_day_shift' => (int) $actualDayShift,
+                'day' => $day,
+                'official_day' => $day,
+                'internal_day' => $internalDay,
+                'internal_day_shift' => (int) $internalDayShift,
 
                 // Legacy fallback keys (used by PDF generator if it reads these directly)
-                'morning_in'    => $officialMorningIn,
-                'morning_out'   => $officialMorningOut,
-                'afternoon_in'  => $officialAfternoonIn,
-                'afternoon_out' => $officialAfternoonOut,
-                'night_in'      => $officialNightIn,
-                'night_out'     => $officialNightOut,
+                'morning_in' => $officialTimes['morning']['in'],
+                'morning_out' => $officialTimes['morning']['out'],
+                'afternoon_in' => $officialTimes['afternoon']['in'],
+                'afternoon_out' => $officialTimes['afternoon']['out'],
+                'night_in' => $officialTimes['night']['in'],
+                'night_out' => $officialTimes['night']['out'],
 
                 // Official tab
-                'official_morning_in'    => $officialMorningIn,
-                'official_morning_out'   => $officialMorningOut,
-                'official_afternoon_in'  => $officialAfternoonIn,
-                'official_afternoon_out' => $officialAfternoonOut,
-                'official_night_in'      => $officialNightIn,
-                'official_night_out'     => $officialNightOut,
+                'official_morning_in' => $officialTimes['morning']['in'],
+                'official_morning_out' => $officialTimes['morning']['out'],
+                'official_afternoon_in' => $officialTimes['afternoon']['in'],
+                'official_afternoon_out' => $officialTimes['afternoon']['out'],
+                'official_night_in' => $officialTimes['night']['in'],
+                'official_night_out' => $officialTimes['night']['out'],
 
-                // Actual tab
-                'actual_morning_in'    => $actualMorningIn,
-                'actual_morning_out'   => $actualMorningOut,
-                'actual_afternoon_in'  => $actualAfternoonIn,
-                'actual_afternoon_out' => $actualAfternoonOut,
-                'actual_night_in'      => $actualNightIn,
-                'actual_night_out'     => $actualNightOut,
+                // Internal tab
+                'internal_morning_in' => $internalTimes['morning']['in'],
+                'internal_morning_out' => $internalTimes['morning']['out'],
+                'internal_afternoon_in' => $internalTimes['afternoon']['in'],
+                'internal_afternoon_out' => $internalTimes['afternoon']['out'],
+                'internal_night_in' => $internalTimes['night']['in'],
+                'internal_night_out' => $internalTimes['night']['out'],
 
-                'tardy_minutes'     => (int) ($record?->computed_late_minutes ?? $record?->late_minutes      ?? 0),
-                'undertime_minutes' => (int) ($record?->computed_undertime_minutes ?? $record?->undertime_minutes ?? 0),
-                'status'            => $dayData['status'] ?? 'none',
-                'holiday_label'     => collect($dayData['holidays'] ?? [])->pluck('name')->filter()->implode(', '),
-                'is_holiday'        => ! empty($dayData['holidays']),
-                'is_manual'         => (bool) ($record?->is_manual_entry ?? false),
+                'tardy_minutes' => (int) $tardyMinutes,
+                'undertime_minutes' => (int) $undertimeMinutes,
+                'total_hours_rendered' => round($totalHoursRendered, 2),
+                'required_hours' => round($requiredHours, 2),
+                'status' => $dayData['status'] ?? 'none',
+                'holiday_label' => collect($dayData['holidays'] ?? [])->pluck('name')->filter()->implode(', '),
+                'is_holiday' => ! empty($dayData['holidays']),
+                'is_manual' => $isManual,
             ];
         }
 
         return $rows;
     }
 
-    public function timeForPeriod(mixed $value, string $period): string
+    public function formatTime(mixed $value): string
     {
         if (empty($value)) {
             return '';
         }
 
         $time = Carbon::parse($value);
-        $hour = $time->hour;
 
-        $isMorning   = $hour < 12;
-        $isAfternoon = $hour >= 12 && $hour < 18;
-        $isNight     = $hour >= 18;
-
-        if (($period === 'morning'   && $isMorning)
-            || ($period === 'afternoon' && $isAfternoon)
-            || ($period === 'night'     && $isNight)
-        ) {
-            return $time->format('g:iA');
-        }
-
-        return '';
+        return $time->format('g:iA');
     }
 }

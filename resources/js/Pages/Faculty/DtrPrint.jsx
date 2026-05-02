@@ -227,7 +227,7 @@ export default function DtrPrint({ faculty, dtrExportDefaults = {}, dtrExportYea
                                 {preview?.periodLabel ?? 'DTR Preview'}
                             </h2>
                             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                                Official and actual logs are shown side by side through the mode switch below.
+                                Official and internal logs are shown side by side through the mode switch below.
                             </p>
                         </div>
                         {preview?.faculty && (
