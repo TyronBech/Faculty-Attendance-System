@@ -8,6 +8,7 @@ import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
 import DangerButton from '@/Components/DangerButton';
 import MultiFileUploader from '@/Components/MultiFileUploader';
+import AttachmentPreviewModal from '@/Components/AttachmentPreviewModal';
 import { Head, Link, useForm, router } from '@inertiajs/react';
 import { useState, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
@@ -83,7 +84,7 @@ export default function ManualAttendanceRequests({
     const [requestLimit, setRequestLimit] = useState(manualRequestLimit);
 
     // ── File preview & Modal state ───────────────────────────────
-    const [previewModalUrl, setPreviewModalUrl] = useState(null);
+    const [previewAttachment, setPreviewAttachment] = useState(null);
     const [showPreviewModal, setShowPreviewModal] = useState(false);
     const [attachmentFiles, setAttachmentFiles] = useState([]);
     const [fileUploadError, setFileUploadError] = useState(null);
@@ -389,7 +390,7 @@ export default function ManualAttendanceRequests({
                                                                         type="button"
                                                                         onClick={(e) => {
                                                                             e.stopPropagation();
-                                                                            setPreviewModalUrl(attachment.url);
+                                                                            setPreviewAttachment(attachment);
                                                                             setShowPreviewModal(true);
                                                                         }}
                                                                         className="group relative flex flex-col items-center justify-center rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-2 hover:border-blue-400 dark:hover:border-blue-500 transition-all w-24 h-24"
@@ -639,25 +640,12 @@ export default function ManualAttendanceRequests({
             </Modal>
 
             {/* Preview Modal */}
-            <Modal show={showPreviewModal} onClose={() => setShowPreviewModal(false)}>
-                <div className="p-6">
-                    {previewModalUrl?.includes('image') || previewModalUrl?.match(/\.(jpg|jpeg|png|gif)$/i) ? (
-                        <img src={previewModalUrl} alt="Preview" className="max-w-full rounded-lg" />
-                    ) : (
-                        <div className="text-center py-8">
-                            <p className="text-gray-600 dark:text-gray-400 mb-4">Document Preview</p>
-                            <a
-                                href={previewModalUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                            >
-                                📥 Download Document
-                            </a>
-                        </div>
-                    )}
-                </div>
-            </Modal>
+            <AttachmentPreviewModal
+                show={showPreviewModal}
+                onClose={() => setShowPreviewModal(false)}
+                url={previewAttachment?.url}
+                label={previewAttachment?.custom_label || 'Attachment Preview'}
+            />
         </AuthenticatedLayout>
     );
 }

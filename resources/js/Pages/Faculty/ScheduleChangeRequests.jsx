@@ -10,6 +10,7 @@ import DangerButton from '@/Components/DangerButton';
 import MultiFileUploader from '@/Components/MultiFileUploader';
 import { Head, Link, useForm, usePage, router } from '@inertiajs/react';
 import { useState, useCallback, useEffect, useRef } from 'react';
+import AttachmentPreviewModal from '@/Components/AttachmentPreviewModal';
 import toast from 'react-hot-toast';
 
 const STATUS_STYLES = {
@@ -63,7 +64,7 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
     // ── File preview & Modal state ───────────────────────────────
     const [supportingDocuments, setSupportingDocuments] = useState([]);
     const [documentUploadError, setDocumentUploadError] = useState(null);
-    const [previewModalUrl, setPreviewModalUrl] = useState(null);
+    const [previewAttachment, setPreviewAttachment] = useState(null);
     const [showPreviewModal, setShowPreviewModal] = useState(false);
 
     // ── Create form ──────────────────────────────────────────
@@ -304,7 +305,7 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
                             key={req.id}
                             req={req}
                             onCancel={() => { setSelectedRequest(req); setShowCancelModal(true); }}
-                            onPreviewDocument={(url) => { setPreviewModalUrl(url); setShowPreviewModal(true); }}
+                            onPreviewDocument={(attachment) => { setPreviewAttachment(attachment); setShowPreviewModal(true); }}
                         />
                     ))}
 
@@ -568,29 +569,12 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
                 </div>
             </Modal>
 
-            <Modal show={showPreviewModal} onClose={() => setShowPreviewModal(false)} maxWidth="2xl">
-                <div className="p-4 flex justify-between items-center border-b border-gray-100 dark:border-gray-700">
-                    <h2 className="text-lg font-bold text-gray-900 dark:text-white">Document Preview</h2>
-                    <button onClick={() => setShowPreviewModal(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
-                        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                    </button>
-                </div>
-                <div className="p-4 relative bg-gray-50 dark:bg-gray-900 min-h-[50vh] flex items-center justify-center overflow-auto">
-                    {previewModalUrl && previewModalUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? (
-                        <img src={previewModalUrl} alt="Preview" className="max-w-full max-h-[70vh] rounded-lg object-contain shadow-sm" />
-                    ) : previewModalUrl ? (
-                        <iframe src={previewModalUrl} className="w-full h-[70vh] rounded-lg bg-white shadow-sm" title="Document Preview" />
-                    ) : null}
-                </div>
-                <div className="p-4 border-t border-gray-100 dark:border-gray-700 flex justify-end">
-                    <SecondaryButton onClick={() => setShowPreviewModal(false)}>Close</SecondaryButton>
-                    <a href={previewModalUrl} download target="_blank" rel="noopener noreferrer" className="ml-3 inline-flex items-center gap-2 rounded-xl bg-[#7a1315] px-4 py-2 bg-gradient-to-r from-red-600 to-red-800 text-sm font-bold text-white shadow-md hover:from-red-700 hover:to-red-900 transition-all dark:from-red-600 dark:to-red-800 focus:ring-2 focus:ring-red-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900">
-                        Download File
-                    </a>
-                </div>
-            </Modal>
+            <AttachmentPreviewModal
+                show={showPreviewModal}
+                onClose={() => setShowPreviewModal(false)}
+                url={previewAttachment?.url}
+                label={previewAttachment?.custom_label || 'Attachment Preview'}
+            />
 
             <ScrollToTop />
         </AuthenticatedLayout>
@@ -736,7 +720,7 @@ function RequestCard({ req, onCancel, onPreviewDocument }) {
                                     {req.attachments_data.map((attachment, idx) => (
                                         <div
                                             key={attachment.id || idx}
-                                            onClick={(e) => { e.stopPropagation(); onPreviewDocument(attachment.url); }}
+                                            onClick={(e) => { e.stopPropagation(); onPreviewDocument(attachment); }}
                                             className="group relative cursor-pointer overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 transition hover:border-blue-400 dark:hover:border-blue-500 w-32 h-32 flex flex-col items-center justify-center p-1"
                                         >
                                             {attachment.url.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? (
