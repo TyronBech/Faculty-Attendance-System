@@ -7,7 +7,8 @@ import InputError from '@/Components/InputError';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
 import DangerButton from '@/Components/DangerButton';
-import { Head, Link, useForm } from '@inertiajs/react';
+import MultiFileUploader from '@/Components/MultiFileUploader';
+import { Head, Link, useForm, router } from '@inertiajs/react';
 import { useState, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
 
@@ -69,6 +70,8 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
     // ── File preview state ───────────────────────────────────
     const [previewIn, setPreviewIn] = useState(null);
     const [previewOut, setPreviewOut] = useState(null);
+    const [supportingDocuments, setSupportingDocuments] = useState([]);
+    const [documentUploadError, setDocumentUploadError] = useState(null);
     const [attendanceCheck, setAttendanceCheck] = useState({ checked: false, canSubmit: true, hasAttendance: false, hasPendingRequest: false });
     const fileInRef = useRef(null);
     const fileOutRef = useRef(null);
@@ -131,6 +134,15 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
         reader.readAsDataURL(file);
     };
 
+    const handleDocumentsChange = (files) => {
+        setSupportingDocuments(files);
+        setDocumentUploadError(null);
+    };
+
+    const handleDocumentUploadError = (error) => {
+        setDocumentUploadError(error);
+    };
+
     const handleCreate = (e) => {
         if (e) e.preventDefault();
 
@@ -150,20 +162,52 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
             force: forceArg ? '1' : '0'
         }));
 
-        // Now call post() on the createForm object
-        createForm.post(route('faculty.online-attendance.store'), {
-            forceFormData: true,
+        // Create FormData to handle files properly including supporting documents
+        const formData = new FormData();
+        
+        // Add form data
+        formData.append('schedule_detail_id', createForm.data.schedule_detail_id);
+        formData.append('class_type', createForm.data.class_type);
+        formData.append('attendance_date', createForm.data.attendance_date);
+        formData.append('time_in', createForm.data.time_in);
+        formData.append('time_out', createForm.data.time_out);
+        formData.append('remarks', createForm.data.remarks);
+        formData.append('force', forceArg ? '1' : '0');
+        
+        // Add required screenshots
+        if (createForm.data.screenshot_in) {
+            formData.append('screenshot_in', createForm.data.screenshot_in);
+        }
+        if (createForm.data.screenshot_out) {
+            formData.append('screenshot_out', createForm.data.screenshot_out);
+        }
+        
+        // Add supporting documents in the correct format for the backend
+        supportingDocuments.forEach((file, index) => {
+            formData.append(`attachments[${index}][file]`, file);
+            formData.append(`attachments[${index}][label]`, file.name);
+        });
+
+        router.post(route('faculty.online-attendance.store'), formData, {
             preserveScroll: true,
+            onStart: () => createForm.processing = true,
+            onFinish: () => createForm.processing = false,
             onSuccess: () => {
                 setShowCreateModal(false);
                 setShowDuplicateModal(false);
                 createForm.reset();
                 setPreviewIn(null);
                 setPreviewOut(null);
+                setSupportingDocuments([]);
+                setDocumentUploadError(null);
                 fetchRequests(filterStatus, 1);
             },
-            onError: () => {
+            onError: (errors) => {
                 setShowDuplicateModal(false);
+                // Manually set errors to the createForm instance
+                Object.keys(errors).forEach(key => {
+                    createForm.setError(key, errors[key]);
+                });
                 toast.error('Please fix the errors and try again.');
             },
         });
@@ -174,6 +218,8 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
         createForm.clearErrors();
         setPreviewIn(null);
         setPreviewOut(null);
+        setSupportingDocuments([]);
+        setDocumentUploadError(null);
         setAttendanceCheck({ checked: false, canSubmit: true, hasAttendance: false, hasPendingRequest: false });
         setShowCreateModal(true);
     };
@@ -541,6 +587,19 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
                             />
                             <InputError message={createForm.errors.remarks} />
                         </div>
+
+                        {/* Additional Supporting Documents */}
+                        <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+                            <MultiFileUploader
+                                label="Additional Supporting Documents"
+                                description="Upload supporting files (5MB per file) - Optional"
+                                value={supportingDocuments}
+                                onChange={handleDocumentsChange}
+                                onError={handleDocumentUploadError}
+                                error={documentUploadError}
+                                disabled={createForm.processing}
+                            />
+                        </div>
                     </div>
 
                     {/* Footer */}
@@ -794,6 +853,38 @@ function RequestCard({ req, onCancel, onOpenScreenshot }) {
                                 )}
                             </div>
                         </div>
+
+                        {/* Additional Attachments Section */}
+                        {req.attachments_data && req.attachments_data.filter(a => !['Time In Screenshot', 'Time Out Screenshot'].includes(a.custom_label)).length > 0 && (
+                            <div className="mt-4 px-4 pb-2">
+                                <p className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider">Additional Supporting Documents</p>
+                                <div className="flex flex-wrap gap-3">
+                                    {req.attachments_data.filter(a => !['Time In Screenshot', 'Time Out Screenshot'].includes(a.custom_label)).map((attachment, idx) => (
+                                        <div
+                                            key={attachment.id || idx}
+                                            onClick={(e) => { e.stopPropagation(); onOpenScreenshot(attachment.url, attachment.custom_label); }}
+                                            className="group relative cursor-pointer overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 transition hover:border-blue-400 dark:hover:border-blue-500 w-28 h-28 flex flex-col items-center justify-center p-1"
+                                        >
+                                            {attachment.url.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? (
+                                                <img src={attachment.url} alt={attachment.custom_label} className="w-full h-16 object-cover rounded-lg opacity-90 group-hover:opacity-100 transition-opacity" />
+                                            ) : (
+                                                <div className="flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 group-hover:text-blue-500 transition-colors h-16">
+                                                    <svg className="h-8 w-8 mb-1" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                                                    </svg>
+                                                </div>
+                                            )}
+                                            <span className="mt-1 text-[10px] font-medium text-gray-500 dark:text-gray-400 truncate w-full text-center px-1">
+                                                {attachment.custom_label || 'File'}
+                                            </span>
+                                            <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-xl">
+                                                <svg className="h-6 w-6 text-white drop-shadow-md" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607zM10.5 7.5v6m3-3h-6" /></svg>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
 
                         {/* Remarks */}
                         {req.remarks && (

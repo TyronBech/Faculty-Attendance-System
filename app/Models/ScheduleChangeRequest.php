@@ -6,8 +6,10 @@ use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 class ScheduleChangeRequest extends Model
 {
@@ -38,7 +40,7 @@ class ScheduleChangeRequest extends Model
     }
 
     /* ------------------------------------------------------------------ */
-    /*  Relationships                                                     */
+    /*  Relationships */
     /* ------------------------------------------------------------------ */
 
     public function faculty(): BelongsTo
@@ -56,8 +58,13 @@ class ScheduleChangeRequest extends Model
         return $this->belongsTo(User::class, 'reviewed_by');
     }
 
+    public function attachments(): MorphMany
+    {
+        return $this->morphMany(RequestAttachment::class, 'attachmentable');
+    }
+
     /* ------------------------------------------------------------------ */
-    /*  Scopes                                                            */
+    /*  Scopes */
     /* ------------------------------------------------------------------ */
 
     public function scopePending($query)
@@ -76,7 +83,7 @@ class ScheduleChangeRequest extends Model
     }
 
     /* ------------------------------------------------------------------ */
-    /*  Admin Query: paginated all requests with faculty info            */
+    /*  Admin Query: paginated all requests with faculty info */
     /* ------------------------------------------------------------------ */
 
     /**
@@ -91,7 +98,7 @@ class ScheduleChangeRequest extends Model
         $semester = $request->query('semester', '');
         $academicYear = $request->query('academic_year', '');
 
-        $query = static::with(['faculty.user', 'faculty.department', 'scheduleDetail.schedule', 'reviewedBy'])
+        $query = static::with(['faculty.user', 'faculty.department', 'scheduleDetail.schedule', 'reviewedBy', 'attachments'])
             ->orderByRaw("
                 CASE
                     WHEN status = 'pending'  THEN 1
@@ -120,31 +127,31 @@ class ScheduleChangeRequest extends Model
         if ($search) {
             $query->where(function ($q) use ($search) {
                 $q->where('reason', 'like', "%{$search}%")
-                  ->orWhere('requested_day_of_week', 'like', "%{$search}%")
-                  ->orWhere('requested_room', 'like', "%{$search}%")
-                  ->orWhere('status', 'like', "%{$search}%")
-                  ->orWhereHas('faculty', function ($fq) use ($search) {
-                      $fq->where('first_name', 'like', "%{$search}%")
-                         ->orWhere('last_name', 'like', "%{$search}%")
-                         ->orWhere('middle_name', 'like', "%{$search}%")
-                         ->orWhere('faculty_code', 'like', "%{$search}%")
-                         ->orWhereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$search}%"])
-                         ->orWhereRaw("CONCAT(last_name, ', ', first_name) LIKE ?", ["%{$search}%"])
-                         ->orWhereRaw("CONCAT(first_name, ' ', COALESCE(middle_name, ''), ' ', last_name) LIKE ?", ["%{$search}%"])
-                         ->orWhereHas('department', function ($dq) use ($search) {
-                             $dq->where('name', 'like', "%{$search}%")
-                                ->orWhere('code', 'like', "%{$search}%");
-                         });
-                  })
-                  ->orWhereHas('scheduleDetail', function ($sdq) use ($search) {
-                      $sdq->where('course_code', 'like', "%{$search}%")
-                          ->orWhere('subject_desc', 'like', "%{$search}%")
-                          ->orWhere('room_code', 'like', "%{$search}%")
-                          ->orWhere('day', 'like', "%{$search}%")
-                          ->orWhereHas('schedule', function ($sq) use ($search) {
-                              $sq->where('schedule_code', 'like', "%{$search}%");
-                          });
-                  });
+                    ->orWhere('requested_day_of_week', 'like', "%{$search}%")
+                    ->orWhere('requested_room', 'like', "%{$search}%")
+                    ->orWhere('status', 'like', "%{$search}%")
+                    ->orWhereHas('faculty', function ($fq) use ($search) {
+                        $fq->where('first_name', 'like', "%{$search}%")
+                            ->orWhere('last_name', 'like', "%{$search}%")
+                            ->orWhere('middle_name', 'like', "%{$search}%")
+                            ->orWhere('faculty_code', 'like', "%{$search}%")
+                            ->orWhereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$search}%"])
+                            ->orWhereRaw("CONCAT(last_name, ', ', first_name) LIKE ?", ["%{$search}%"])
+                            ->orWhereRaw("CONCAT(first_name, ' ', COALESCE(middle_name, ''), ' ', last_name) LIKE ?", ["%{$search}%"])
+                            ->orWhereHas('department', function ($dq) use ($search) {
+                                $dq->where('name', 'like', "%{$search}%")
+                                    ->orWhere('code', 'like', "%{$search}%");
+                            });
+                    })
+                    ->orWhereHas('scheduleDetail', function ($sdq) use ($search) {
+                        $sdq->where('course_code', 'like', "%{$search}%")
+                            ->orWhere('subject_desc', 'like', "%{$search}%")
+                            ->orWhere('room_code', 'like', "%{$search}%")
+                            ->orWhere('day', 'like', "%{$search}%")
+                            ->orWhereHas('schedule', function ($sq) use ($search) {
+                                $sq->where('schedule_code', 'like', "%{$search}%");
+                            });
+                    });
             });
         }
 
@@ -160,7 +167,7 @@ class ScheduleChangeRequest extends Model
             return [
                 'id' => $req->id,
                 'faculty_name' => $faculty
-                    ? trim($faculty->first_name . ' ' . ($faculty->middle_name ? $faculty->middle_name[0] . '. ' : '') . $faculty->last_name)
+                    ? trim($faculty->first_name.' '.($faculty->middle_name ? $faculty->middle_name[0].'. ' : '').$faculty->last_name)
                     : 'N/A',
                 'faculty_code' => $faculty?->faculty_code ?? 'N/A',
                 'department' => $faculty?->department?->name ?? 'N/A',
@@ -178,7 +185,8 @@ class ScheduleChangeRequest extends Model
                 'requested_room' => $req->requested_room,
                 'effective_date' => $req->effective_date?->format('M d, Y'),
                 'reason' => $req->reason,
-                'supporting_document_url' => $req->supporting_document_path ? \Illuminate\Support\Facades\Storage::url($req->supporting_document_path) : null,
+                'supporting_document_url' => $req->getAttachmentUrl(),
+                'attachments_data' => $req->getAttachmentsData(),
                 'status' => $req->status,
                 'reviewed_by_email' => $req->reviewedBy?->email ?? null,
                 'reviewed_at' => $req->reviewed_at?->format('M d, Y h:i A'),
@@ -200,7 +208,7 @@ class ScheduleChangeRequest extends Model
     }
 
     /* ------------------------------------------------------------------ */
-    /*  Faculty Query: paginated own requests                             */
+    /*  Faculty Query: paginated own requests */
     /* ------------------------------------------------------------------ */
 
     /**
@@ -214,7 +222,7 @@ class ScheduleChangeRequest extends Model
         $semester = $request->query('semester', '');
         $academicYear = $request->query('academic_year', '');
 
-        $query = static::with(['scheduleDetail.schedule', 'reviewedBy'])
+        $query = static::with(['scheduleDetail.schedule', 'reviewedBy', 'attachments'])
             ->where('faculty_id', $facultyId)
             ->orderBy('created_at', 'desc');
 
@@ -256,7 +264,8 @@ class ScheduleChangeRequest extends Model
                 'requested_room' => $req->requested_room,
                 'effective_date' => $req->effective_date?->format('M d, Y'),
                 'reason' => $req->reason,
-                'supporting_document_url' => $req->supporting_document_path ? \Illuminate\Support\Facades\Storage::url($req->supporting_document_path) : null,
+                'supporting_document_url' => $req->getAttachmentUrl(),
+                'attachments_data' => $req->getAttachmentsData(),
                 'status' => $req->status,
                 'reviewed_by' => $req->reviewedBy?->email ?? null,
                 'reviewed_at' => $req->reviewed_at?->format('M d, Y h:i A'),
@@ -275,5 +284,52 @@ class ScheduleChangeRequest extends Model
             'current_page' => $page,
             'last_page' => (int) ceil($total / max($perPage, 1)),
         ];
+    }
+
+    /**
+     * Get the first attachment URL if it exists
+     */
+    public function getAttachmentUrl(): ?string
+    {
+        if ($this->supporting_document_path) {
+            return Storage::url($this->supporting_document_path);
+        }
+
+        $firstAttachment = $this->attachments()->first();
+
+        return $firstAttachment ? $firstAttachment->getDownloadUrl() : null;
+    }
+
+    /**
+     * Get all attachments with their URLs
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function getAttachmentsData(): array
+    {
+        $data = [];
+
+        // Legacy single attachment
+        if ($this->supporting_document_path) {
+            $data[] = [
+                'id' => 'legacy',
+                'file_path' => $this->supporting_document_path,
+                'custom_label' => 'Supporting Document',
+                'url' => Storage::url($this->supporting_document_path),
+            ];
+        }
+
+        // New multiple attachments
+        foreach ($this->attachments as $attachment) {
+            $data[] = [
+                'id' => $attachment->id,
+                'file_path' => $attachment->file_path,
+                'custom_label' => $attachment->custom_label,
+                'url' => $attachment->getDownloadUrl(),
+                'mime_type' => $attachment->mime_type,
+            ];
+        }
+
+        return $data;
     }
 }

@@ -18,6 +18,7 @@ export default function AuthenticatedLayout({ header, children }) {
         roles.includes("admin") ||
         roles.includes("hr_staff") ||
         roles.includes("head_academic_program");
+    const isSuperAdmin = roles.includes("super_admin");
     const dashboardRoute = isAdmin
         ? "admin.dashboard"
         : isFaculty
@@ -121,6 +122,15 @@ export default function AuthenticatedLayout({ header, children }) {
                                             )}
                                         >
                                             Attendance
+                                        </NavLink>
+
+                                        <NavLink
+                                            href={route("faculty.dtr.index")}
+                                            active={route().current(
+                                                "faculty.dtr.*",
+                                            )}
+                                        >
+                                            My DTR
                                         </NavLink>
 
                                         {/* ── Requests dropdown ─────────────── */}
@@ -239,6 +249,17 @@ export default function AuthenticatedLayout({ header, children }) {
                                         >
                                             Schedules
                                         </NavLink>
+
+                                        {isSuperAdmin && (
+                                            <NavLink
+                                                href={route("admin.rbac.index")}
+                                                active={route().current(
+                                                    "admin.rbac.*",
+                                                )}
+                                            >
+                                                RBAC
+                                            </NavLink>
+                                        )}
 
                                         {/* ── Admin Requests dropdown ───────── */}
                                         <Dropdown>
@@ -574,6 +595,15 @@ export default function AuthenticatedLayout({ header, children }) {
                                     Attendance
                                 </ResponsiveNavLink>
 
+                                <ResponsiveNavLink
+                                    href={route("faculty.dtr.index")}
+                                    active={route().current(
+                                        "faculty.dtr.*",
+                                    )}
+                                >
+                                    My DTR
+                                </ResponsiveNavLink>
+
                                 {/* ── Requests group ─────────────── */}
                                 <div>
                                     <button
@@ -651,6 +681,17 @@ export default function AuthenticatedLayout({ header, children }) {
                                 >
                                     Schedules
                                 </ResponsiveNavLink>
+
+                                {isSuperAdmin && (
+                                    <ResponsiveNavLink
+                                        href={route("admin.rbac.index")}
+                                        active={route().current(
+                                            "admin.rbac.*",
+                                        )}
+                                    >
+                                        RBAC
+                                    </ResponsiveNavLink>
+                                )}
 
                                 {/* ── Admin Requests group ─────────── */}
                                 <div>

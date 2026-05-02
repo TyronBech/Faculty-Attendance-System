@@ -85,6 +85,20 @@ class FlssBackendClient
         return $this->request('GET', $url, $query);
     }
 
+    /**
+     * Call the configured temporary faculty schedules endpoint.
+     */
+    public function getTemporaryFacultySchedules(array $query = []): Response
+    {
+        $url = (string) config('services.flss_backend.temporary_schedules_url');
+
+        if ($url === '') {
+            throw new RuntimeException('FLSS temporary faculty schedules URL is not configured.');
+        }
+
+        return $this->request('GET', $url, $query);
+    }
+
     private function buildSignedUrl(string $url, array $query = []): string
     {
         if (empty($query)) {

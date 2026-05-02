@@ -11,6 +11,7 @@ use App\Http\Controllers\Admin\AdminNewPasswordController;
 use App\Http\Controllers\Admin\AdminOnlineRequestController;
 use App\Http\Controllers\Admin\AdminPasswordResetLinkController;
 use App\Http\Controllers\Admin\AdminProfileController;
+use App\Http\Controllers\Admin\AdminRbacController;
 use App\Http\Controllers\Admin\AdminScheduleChangeRequestController;
 use App\Http\Controllers\Admin\AdminScheduleController;
 use App\Http\Controllers\Admin\AdminSessionController;
@@ -54,6 +55,26 @@ Route::middleware(['auth.admin'])->prefix('admin')->group(function () {
     // ── Dashboard ──────────────────────────────────────────────────────────
     Route::get('/dashboard', [AdminDashboardController::class, 'index'])
         ->name('admin.dashboard');
+
+    Route::get('/rbac', [AdminRbacController::class, 'index'])
+        ->middleware('check.role:super_admin|admin,admin')
+        ->name('admin.rbac.index');
+
+    Route::post('/rbac/roles', [AdminRbacController::class, 'storeRole'])
+        ->middleware('check.role:super_admin|admin,admin')
+        ->name('admin.rbac.roles.store');
+
+    Route::put('/rbac/roles/{role}', [AdminRbacController::class, 'updateRole'])
+        ->middleware('check.role:super_admin|admin,admin')
+        ->name('admin.rbac.roles.update');
+
+    Route::delete('/rbac/roles/{role}', [AdminRbacController::class, 'destroyRole'])
+        ->middleware('check.role:super_admin|admin,admin')
+        ->name('admin.rbac.roles.destroy');
+
+    Route::put('/rbac/users/{user}/roles', [AdminRbacController::class, 'updateUserRoles'])
+        ->middleware('check.role:super_admin|admin,admin')
+        ->name('admin.rbac.users.roles.update');
 
     Route::get('/api/dashboard', [AdminDashboardController::class, 'liveStats'])
         ->name('admin.api.dashboard');

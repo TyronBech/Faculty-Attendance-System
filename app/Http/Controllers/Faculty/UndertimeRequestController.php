@@ -3,12 +3,13 @@
 namespace App\Http\Controllers\Faculty;
 
 use App\Http\Controllers\Controller;
-use App\Models\UndertimeRequest;
 use App\Models\AttendanceRecord;
+use App\Models\RequestAttachment;
+use App\Models\UndertimeRequest;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
-use Inertia\Inertia;
 use Illuminate\Support\Facades\Storage;
+use Inertia\Inertia;
 
 class UndertimeRequestController extends Controller
 {
@@ -19,7 +20,7 @@ class UndertimeRequestController extends Controller
     {
         $faculty = $request->user()->faculty;
 
-        if (!$faculty) {
+        if (! $faculty) {
             return Inertia::render('Faculty/UndertimeRequests', [
                 'requests' => ['data' => [], 'total' => 0, 'per_page' => 10, 'current_page' => 1, 'last_page' => 1],
                 'filters' => ['status' => ''],
@@ -33,21 +34,22 @@ class UndertimeRequestController extends Controller
             $query->where('status', $status);
         }
 
-        $requests = $query->with(['attendanceRecord.scheduleDetail', 'attendanceRecord.internalSchedule', 'reviewedBy'])
+        $requests = $query->with(['attendanceRecord.scheduleDetail', 'attendanceRecord.internalSchedule', 'reviewedBy', 'attachments'])
             ->orderBy('created_at', 'desc')
             ->paginate(10);
 
         // Add attachment URLs and course info to each request
         $requests->through(function ($req) {
             $req->attachment_url = $req->getAttachmentUrl();
-            
+            $req->attachments_data = $req->getAttachmentsData();
+
             // Add course information for display
             if ($req->attendanceRecord) {
                 if ($req->attendanceRecord->scheduleDetail) {
-                    $req->course_name = $req->attendanceRecord->scheduleDetail->course_title 
-                        ?? $req->attendanceRecord->scheduleDetail->course_code 
+                    $req->course_name = $req->attendanceRecord->scheduleDetail->course_title
+                        ?? $req->attendanceRecord->scheduleDetail->course_code
                         ?? 'Unknown Course';
-                } else if ($req->attendanceRecord->internalSchedule) {
+                } elseif ($req->attendanceRecord->internalSchedule) {
                     $req->course_name = 'Operational Duty';
                 } else {
                     $req->course_name = 'Unknown Course';
@@ -55,7 +57,7 @@ class UndertimeRequestController extends Controller
             } else {
                 $req->course_name = 'Unknown Course';
             }
-            
+
             return $req;
         });
 
@@ -154,14 +156,16 @@ class UndertimeRequestController extends Controller
     {
         $faculty = $request->user()->faculty;
 
-        if (!$faculty) {
+        if (! $faculty) {
             return back()->withErrors(['error' => 'Faculty profile not found.']);
         }
 
         $validated = $request->validate([
             'attendance_record_id' => 'nullable|exists:attendance_records,id',
             'reason' => 'required|string|max:1000',
-            'attachment' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
+            'attachments' => 'nullable|array',
+            'attachments.*.file' => 'required|file|mimes:pdf,doc,docx,jpg,jpeg,png|max:5120',
+            'attachments.*.label' => 'required|string|max:255',
         ]);
 
         // If attendance_record_id is provided, verify it belongs to this faculty
@@ -180,23 +184,34 @@ class UndertimeRequestController extends Controller
             'status' => 'pending',
         ]);
 
-        // Handle file attachment
-        if ($request->hasFile('attachment') && $request->file('attachment')->isValid()) {
-            try {
-                $file = $request->file('attachment');
-                $path = $file->store('undertime_attachments', 'public');
-                if ($path) {
-                    $undertimeRequest->attachment_path = $path;
+        $undertimeRequest->save();
+
+        // Handle multiple file attachments
+        if (! empty($validated['attachments'])) {
+            $facultyDir = "attachments/faculty_{$faculty->id}/undertime_requests";
+
+            foreach ($validated['attachments'] as $attachment) {
+                try {
+                    $file = $attachment['file'];
+                    $label = $attachment['label'];
+                    $path = $file->store("{$facultyDir}/request_{$undertimeRequest->id}", 'public');
+
+                    if ($path) {
+                        RequestAttachment::create([
+                            'attachmentable_id' => $undertimeRequest->id,
+                            'attachmentable_type' => UndertimeRequest::class,
+                            'file_path' => $path,
+                            'custom_label' => $label,
+                            'mime_type' => $file->getMimeType(),
+                            'file_size' => $file->getSize(),
+                        ]);
+                    }
+                } catch (\Exception $e) {
+                    Log::error('Failed to save undertime attachment: '.$e->getMessage());
                 }
-            } catch (\Exception $e) {
-                // Log error but don't fail the request
-                Log::error('Failed to save undertime attachment: ' . $e->getMessage());
             }
         }
 
-        $undertimeRequest->save();
-
-        // Return redirect to index page, trigger success callback
         return redirect(route('faculty.undertime-requests.index'))->with('success', 'Undertime request submitted successfully.');
     }
 
@@ -207,7 +222,7 @@ class UndertimeRequestController extends Controller
     {
         $faculty = $request->user()->faculty;
 
-        if (!$faculty || $undertimeRequest->faculty_id !== $faculty->id) {
+        if (! $faculty || $undertimeRequest->faculty_id !== $faculty->id) {
             return back()->withErrors(['error' => 'Unauthorized.']);
         }
 
@@ -215,6 +230,13 @@ class UndertimeRequestController extends Controller
             return back()->withErrors(['error' => 'Can only cancel pending requests.']);
         }
 
+        // Delete associated attachments
+        foreach ($undertimeRequest->attachments as $attachment) {
+            $attachment->deleteFile();
+            $attachment->delete();
+        }
+
+        // Keep legacy support for old attachment_path field
         if ($undertimeRequest->attachment_path && Storage::disk('public')->exists($undertimeRequest->attachment_path)) {
             Storage::disk('public')->delete($undertimeRequest->attachment_path);
         }
@@ -231,7 +253,7 @@ class UndertimeRequestController extends Controller
     {
         $faculty = $request->user()->faculty;
 
-        if (!$faculty) {
+        if (! $faculty) {
             return response()->json([
                 'data' => [],
                 'total' => 0,
@@ -248,21 +270,22 @@ class UndertimeRequestController extends Controller
             $query->where('status', $status);
         }
 
-        $requests = $query->with(['attendanceRecord.scheduleDetail', 'attendanceRecord.internalSchedule', 'reviewedBy'])
+        $requests = $query->with(['attendanceRecord.scheduleDetail', 'attendanceRecord.internalSchedule', 'reviewedBy', 'attachments'])
             ->orderBy('created_at', 'desc')
             ->paginate(10);
 
         // Add attachment URLs and course info to each request
         $requests->through(function ($req) {
             $req->attachment_url = $req->getAttachmentUrl();
-            
+            $req->attachments_data = $req->getAttachmentsData();
+
             // Add course information for display
             if ($req->attendanceRecord) {
                 if ($req->attendanceRecord->scheduleDetail) {
-                    $req->course_name = $req->attendanceRecord->scheduleDetail->course_title 
-                        ?? $req->attendanceRecord->scheduleDetail->course_code 
+                    $req->course_name = $req->attendanceRecord->scheduleDetail->course_title
+                        ?? $req->attendanceRecord->scheduleDetail->course_code
                         ?? 'Unknown Course';
-                } else if ($req->attendanceRecord->internalSchedule) {
+                } elseif ($req->attendanceRecord->internalSchedule) {
                     $req->course_name = 'Operational Duty';
                 } else {
                     $req->course_name = 'Unknown Course';
@@ -270,7 +293,7 @@ class UndertimeRequestController extends Controller
             } else {
                 $req->course_name = 'Unknown Course';
             }
-            
+
             return $req;
         });
 

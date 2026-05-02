@@ -7,8 +7,10 @@ import InputError from '@/Components/InputError';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
 import DangerButton from '@/Components/DangerButton';
-import { Head, Link, useForm } from '@inertiajs/react';
+import MultiFileUploader from '@/Components/MultiFileUploader';
+import { Head, Link, useForm, usePage, router } from '@inertiajs/react';
 import { useState, useCallback, useEffect, useRef } from 'react';
+import AttachmentPreviewModal from '@/Components/AttachmentPreviewModal';
 import toast from 'react-hot-toast';
 
 const STATUS_STYLES = {
@@ -60,9 +62,9 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
     const [currentPage, setCurrentPage] = useState(initialRequests.current_page || 1);
 
     // ── File preview & Modal state ───────────────────────────────
-    const [previewDoc, setPreviewDoc] = useState(null);
-    const fileDocRef = useRef(null);
-    const [previewModalUrl, setPreviewModalUrl] = useState(null);
+    const [supportingDocuments, setSupportingDocuments] = useState([]);
+    const [documentUploadError, setDocumentUploadError] = useState(null);
+    const [previewAttachment, setPreviewAttachment] = useState(null);
     const [showPreviewModal, setShowPreviewModal] = useState(false);
 
     // ── Create form ──────────────────────────────────────────
@@ -74,7 +76,6 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
         requested_room: '',
         effective_date: '',
         reason: '',
-        supporting_document: null,
     });
 
     const selectedDetail = scheduleDetails.find(
@@ -100,7 +101,7 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
         conflictTimerRef.current = setTimeout(() => {
             setIsCheckingConflict(true);
 
-            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+            const { csrf_token } = usePage().props;
 
             fetch(route('faculty.schedule-change-requests.check-conflict'), {
                 method: 'POST',
@@ -109,7 +110,7 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
                     'Content-Type': 'application/json',
                     'Accept': 'application/json',
                     'X-Requested-With': 'XMLHttpRequest',
-                    'X-CSRF-TOKEN': csrfToken,
+                    'X-CSRF-TOKEN': csrf_token,
                 },
                 body: JSON.stringify({
                     schedule_detail_id: schedule_detail_id || null,
@@ -138,34 +139,43 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
 
     const hasConflict = conflicts.length > 0;
 
-    const handleFileChange = (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
+    const handleDocumentsChange = (files) => {
+        setSupportingDocuments(files);
+        setDocumentUploadError(null);
+    };
 
-        createForm.setData('supporting_document', file);
-        createForm.clearErrors('supporting_document');
-
-        if (file.type.startsWith('image/')) {
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-                setPreviewDoc(ev.target.result);
-            };
-            reader.readAsDataURL(file);
-        } else {
-            // Signal it's a document (PDF, doc), show a generic state instead of image preview
-            setPreviewDoc('document');
-        }
+    const handleDocumentUploadError = (error) => {
+        setDocumentUploadError(error);
     };
 
     const handleCreate = (e) => {
         e.preventDefault();
-        createForm.post(route('faculty.schedule-change-requests.store'), {
+
+        // Create FormData to handle multiple files
+        const formData = new FormData();
+        formData.append('schedule_detail_id', createForm.data.schedule_detail_id);
+        formData.append('requested_day_of_week', createForm.data.requested_day_of_week);
+        formData.append('requested_time_in', createForm.data.requested_time_in);
+        formData.append('requested_time_out', createForm.data.requested_time_out);
+        formData.append('requested_room', createForm.data.requested_room);
+        formData.append('effective_date', createForm.data.effective_date);
+        formData.append('reason', createForm.data.reason);
+
+        // Append all files in the correct format for the backend
+        supportingDocuments.forEach((file, index) => {
+            formData.append(`attachments[${index}][file]`, file);
+            formData.append(`attachments[${index}][label]`, file.name);
+        });
+
+        router.post(route('faculty.schedule-change-requests.store'), formData, {
             preserveScroll: true,
-            forceFormData: true,
+            onStart: () => createForm.processing = true,
+            onFinish: () => createForm.processing = false,
             onSuccess: () => {
                 setShowCreateModal(false);
                 createForm.reset();
-                setPreviewDoc(null);
+                setSupportingDocuments([]);
+                setDocumentUploadError(null);
                 setConflicts([]);
                 // Refresh the list via AJAX
                 fetchRequests(filterStatus, 1);
@@ -295,7 +305,7 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
                             key={req.id}
                             req={req}
                             onCancel={() => { setSelectedRequest(req); setShowCancelModal(true); }}
-                            onPreviewDocument={(url) => { setPreviewModalUrl(url); setShowPreviewModal(true); }}
+                            onPreviewDocument={(attachment) => { setPreviewAttachment(attachment); setShowPreviewModal(true); }}
                         />
                     ))}
 
@@ -370,7 +380,7 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
                             >
                                 <option value="">— Choose a schedule —</option>
                                 {scheduleDetails.map((d) => (
-                                       <option key={d.id} value={d.id}>
+                                    <option key={d.id} value={d.id}>
                                         [{d.schedule_code}] {d.day_of_week} · {formatTime12(d.time_in)}–{formatTime12(d.time_out)} · {d.subject_code} - {d.subject_desc} · {[d.program_code, (d.year_level || d.section_name) ? [d.year_level, d.section_name].filter(Boolean).join('-') : null].filter(Boolean).join(' ')} ({d.room}) {d.is_changed ? ' (Internal)' : ''}
                                     </option>
                                 ))}
@@ -480,40 +490,17 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
                         </div>
 
                         <div>
-                            <InputLabel value="Supporting Document" />
-                            <div
-                                onClick={() => fileDocRef.current?.click()}
-                                className="mt-1 flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-700 p-6 cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition-colors bg-gray-50 dark:bg-gray-900"
-                            >
-                                {previewDoc === 'document' ? (
-                                    <div className="flex flex-col items-center text-blue-600 dark:text-blue-400">
-                                        <svg className="h-10 w-10 mb-2" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-                                        </svg>
-                                        <p className="text-sm font-bold">{createForm.data.supporting_document?.name}</p>
-                                        <p className="text-xs mt-1 text-blue-500/70">Click to change file</p>
-                                    </div>
-                                ) : previewDoc ? (
-                                    <img src={previewDoc} alt="Document Preview" className="max-h-36 rounded-lg object-contain" />
-                                ) : (
-                                    <>
-                                        <svg className="h-8 w-8 text-gray-400 dark:text-gray-500 mb-2" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
-                                        </svg>
-                                        <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">Click to upload Supporting Document</p>
-                                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">PDF, JPG, PNG or WebP (max 5MB)</p>
-                                    </>
-                                )}
-                            </div>
-                            <input
-                                ref={fileDocRef}
-                                id="supporting_document"
-                                type="file"
-                                className="hidden"
-                                onChange={handleFileChange}
-                                accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp"
+                            <InputLabel value="Supporting Documents" />
+                            <MultiFileUploader
+                                label=""
+                                description="Upload supporting files (5MB per file)"
+                                value={supportingDocuments}
+                                onChange={handleDocumentsChange}
+                                onError={handleDocumentUploadError}
+                                error={documentUploadError}
+                                disabled={createForm.processing}
+                                className="mt-1"
                             />
-                            <InputError message={createForm.errors.supporting_document} />
                         </div>
 
                         {/* Conflict warning */}
@@ -582,29 +569,12 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
                 </div>
             </Modal>
 
-            <Modal show={showPreviewModal} onClose={() => setShowPreviewModal(false)} maxWidth="2xl">
-                <div className="p-4 flex justify-between items-center border-b border-gray-100 dark:border-gray-700">
-                    <h2 className="text-lg font-bold text-gray-900 dark:text-white">Document Preview</h2>
-                    <button onClick={() => setShowPreviewModal(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
-                        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                    </button>
-                </div>
-                <div className="p-4 relative bg-gray-50 dark:bg-gray-900 min-h-[50vh] flex items-center justify-center overflow-auto">
-                    {previewModalUrl && previewModalUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? (
-                        <img src={previewModalUrl} alt="Preview" className="max-w-full max-h-[70vh] rounded-lg object-contain shadow-sm" />
-                    ) : previewModalUrl ? (
-                        <iframe src={previewModalUrl} className="w-full h-[70vh] rounded-lg bg-white shadow-sm" title="Document Preview" />
-                    ) : null}
-                </div>
-                <div className="p-4 border-t border-gray-100 dark:border-gray-700 flex justify-end">
-                    <SecondaryButton onClick={() => setShowPreviewModal(false)}>Close</SecondaryButton>
-                    <a href={previewModalUrl} download target="_blank" rel="noopener noreferrer" className="ml-3 inline-flex items-center gap-2 rounded-xl bg-[#7a1315] px-4 py-2 bg-gradient-to-r from-red-600 to-red-800 text-sm font-bold text-white shadow-md hover:from-red-700 hover:to-red-900 transition-all dark:from-red-600 dark:to-red-800 focus:ring-2 focus:ring-red-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900">
-                        Download File
-                    </a>
-                </div>
-            </Modal>
+            <AttachmentPreviewModal
+                show={showPreviewModal}
+                onClose={() => setShowPreviewModal(false)}
+                url={previewAttachment?.url}
+                label={previewAttachment?.custom_label || 'Attachment Preview'}
+            />
 
             <ScrollToTop />
         </AuthenticatedLayout>
@@ -742,27 +712,34 @@ function RequestCard({ req, onCancel, onPreviewDocument }) {
                             <p className="text-sm text-gray-700 dark:text-gray-300">{req.reason}</p>
                         </div>
 
-                        {/* Supporting Document */}
-                        {req.supporting_document_url && (
+                        {/* Attachments Section */}
+                        {req.attachments_data && req.attachments_data.length > 0 && (
                             <div className="mt-4">
-                                <p className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider">Supporting Document</p>
-                                <div
-                                    onClick={(e) => { e.stopPropagation(); onPreviewDocument(req.supporting_document_url); }}
-                                    className="group relative cursor-pointer overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 transition hover:border-blue-400 dark:hover:border-blue-500 w-full sm:w-48 h-32 flex items-center justify-center"
-                                >
-                                    {req.supporting_document_url.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? (
-                                        <img src={req.supporting_document_url} alt="Supporting Document" className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
-                                    ) : (
-                                        <div className="flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 group-hover:text-blue-500 transition-colors">
-                                            <svg className="h-10 w-10 mb-2" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-                                            </svg>
-                                            <span className="text-sm font-semibold">View Document</span>
+                                <p className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider">Supporting Documents</p>
+                                <div className="flex flex-wrap gap-3">
+                                    {req.attachments_data.map((attachment, idx) => (
+                                        <div
+                                            key={attachment.id || idx}
+                                            onClick={(e) => { e.stopPropagation(); onPreviewDocument(attachment); }}
+                                            className="group relative cursor-pointer overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 transition hover:border-blue-400 dark:hover:border-blue-500 w-32 h-32 flex flex-col items-center justify-center p-1"
+                                        >
+                                            {attachment.url.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? (
+                                                <img src={attachment.url} alt={attachment.custom_label} className="w-full h-20 object-cover rounded-lg opacity-90 group-hover:opacity-100 transition-opacity" />
+                                            ) : (
+                                                <div className="flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 group-hover:text-blue-500 transition-colors h-20">
+                                                    <svg className="h-10 w-10 mb-1" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                                                    </svg>
+                                                </div>
+                                            )}
+                                            <span className="mt-1 text-[10px] font-medium text-gray-500 dark:text-gray-400 truncate w-full text-center px-1">
+                                                {attachment.custom_label || 'File'}
+                                            </span>
+                                            <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-xl">
+                                                <svg className="h-6 w-6 text-white drop-shadow-md" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607zM10.5 7.5v6m3-3h-6" /></svg>
+                                            </div>
                                         </div>
-                                    )}
-                                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <svg className="h-8 w-8 text-white drop-shadow-md" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607zM10.5 7.5v6m3-3h-6" /></svg>
-                                    </div>
+                                    ))}
                                 </div>
                             </div>
                         )}

@@ -281,6 +281,7 @@ class AdminDtrExportController extends Controller
                 'status' => $dayData['status'] ?? 'none',
                 'holiday_label' => collect($dayData['holidays'] ?? [])->pluck('name')->filter()->implode(', '),
                 'is_holiday' => ! empty($dayData['holidays']),
+                'is_manual' => (bool) ($record?->is_manual_entry ?? false),
             ];
         }
 
