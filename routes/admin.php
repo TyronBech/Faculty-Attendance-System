@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\AdminActivityLogController;
 use App\Http\Controllers\Admin\AdminAttendanceImportController;
+use App\Http\Controllers\Admin\AdminBackupController;
 use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\AdminDtrExportController;
 use App\Http\Controllers\Admin\AdminDtrExportPageController;
@@ -171,6 +172,9 @@ Route::middleware(['auth.admin'])->prefix('admin')->group(function () {
     Route::get('/api/manual-attendance-requests', [AdminManualAttendanceRequestApprovalController::class, 'filter'])
         ->name('admin.manual-attendance-requests.filter');
 
+    Route::patch('/manual-attendance-requests/settings/limit', [AdminManualAttendanceRequestApprovalController::class, 'updateLimit'])
+        ->name('admin.manual-attendance-requests.limit.update');
+
     Route::patch('/manual-attendance-requests/{justification}/approve', [AdminManualAttendanceRequestApprovalController::class, 'approve'])
         ->name('admin.manual-attendance-requests.approve');
 
@@ -224,4 +228,13 @@ Route::middleware(['auth.admin'])->prefix('admin')->group(function () {
 
     Route::post('/manual-attendance', [AdminManualAttendanceController::class, 'store'])
         ->name('admin.manual-attendance.store');
+
+    Route::get('/backups', [AdminBackupController::class, 'index'])
+        ->name('admin.backups.index');
+
+    Route::post('/backups/run', [AdminBackupController::class, 'store'])
+        ->name('admin.backups.store');
+
+    Route::get('/backups/{backup}/download', [AdminBackupController::class, 'download'])
+        ->name('admin.backups.download');
 });

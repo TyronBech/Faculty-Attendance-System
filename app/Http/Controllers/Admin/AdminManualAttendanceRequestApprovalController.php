@@ -5,11 +5,14 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\ApproveManualAttendanceRequest;
 use App\Http\Requests\Admin\RejectManualAttendanceRequest;
+use App\Http\Requests\Admin\UpdateManualAttendanceRequestLimitRequest;
 use App\Models\AttendanceJustification;
 use App\Models\AttendanceRecord;
 use App\Models\InternalSchedule;
 use App\Models\ScheduleDetail;
+use App\Models\SystemSetting;
 use Carbon\Carbon;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
@@ -22,9 +25,10 @@ class AdminManualAttendanceRequestApprovalController extends Controller
     public function index(Request $request): Response
     {
         $paginator = $this->buildPaginator($request);
+        $manualLogLimit = SystemSetting::manualAttendanceRequestLimit();
 
         return Inertia::render('Admin/ManualAttendanceRequestApproval', [
-            'requests' => $this->formatRequests($paginator),
+            'requests' => $this->formatRequests($paginator, $manualLogLimit),
             'paginator' => [
                 'current_page' => $paginator->currentPage(),
                 'last_page' => $paginator->lastPage(),
@@ -40,16 +44,17 @@ class AdminManualAttendanceRequestApprovalController extends Controller
                 ->where('type', 'manual_time')
                 ->where('status', 'pending')
                 ->count(),
-            'manualLogLimit' => 5,
+            'manualLogLimit' => $manualLogLimit,
         ]);
     }
 
     public function filter(Request $request)
     {
         $paginator = $this->buildPaginator($request);
+        $manualLogLimit = SystemSetting::manualAttendanceRequestLimit();
 
         return response()->json([
-            'data' => $this->formatRequests($paginator),
+            'data' => $this->formatRequests($paginator, $manualLogLimit),
             'pagination' => [
                 'current_page' => $paginator->currentPage(),
                 'last_page' => $paginator->lastPage(),
@@ -57,7 +62,26 @@ class AdminManualAttendanceRequestApprovalController extends Controller
                 'per_page' => $paginator->perPage(),
                 'path' => $paginator->path(),
             ],
+            'manualLogLimit' => $manualLogLimit,
         ]);
+    }
+
+    public function updateLimit(UpdateManualAttendanceRequestLimitRequest $request): RedirectResponse
+    {
+        $validated = $request->validated();
+
+        SystemSetting::query()->updateOrCreate(
+            ['setting_key' => 'manual_attendance_request_limit'],
+            [
+                'setting_value' => (string) $validated['manual_request_limit'],
+                'setting_type' => 'integer',
+                'description' => 'Maximum counted manual attendance requests allowed per faculty each semester.',
+                'is_editable' => true,
+                'updated_by' => $request->user('admin')?->id,
+            ],
+        );
+
+        return back()->with('success', 'Manual attendance request limit updated successfully.');
     }
 
     public function approve(ApproveManualAttendanceRequest $request, AttendanceJustification $justification)
@@ -74,8 +98,9 @@ class AdminManualAttendanceRequestApprovalController extends Controller
 
         try {
             $countAsManualLog = $request->boolean('count_manual_log', true);
+            $manualLogLimit = SystemSetting::manualAttendanceRequestLimit();
 
-            DB::transaction(function () use ($justification, $validated, $request, $countAsManualLog): void {
+            DB::transaction(function () use ($justification, $validated, $request, $countAsManualLog, $manualLogLimit): void {
                 $locked = AttendanceJustification::query()
                     ->whereKey($justification->id)
                     ->with([
@@ -109,8 +134,8 @@ class AdminManualAttendanceRequestApprovalController extends Controller
                         excludedJustificationId: (int) $locked->id,
                     );
 
-                    if ($usedManualLogs >= 5) {
-                        throw new RuntimeException('This faculty already reached the maximum of 5 counted manual logs for this semester.');
+                    if ($usedManualLogs >= $manualLogLimit) {
+                        throw new RuntimeException("This faculty already reached the maximum of {$manualLogLimit} counted manual logs for this semester.");
                     }
                 }
 
@@ -220,11 +245,11 @@ class AdminManualAttendanceRequestApprovalController extends Controller
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function formatRequests(LengthAwarePaginator $paginator): array
+    private function formatRequests(LengthAwarePaginator $paginator, int $manualLogLimit): array
     {
         $manualCountCache = [];
 
-        return $paginator->getCollection()->map(function (AttendanceJustification $justification) use (&$manualCountCache): array {
+        return $paginator->getCollection()->map(function (AttendanceJustification $justification) use (&$manualCountCache, $manualLogLimit): array {
             $record = $justification->attendanceRecord;
             $scheduleWindow = $record ? $this->resolveScheduleWindow($record) : null;
 
@@ -233,7 +258,7 @@ class AdminManualAttendanceRequestApprovalController extends Controller
 
             if ($scheduleWindow !== null) {
                 $semesterLabel = "AY {$scheduleWindow['academic_year']} - Semester {$scheduleWindow['semester']}";
-                $cacheKey = $justification->faculty_id . ':' . $scheduleWindow['academic_year'] . ':' . $scheduleWindow['semester'];
+                $cacheKey = $justification->faculty_id.':'.$scheduleWindow['academic_year'].':'.$scheduleWindow['semester'];
 
                 if (! array_key_exists($cacheKey, $manualCountCache)) {
                     $manualCountCache[$cacheKey] = $this->countApprovedManualLogsInSemester(
@@ -278,7 +303,7 @@ class AdminManualAttendanceRequestApprovalController extends Controller
                 'counts_as_manual_log' => (bool) $justification->counts_as_manual_log,
                 'semester_label' => $semesterLabel,
                 'used_manual_logs' => $usedCount,
-                'manual_log_limit' => 5,
+                'manual_log_limit' => $manualLogLimit,
             ];
         })->values()->all();
     }

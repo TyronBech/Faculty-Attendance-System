@@ -396,6 +396,9 @@ export default function AuthenticatedLayout({ header, children }) {
                                                             "admin.manual-attendance.*",
                                                         ) ||
                                                         route().current(
+                                                            "admin.backups.*",
+                                                        ) ||
+                                                        route().current(
                                                             "admin.dtr-export.*",
                                                         )
                                                             ? "border-[#7a1315] text-gray-900 font-bold dark:border-red-500 dark:text-white"
@@ -449,6 +452,20 @@ export default function AuthenticatedLayout({ header, children }) {
                                                     }
                                                 >
                                                     Manual Attendance
+                                                </Dropdown.Link>
+                                                <Dropdown.Link
+                                                    href={route(
+                                                        "admin.backups.index",
+                                                    )}
+                                                    className={
+                                                        route().current(
+                                                            "admin.backups.*",
+                                                        )
+                                                            ? "!bg-red-50 !text-[#7a1315] dark:!bg-gray-700 dark:!text-white"
+                                                            : ""
+                                                    }
+                                                >
+                                                    Backups
                                                 </Dropdown.Link>
                                                 <Dropdown.Link
                                                     href={route(
@@ -827,6 +844,9 @@ export default function AuthenticatedLayout({ header, children }) {
                                                 "admin.manual-attendance.*",
                                             ) ||
                                             route().current(
+                                                "admin.backups.*",
+                                            ) ||
+                                            route().current(
                                                 "admin.dtr-export.*",
                                             )
                                                 ? "border-[#7a1315] bg-red-50 text-[#7a1315] dark:border-red-500 dark:bg-red-900/20 dark:text-red-400"
@@ -874,6 +894,17 @@ export default function AuthenticatedLayout({ header, children }) {
                                                 )}
                                             >
                                                 Manual Attendance
+                                            </ResponsiveNavLink>
+
+                                            <ResponsiveNavLink
+                                                href={route(
+                                                    "admin.backups.index",
+                                                )}
+                                                active={route().current(
+                                                    "admin.backups.*",
+                                                )}
+                                            >
+                                                Backups
                                             </ResponsiveNavLink>
 
                                             <ResponsiveNavLink
