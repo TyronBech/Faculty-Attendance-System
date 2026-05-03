@@ -60,14 +60,14 @@ export function DtrTimeLog({ rows, totalHours, mode = 'official', onModeChange }
                     </button>
                     <button
                         type="button"
-                        onClick={() => onModeChange('actual')}
+                        onClick={() => onModeChange('internal')}
                         className={`rounded-md px-3 py-1 text-xs font-semibold transition ${
-                            mode === 'actual'
+                            mode === 'internal'
                                 ? 'bg-[#7a1315] text-white'
                                 : 'text-gray-600 hover:bg-gray-200 dark:text-gray-300 dark:hover:bg-gray-700'
                         }`}
                     >
-                        Actual
+                        Internal
                     </button>
                 </div>
             </div>
@@ -79,6 +79,8 @@ export function DtrTimeLog({ rows, totalHours, mode = 'official', onModeChange }
                             <th className="px-2 py-2 text-center font-semibold" colSpan={2}>Morning</th>
                             <th className="px-2 py-2 text-center font-semibold" colSpan={2}>Afternoon</th>
                             <th className="px-2 py-2 text-center font-semibold" colSpan={2}>Night</th>
+                            <th className="w-20 px-2 py-2 text-center font-semibold">Total</th>
+                            <th className="w-20 px-2 py-2 text-center font-semibold">Required</th>
                             <th className="w-16 px-2 py-2 text-center font-semibold">Tardy</th>
                             <th className="w-20 px-2 py-2 text-center font-semibold">Under Time</th>
                         </tr>
@@ -92,6 +94,8 @@ export function DtrTimeLog({ rows, totalHours, mode = 'official', onModeChange }
                             <th className="px-2 py-1 font-medium">OUT</th>
                             <th></th>
                             <th></th>
+                            <th></th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -99,9 +103,9 @@ export function DtrTimeLog({ rows, totalHours, mode = 'official', onModeChange }
                             const isHoliday = row.is_holiday;
                             const hasTardy = row.tardy_minutes > 0 || row.undertime_minutes > 0;
                             const isAbsent = row.status === 'absent' && !isHoliday;
-                            const prefix = mode === 'actual' ? 'actual_' : 'official_';
-                            const displayDay = mode === 'actual' ? (row.actual_day ?? row.day) : (row.official_day ?? row.day);
-                            const dayShift = mode === 'actual' ? (row.actual_day_shift ?? 0) : 0;
+                            const prefix = mode === 'internal' ? 'internal_' : 'official_';
+                            const displayDay = mode === 'internal' ? (row.internal_day ?? row.day) : (row.official_day ?? row.day);
+                            const dayShift = mode === 'internal' ? (row.internal_day_shift ?? 0) : 0;
                             const morningIn = row[`${prefix}morning_in`] ?? row.morning_in ?? '';
                             const morningOut = row[`${prefix}morning_out`] ?? row.morning_out ?? '';
                             const afternoonIn = row[`${prefix}afternoon_in`] ?? row.afternoon_in ?? '';
@@ -109,6 +113,8 @@ export function DtrTimeLog({ rows, totalHours, mode = 'official', onModeChange }
                             const nightIn = row[`${prefix}night_in`] ?? row.night_in ?? '';
                             const nightOut = row[`${prefix}night_out`] ?? row.night_out ?? '';
                             const hasTimes = Boolean(morningIn || morningOut || afternoonIn || afternoonOut || nightIn || nightOut);
+                            const totalHours = Number(row.total_hours_rendered ?? 0).toFixed(2);
+                            const requiredHours = Number(row.required_hours ?? 0).toFixed(2);
 
                             let rowClass = '';
                             if (isHoliday) {
@@ -150,6 +156,12 @@ export function DtrTimeLog({ rows, totalHours, mode = 'official', onModeChange }
                                             <td className="px-2 py-1.5 text-center text-xs">{nightOut}</td>
                                         </>
                                     )}
+                                    <td className="px-2 py-1.5 text-center text-xs font-semibold">
+                                        {totalHours}
+                                    </td>
+                                    <td className="px-2 py-1.5 text-center text-xs font-semibold">
+                                        {requiredHours}
+                                    </td>
                                     <td className="px-2 py-1.5 text-center text-xs font-medium">
                                         {row.tardy_minutes > 0 ? row.tardy_minutes : ''}
                                     </td>
@@ -162,11 +174,20 @@ export function DtrTimeLog({ rows, totalHours, mode = 'official', onModeChange }
                     </tbody>
                     <tfoot>
                         <tr className="border-t border-gray-200 bg-gray-50 text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
-                            <td colSpan={8} className="px-3 py-2 text-right text-xs font-semibold">
-                                Total Hours Attended
+                            <td colSpan={7} className="px-3 py-2 text-right text-xs font-semibold">
+                                Totals
                             </td>
                             <td className="px-2 py-2 text-center text-xs font-bold">
                                 {totalHoursText}
+                            </td>
+                            <td className="px-2 py-2 text-center text-xs font-bold">
+                                {Number(rows.reduce((total, row) => total + Number(row.required_hours ?? 0), 0)).toFixed(2)}
+                            </td>
+                            <td className="px-2 py-2 text-center text-xs font-bold">
+                                {rows.reduce((total, row) => total + Number(row.tardy_minutes ?? 0), 0)}
+                            </td>
+                            <td className="px-2 py-2 text-center text-xs font-bold">
+                                {rows.reduce((total, row) => total + Number(row.undertime_minutes ?? 0), 0)}
                             </td>
                         </tr>
                     </tfoot>

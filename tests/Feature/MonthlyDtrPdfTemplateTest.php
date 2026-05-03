@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Http\Controllers\Admin\AdminDtrExportController;
 use App\Models\Faculty;
+use App\Support\MonthlyDtrBarcode;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -25,6 +27,9 @@ class MonthlyDtrPdfTemplateTest extends TestCase
         $controller = new AdminDtrExportController;
         $rows = $controller->buildRows([], 3, 2026);
 
+        $printedAt = Carbon::parse('2026-04-01 10:00:00');
+        $barcode = MonthlyDtrBarcode::build($faculty, $printedAt);
+
         $html = view('pdf.monthly-dtr', [
             'faculty' => $faculty,
             'rows' => $rows,
@@ -41,13 +46,18 @@ class MonthlyDtrPdfTemplateTest extends TestCase
                 'timesOvertimeNight' => 0,
                 'totalOvertimeNightMinutes' => 0,
                 'totalHoursRendered' => 0,
+                'totalRequiredHours' => 0,
             ],
             'manualEntries' => [],
             'periodLabel' => 'March 2026',
-            'generatedAt' => 'Monday, April 1, 2026',
+            'generatedAt' => $printedAt->format('l, F d, Y'),
+            'barcodeImg' => $barcode['img'],
+            'barcodeValue' => $barcode['value'],
         ])->render();
 
         $this->assertStringContainsString('TIME LOGS', $html);
+        $this->assertStringContainsString('Total Hours', $html);
+        $this->assertStringContainsString('Required', $html);
         $this->assertStringContainsString('SUMMARY', $html);
         $this->assertStringContainsString('MANUAL ENTRY', $html);
         $this->assertStringContainsString('DELA CRUZ', $html);
@@ -60,6 +70,10 @@ class MonthlyDtrPdfTemplateTest extends TestCase
         $this->assertStringContainsString('data:image/jpeg;base64,', $html);
         $this->assertStringContainsString('210mm', $html);
         $this->assertStringContainsString('Date Printed:', $html);
-        $this->assertStringContainsString('Monday, April 1, 2026', $html);
+        $this->assertStringContainsString($printedAt->format('l, F d, Y'), $html);
+        if ($barcode['img'] !== '') {
+            $this->assertStringContainsString('data:image/png;base64,', $html);
+            $this->assertStringContainsString('FC-001|2026-04-01', $html);
+        }
     }
 }

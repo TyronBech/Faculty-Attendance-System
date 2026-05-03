@@ -1,8 +1,15 @@
 <?php
 
+use App\Http\Middleware\CheckPermission;
+use App\Http\Middleware\CheckRole;
+use App\Http\Middleware\EnsureAdminAuthenticated;
+use App\Http\Middleware\EnsureFacultyAuthenticated;
+use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\LogActionActivity;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -12,18 +19,19 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->web(append: [
-            \App\Http\Middleware\HandleInertiaRequests::class,
-            \Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets::class,
+            LogActionActivity::class,
+            HandleInertiaRequests::class,
+            AddLinkHeadersForPreloadedAssets::class,
         ]);
 
         // ── Guard-aware authentication ──────────────────────────────────────
         // auth.admin  → checks the 'admin' guard (super_admin / admin / hr_staff)
         // auth.faculty → checks the 'web' guard (faculty)
         $middleware->alias([
-            'auth.admin'         => \App\Http\Middleware\EnsureAdminAuthenticated::class,
-            'auth.faculty'       => \App\Http\Middleware\EnsureFacultyAuthenticated::class,
-            'check.role'         => \App\Http\Middleware\CheckRole::class,
-            'check.permission'   => \App\Http\Middleware\CheckPermission::class,
+            'auth.admin' => EnsureAdminAuthenticated::class,
+            'auth.faculty' => EnsureFacultyAuthenticated::class,
+            'check.role' => CheckRole::class,
+            'check.permission' => CheckPermission::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
