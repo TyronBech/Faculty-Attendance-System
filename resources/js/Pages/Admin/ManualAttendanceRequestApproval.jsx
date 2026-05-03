@@ -6,6 +6,7 @@ import InputError from "@/Components/InputError";
 import TextInput from "@/Components/TextInput";
 import SecondaryButton from "@/Components/SecondaryButton";
 import Pagination from "@/Components/Pagination";
+import AttachmentPreviewModal from "@/Components/AttachmentPreviewModal";
 import { Head, useForm } from "@inertiajs/react";
 import { useCallback, useState } from "react";
 import toast from "react-hot-toast";
@@ -23,6 +24,7 @@ function RequestCard({
     request,
     onApprove,
     onReject,
+    onPreview,
     isExpanded,
     toggleExpand,
 }) {
@@ -202,16 +204,36 @@ function RequestCard({
                             </p>
                         </div>
 
-                        {request.attachment_url && (
-                            <a
-                                href={request.attachment_url}
-                                target="_blank"
-                                rel="noreferrer"
-                                onClick={(event) => event.stopPropagation()}
-                                className="inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-bold text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
-                            >
-                                View Attachment
-                            </a>
+                        {request.attachments_data && request.attachments_data.length > 0 && (
+                            <div className="space-y-3">
+                                <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Supporting Documents</p>
+                                <div className="flex flex-wrap gap-3">
+                                    {request.attachments_data.map((attachment, idx) => (
+                                        <button
+                                            key={attachment.id || idx}
+                                            type="button"
+                                            onClick={(event) => {
+                                                event.stopPropagation();
+                                                onPreview(request.attachments_data, idx);
+                                            }}
+                                            className="group relative flex flex-col items-center justify-center rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-2 hover:border-blue-400 dark:hover:border-blue-500 transition-all w-24 h-24"
+                                        >
+                                            {attachment.url.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? (
+                                                <img src={attachment.url} alt={attachment.custom_label} className="w-full h-full object-cover rounded-lg opacity-80 group-hover:opacity-100" />
+                                            ) : (
+                                                <div className="flex flex-col items-center justify-center text-gray-400 group-hover:text-blue-500">
+                                                    <svg className="h-8 w-8 mb-1" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                                                    </svg>
+                                                </div>
+                                            )}
+                                            <span className="mt-1 text-[10px] font-medium text-gray-500 dark:text-gray-400 truncate w-full text-center">
+                                                {attachment.custom_label || 'File'}
+                                            </span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
                         )}
 
                         {request.semester_label && (
@@ -331,6 +353,8 @@ export default function ManualAttendanceRequestApproval({
     const [currentManualLogLimit, setCurrentManualLogLimit] = useState(
         manualLogLimit ?? 5,
     );
+    const [previewState, setPreviewState] = useState({ attachments: [], startIndex: 0 });
+    const [showPreviewModal, setShowPreviewModal] = useState(false);
 
     const approveForm = useForm({
         review_remarks: "",
@@ -356,8 +380,8 @@ export default function ManualAttendanceRequestApproval({
 
             fetch(
                 route("admin.manual-attendance-requests.filter") +
-                    "?" +
-                    params.toString(),
+                "?" +
+                params.toString(),
                 {
                     credentials: "same-origin",
                     headers: {
@@ -590,7 +614,7 @@ export default function ManualAttendanceRequestApproval({
                                     disabled={
                                         limitForm.processing ||
                                         limitForm.data.manual_request_limit ===
-                                            ""
+                                        ""
                                     }
                                     className="inline-flex items-center gap-1.5 rounded-xl bg-gray-900 dark:bg-gray-100 px-4 py-2.5 text-xs font-bold text-white dark:text-gray-900 hover:bg-gray-700 dark:hover:bg-gray-300 transition-colors disabled:opacity-50"
                                 >
@@ -664,16 +688,15 @@ export default function ManualAttendanceRequestApproval({
                         <button
                             key={status}
                             onClick={() => applyFilter(status)}
-                            className={`px-4 py-2 rounded-full text-xs font-bold transition-all ${
-                                filterStatus === status
+                            className={`px-4 py-2 rounded-full text-xs font-bold transition-all ${filterStatus === status
                                     ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900 shadow-sm"
                                     : "bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
-                            }`}
+                                }`}
                         >
                             {status === ""
                                 ? "All"
                                 : status.charAt(0).toUpperCase() +
-                                  status.slice(1)}
+                                status.slice(1)}
                         </button>
                     ))}
                 </div>
@@ -714,6 +737,10 @@ export default function ManualAttendanceRequestApproval({
                             toggleExpand={() => toggleExpand(request.id)}
                             onApprove={() => openApprove(request)}
                             onReject={() => openReject(request)}
+                            onPreview={(attachments, startIndex) => {
+                                setPreviewState({ attachments, startIndex });
+                                setShowPreviewModal(true);
+                            }}
                         />
                     ))}
 
@@ -724,7 +751,7 @@ export default function ManualAttendanceRequestApproval({
                         onPageChange={(page) =>
                             fetchRequests(filterStatus, searchQuery, page)
                         }
-                        onPerPageChange={() => {}}
+                        onPerPageChange={() => { }}
                         perPageOptions={[15]}
                     />
                 </div>
@@ -802,7 +829,7 @@ export default function ManualAttendanceRequestApproval({
                                         Schedule Priority Used:
                                     </span>{" "}
                                     {selectedRequest.schedule_source ===
-                                    "internal"
+                                        "internal"
                                         ? "Internal first"
                                         : "Official fallback"}
                                 </p>
@@ -811,13 +838,12 @@ export default function ManualAttendanceRequestApproval({
 
                         {selectedRequest?.semester_label && (
                             <div
-                                className={`rounded-xl border px-4 py-3 ${
-                                    Number(
-                                        selectedRequest.used_manual_logs ?? 0,
-                                    ) >= Number(currentManualLogLimit)
+                                className={`rounded-xl border px-4 py-3 ${Number(
+                                    selectedRequest.used_manual_logs ?? 0,
+                                ) >= Number(currentManualLogLimit)
                                         ? "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800/50 text-red-800 dark:text-red-300"
                                         : "bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800/50 text-amber-800 dark:text-amber-300"
-                                }`}
+                                    }`}
                             >
                                 <p className="text-xs font-semibold">
                                     {selectedRequest.semester_label}:{" "}
@@ -1004,6 +1030,13 @@ export default function ManualAttendanceRequestApproval({
                     </div>
                 </form>
             </Modal>
+
+            <AttachmentPreviewModal
+                show={showPreviewModal}
+                onClose={() => setShowPreviewModal(false)}
+                attachments={previewState.attachments}
+                startIndex={previewState.startIndex}
+            />
 
             <ScrollToTop />
         </AuthenticatedLayout>

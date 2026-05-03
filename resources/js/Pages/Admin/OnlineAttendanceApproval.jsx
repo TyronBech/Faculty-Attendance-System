@@ -8,6 +8,7 @@ import DangerButton from '@/Components/DangerButton';
 import Pagination from '@/Components/Pagination';
 import { Head, useForm } from '@inertiajs/react';
 import { useState, useCallback } from 'react';
+import AttachmentPreviewModal from '@/Components/AttachmentPreviewModal';
 
 const STATUS_BADGE = {
     pending: 'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-900/20 dark:text-amber-400 dark:ring-amber-400/30',
@@ -38,7 +39,7 @@ const formatDateTime = (dateString) => {
     }
 };
 
-function ApprovalCard({ request, onApprove, onReject, isExpanded, toggleExpand, onOpenScreenshot }) {
+function ApprovalCard({ request, onApprove, onReject, isExpanded, toggleExpand, onPreview }) {
     const handleActionClick = (event, callback) => {
         event.stopPropagation();
         callback();
@@ -101,7 +102,7 @@ function ApprovalCard({ request, onApprove, onReject, isExpanded, toggleExpand, 
                         {request.screenshot_in ? (
                             <button
                                 type="button"
-                                onClick={(event) => handleActionClick(event, () => onOpenScreenshot(request.screenshot_in, 'Time In Screenshot'))}
+                                onClick={(event) => handleActionClick(event, () => onPreview(request.attachments_data, 0))}
                                 className="group relative w-full h-24 rounded-lg overflow-hidden border border-blue-200 dark:border-blue-700/50 bg-white dark:bg-gray-800"
                             >
                                 <img src={request.screenshot_in} alt="Time In" className="w-full h-full object-cover transition-transform group-hover:scale-105" />
@@ -116,7 +117,10 @@ function ApprovalCard({ request, onApprove, onReject, isExpanded, toggleExpand, 
                         {request.screenshot_out ? (
                             <button
                                 type="button"
-                                onClick={(event) => handleActionClick(event, () => onOpenScreenshot(request.screenshot_out, 'Time Out Screenshot'))}
+                                onClick={(event) => {
+                                    const outIdx = request.attachments_data.findIndex(a => a.id === 'screenshot_out');
+                                    handleActionClick(event, () => onPreview(request.attachments_data, outIdx !== -1 ? outIdx : 1));
+                                }}
                                 className="group relative w-full h-24 rounded-lg overflow-hidden border border-emerald-200 dark:border-emerald-700/50 bg-white dark:bg-gray-800"
                             >
                                 <img src={request.screenshot_out} alt="Time Out" className="w-full h-full object-cover transition-transform group-hover:scale-105" />
@@ -201,6 +205,41 @@ function ApprovalCard({ request, onApprove, onReject, isExpanded, toggleExpand, 
                                 </div>
                             </div>
                         )}
+
+                        {/* Other Attachments */}
+                        {request.attachments_data && request.attachments_data.length > (request.screenshot_in && request.screenshot_out ? 2 : (request.screenshot_in || request.screenshot_out ? 1 : 0)) && (
+                            <div className="rounded-xl bg-gray-50 dark:bg-gray-700/30 border border-gray-100 dark:border-gray-700/50 p-4">
+                                <p className="text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-2">
+                                    Additional Proof
+                                </p>
+                                <div className="flex flex-wrap gap-2">
+                                    {request.attachments_data.filter(a => a.id !== 'screenshot_in' && a.id !== 'screenshot_out').map((attachment, idx) => {
+                                        const actualIdx = request.attachments_data.findIndex(at => at.id === attachment.id);
+                                        return (
+                                            <button
+                                                key={attachment.id}
+                                                type="button"
+                                                onClick={(e) => handleActionClick(e, () => onPreview(request.attachments_data, actualIdx))}
+                                                className="group relative flex flex-col items-center justify-center rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-1 hover:border-blue-400 dark:hover:border-blue-500 transition-all w-20 h-20"
+                                            >
+                                                {attachment.url.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? (
+                                                    <img src={attachment.url} alt={attachment.custom_label} className="w-full h-full object-cover rounded" />
+                                                ) : (
+                                                    <div className="flex flex-col items-center justify-center text-gray-400 group-hover:text-blue-500">
+                                                        <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                                                        </svg>
+                                                    </div>
+                                                )}
+                                                <span className="mt-0.5 text-[9px] font-medium text-gray-500 truncate w-full text-center">
+                                                    {attachment.custom_label}
+                                                </span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
@@ -243,10 +282,9 @@ export default function OnlineAttendanceApproval({ requests: initialRequests, fi
 
     const [showApproveModal, setShowApproveModal] = useState(false);
     const [showRejectModal, setShowRejectModal] = useState(false);
-    const [showScreenshotModal, setShowScreenshotModal] = useState(false);
-    const [screenshotUrl, setScreenshotUrl] = useState('');
-    const [screenshotLabel, setScreenshotLabel] = useState('');
     const [selectedRequest, setSelectedRequest] = useState(null);
+    const [previewState, setPreviewState] = useState({ attachments: [], startIndex: 0 });
+    const [showPreviewModal, setShowPreviewModal] = useState(false);
 
     const approveForm = useForm({ review_remarks: '' });
     const rejectForm = useForm({ review_remarks: '' });
@@ -465,7 +503,10 @@ export default function OnlineAttendanceApproval({ requests: initialRequests, fi
                             toggleExpand={() => toggleExpand(req.id)}
                             onApprove={() => openApprove(req)}
                             onReject={() => openReject(req)}
-                            onOpenScreenshot={openScreenshot}
+                            onPreview={(attachments, startIndex) => {
+                                setPreviewState({ attachments, startIndex });
+                                setShowPreviewModal(true);
+                            }}
                         />
                     ))}
 
@@ -642,27 +683,12 @@ export default function OnlineAttendanceApproval({ requests: initialRequests, fi
                 </form>
             </Modal>
 
-            {/* SCREENSHOT VIEWER MODAL */}
-            <Modal show={showScreenshotModal} onClose={() => setShowScreenshotModal(false)} maxWidth="3xl">
-                <div className="p-4">
-                    <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-sm font-bold text-gray-900 dark:text-white">{screenshotLabel}</h3>
-                        <button
-                            onClick={() => setShowScreenshotModal(false)}
-                            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-                        >
-                            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-                            </svg>
-                        </button>
-                    </div>
-                    <img
-                        src={screenshotUrl}
-                        alt={screenshotLabel}
-                        className="w-full rounded-xl object-contain max-h-[70vh]"
-                    />
-                </div>
-            </Modal>
+            <AttachmentPreviewModal
+                show={showPreviewModal}
+                onClose={() => setShowPreviewModal(false)}
+                attachments={previewState.attachments}
+                startIndex={previewState.startIndex}
+            />
 
             <ScrollToTop />
         </AuthenticatedLayout>

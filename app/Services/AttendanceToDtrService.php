@@ -6,10 +6,12 @@ use App\Models\AttendanceRecord;
 use App\Models\Holiday;
 use Carbon\Carbon;
 
-// Converts each biometric log to a DTR record
 class AttendanceToDtrService
 {
-    // Start at attendance records
+    public function __construct(
+        private readonly AbsenceDetectionService $absenceDetectionService,
+    ) {}
+
     public function convertToDtr(int $facultyId, int $month, int $year): array
     {
         $attendance = $this->buildConversionMap($facultyId, $month, $year);
@@ -17,7 +19,9 @@ class AttendanceToDtrService
         $finalizedAttendance = $this->finalizeAttendanceMapping($attendance, $holidaysByDay, $month, $year);
 
         $summary = [
+            'daysPresent' => 0,
             'daysAbsent' => 0,
+            'totalHoursAbsent' => 0,
             'timesLate' => 0,
             'totalLateMinutes' => 0,
             'timesUndertime' => 0,
@@ -29,52 +33,59 @@ class AttendanceToDtrService
             'timesOvertimeNight' => 0,
             'totalOvertimeNightMinutes' => 0,
             'totalHoursRendered' => 0,
+            'totalRequiredHours' => 0,
         ];
 
         foreach ($finalizedAttendance as $dayData) {
-            if (($dayData['status'] ?? '') === 'absent') {
+            $records = $dayData['records'] ?? [];
+            $hasAnyActualAttendance = false;
+
+            foreach ($records as $record) {
+                // Use on-the-fly computed deltas when available (moved schedules),
+                // otherwise fall back to whatever is stored in the DB.
+                $lateMinutes = (int) ($record->computed_late_minutes ?? $record->late_minutes ?? 0);
+                $undertimeMinutes = (int) ($record->computed_undertime_minutes ?? $record->undertime_minutes ?? 0);
+                $nightMinutes = (int) ($record->night_minutes ?? 0);
+                $overtimeMinutes = (int) ($record->overtime_minutes ?? 0);
+                $overtimeNightMinutes = (int) ($record->overtime_night_minutes ?? 0);
+                $hasActualAttendance = ! empty($record->actual_time_in) || ! empty($record->actual_time_out);
+
+                $hasAnyActualAttendance = $hasAnyActualAttendance || $hasActualAttendance;
+
+                if ($lateMinutes > 0) {
+                    $summary['timesLate']++;
+                    $summary['totalLateMinutes'] += $lateMinutes;
+                }
+                if ($undertimeMinutes > 0) {
+                    $summary['timesUndertime']++;
+                    $summary['totalUndertimeMinutes'] += $undertimeMinutes;
+                }
+                if ($nightMinutes > 0) {
+                    $summary['timesNight']++;
+                    $summary['totalNightMinutes'] += $nightMinutes;
+                }
+                if ($overtimeMinutes > 0) {
+                    $summary['timesOvertime']++;
+                    $summary['totalOvertimeMinutes'] += $overtimeMinutes;
+                }
+                if ($overtimeNightMinutes > 0) {
+                    $summary['timesOvertimeNight']++;
+                    $summary['totalOvertimeNightMinutes'] += $overtimeNightMinutes;
+                }
+
+                $summary['totalHoursRendered'] += (float) ($record->computed_total_hours_rendered ?? 0);
+                $summary['totalRequiredHours'] += (float) ($record->required_hours ?? 0);
+            }
+
+            if (! empty($records) && ! $hasAnyActualAttendance && ($dayData['status'] ?? '') === 'absent') {
                 $summary['daysAbsent']++;
             }
-
-            $record = $dayData['record'] ?? null;
-            if ($record === null) {
-                continue;
+            if (($dayData['status'] ?? '') === 'present' || ($dayData['status'] ?? '') === 'holiday_present') {
+                $summary['daysPresent']++;
             }
 
-            $lateMinutes = (int) ($record->late_minutes ?? 0);
-            $undertimeMinutes = (int) ($record->undertime_minutes ?? 0);
-            $nightMinutes = (int) ($record->night_minutes ?? 0);
-            $overtimeMinutes = (int) ($record->overtime_minutes ?? 0);
-            $overtimeNightMinutes = (int) ($record->overtime_night_minutes ?? 0);
-            $hasActualAttendance = ! empty($record->actual_time_in) || ! empty($record->actual_time_out);
-
-            if ($lateMinutes > 0) {
-                $summary['timesLate']++;
-                $summary['totalLateMinutes'] += $lateMinutes;
-            }
-
-            if ($undertimeMinutes > 0) {
-                $summary['timesUndertime']++;
-                $summary['totalUndertimeMinutes'] += $undertimeMinutes;
-            }
-
-            if ($nightMinutes > 0) {
-                $summary['timesNight']++;
-                $summary['totalNightMinutes'] += $nightMinutes;
-            }
-
-            if ($overtimeMinutes > 0) {
-                $summary['timesOvertime']++;
-                $summary['totalOvertimeMinutes'] += $overtimeMinutes;
-            }
-
-            if ($overtimeNightMinutes > 0) {
-                $summary['timesOvertimeNight']++;
-                $summary['totalOvertimeNightMinutes'] += $overtimeNightMinutes;
-            }
-
-            if ($hasActualAttendance) {
-                $summary['totalHoursRendered'] += (float) ($record->total_hours_rendered ?? 0);
+            if (($dayData['status'] ?? '') === 'absent') {
+                $summary['totalHoursAbsent'] += (float) collect($records)->sum(fn ($record) => (float) ($record->required_hours ?? 0));
             }
         }
 
@@ -92,77 +103,91 @@ class AttendanceToDtrService
             ->with('faculty:id,first_name,middle_name,last_name,department_id')
             ->get();
 
+        $monthlyAttendance = $this->absenceDetectionService->buildMergedRecords($facultyId, $month, $year, $monthlyAttendance);
+
         $attendance = [];
+
         foreach ($monthlyAttendance as $mt) {
+            // Preserve raw times before any in-memory adjustments.
             $mt->raw_actual_time_in = $mt->actual_time_in;
             $mt->raw_actual_time_out = $mt->actual_time_out;
+            $mt->raw_official_time_in = $mt->official_time_in;
+            $mt->raw_official_time_out = $mt->official_time_out;
 
+            // Day bucket key = day of official_time_in (the original schedule day).
             $daySource = $mt->official_time_in ?? $mt->attendance_date;
             if (empty($daySource)) {
                 continue;
             }
 
             $attendanceDay = Carbon::parse($daySource)->day;
-            $hasOfficialSchedule = ! empty($mt->official_time_in) && ! empty($mt->official_time_out);
+
+            if (! array_key_exists($attendanceDay, $attendance)) {
+                $attendance[$attendanceDay] = [
+                    'records' => [],
+                    'holidays' => [],
+                ];
+            }
+
+            $gracePeriodMinutes = 5;
+
+            $officialIn = $mt->official_time_in ? Carbon::parse($mt->official_time_in) : null;
+            $officialOut = $mt->official_time_out ? Carbon::parse($mt->official_time_out) : null;
+            $operationalIn = $mt->operational_time_in ? Carbon::parse($mt->operational_time_in) : null;
+            $operationalOut = $mt->operational_time_out ? Carbon::parse($mt->operational_time_out) : null;
+            $actualIn = $mt->actual_time_in ? Carbon::parse($mt->actual_time_in) : null;
+            $actualOut = $mt->actual_time_out ? Carbon::parse($mt->actual_time_out) : null;
+
             $hasActualAttendance = ! empty($mt->actual_time_in) || ! empty($mt->actual_time_out);
+            $useOperational = $this->shouldUseOperationalSchedule(
+                $mt,
+                $officialIn,
+                $officialOut,
+                $operationalIn,
+                $operationalOut,
+            );
 
-            if ($hasOfficialSchedule && ! $hasActualAttendance) {
-                $attendance[$attendanceDay] = [
-                    'status' => 'absent',
-                    'record' => $mt,
-                    'holidays' => [],
-                ];
+            $baseIn = $useOperational ? $operationalIn : $officialIn;
+            $baseOut = $useOperational ? $operationalOut : $officialOut;
 
-                continue;
+            $lateMinutes = 0;
+            $undertimeMinutes = 0;
+
+            if ($actualIn && $baseIn) {
+                $lateMinutes = $actualIn->greaterThan($baseIn->copy()->addMinutes($gracePeriodMinutes))
+                    ? (int) $baseIn->diffInMinutes($actualIn)
+                    : 0;
             }
 
-            $sameOfficialIn = ! empty($mt->official_time_in) && ! empty($mt->operational_time_in)
-                ? Carbon::parse($mt->official_time_in)->equalTo(Carbon::parse($mt->operational_time_in))
-                : false;
-            $sameOfficialOut = ! empty($mt->official_time_out) && ! empty($mt->operational_time_out)
-                ? Carbon::parse($mt->official_time_out)->equalTo(Carbon::parse($mt->operational_time_out))
-                : false;
-
-            $canConvert = ! empty($mt->official_time_in)
-                && ! empty($mt->official_time_out)
-                && ! empty($mt->operational_time_in)
-                && ! empty($mt->actual_time_in);
-
-            if (
-                ($sameOfficialIn && $sameOfficialOut) ||
-                ! $canConvert
-            ) {
-                $attendance[$attendanceDay] = [
-                    'status' => 'present',
-                    'record' => $mt,
-                    'holidays' => [],
-                ];
-            } else {
-                $operational = Carbon::parse($mt->operational_time_in);
-                $actual = Carbon::parse($mt->actual_time_in);
-                $officialIn = Carbon::parse($mt->official_time_in);
-                $officialOut = Carbon::parse($mt->official_time_out);
-
-                $offsetMinutes = $operational->diffInMinutes($actual, false);
-                $hoursRendered = (float) $mt->total_hours_rendered;
-
-                $convertedIn = $officialIn->copy()->addMinutes($offsetMinutes);
-                $convertedOut = $officialOut->copy()->addSeconds((int) round($hoursRendered * 3600));
-
-                $mt->actual_time_in = $convertedIn->setDate(
-                    $officialIn->year, $officialIn->month, $officialIn->day
-                );
-
-                $mt->actual_time_out = $convertedOut->setDate(
-                    $officialOut->year, $officialOut->month, $officialOut->day
-                );
-
-                $attendance[$attendanceDay] = [
-                    'status' => 'present',
-                    'record' => $mt,
-                    'holidays' => [],
-                ];
+            if ($actualOut && $baseOut) {
+                $undertimeMinutes = $actualOut->lessThan($baseOut)
+                    ? (int) $actualOut->diffInMinutes($baseOut)
+                    : 0;
             }
+
+            $mt->computed_late_minutes = $lateMinutes;
+            $mt->computed_undertime_minutes = $undertimeMinutes;
+
+            if ($officialIn) {
+                $mt->dtr_official_time_in = $officialIn->copy()->addMinutes($lateMinutes);
+            }
+            if ($officialOut) {
+                $mt->dtr_official_time_out = $officialOut->copy()->subMinutes($undertimeMinutes);
+            }
+            if ($operationalIn) {
+                $mt->dtr_operational_time_in = $operationalIn->copy()->addMinutes($lateMinutes);
+            }
+            if ($operationalOut) {
+                $mt->dtr_operational_time_out = $operationalOut->copy()->subMinutes($undertimeMinutes);
+            }
+
+            $mt->computed_total_hours_rendered = $this->calculateRenderedHours(
+                $mt->dtr_official_time_in ?? null,
+                $mt->dtr_official_time_out ?? null,
+                $hasActualAttendance,
+            );
+
+            $attendance[$attendanceDay]['records'][] = $mt;
         }
 
         return $attendance;
@@ -172,11 +197,11 @@ class AttendanceToDtrService
     {
         $monthHolidays = Holiday::query()
             ->where(function ($query) use ($year, $month) {
-                $query->where(function ($monthlyQuery) use ($year, $month) {
-                    $monthlyQuery->whereYear('holiday_date', $year)
+                $query->where(function ($q) use ($year, $month) {
+                    $q->whereYear('holiday_date', $year)
                         ->whereMonth('holiday_date', $month);
-                })->orWhere(function ($recurringQuery) use ($month) {
-                    $recurringQuery->where('is_recurring', true)
+                })->orWhere(function ($q) use ($month) {
+                    $q->where('is_recurring', true)
                         ->whereMonth('holiday_date', $month);
                 });
             })
@@ -196,35 +221,68 @@ class AttendanceToDtrService
         $daysInMonth = Carbon::create($year, $month, 1)->daysInMonth;
 
         for ($day = 1; $day <= $daysInMonth; $day++) {
-            if (array_key_exists($day, $attendance)) {
-                if (array_key_exists($day, $holidaysByDay)) {
-                    $record = $attendance[$day]['record'] ?? null;
-                    $hasActualAttendance = ! empty($record?->actual_time_in) || ! empty($record?->actual_time_out);
+            $dayRecords = $attendance[$day]['records'] ?? [];
+            $hasAnyActualAttendance = false;
 
-                    $attendance[$day]['holidays'] = $holidaysByDay[$day];
-                    $attendance[$day]['status'] = $hasActualAttendance ? 'holiday_present' : 'holiday';
+            foreach ($dayRecords as $record) {
+                if (! empty($record?->actual_time_in) || ! empty($record?->actual_time_out)) {
+                    $hasAnyActualAttendance = true;
+                    break;
                 }
+            }
 
-                continue;
+            $status = 'none';
+
+            if (! empty($dayRecords)) {
+                $status = $hasAnyActualAttendance ? 'present' : 'absent';
             }
 
             if (array_key_exists($day, $holidaysByDay)) {
-                $attendance[$day] = [
-                    'status' => 'holiday',
-                    'record' => null,
-                    'holidays' => $holidaysByDay[$day],
-                ];
-            } else {
-                $attendance[$day] = [
-                    'status' => 'none',
-                    'record' => null,
-                    'holidays' => [],
-                ];
+                $status = $hasAnyActualAttendance ? 'holiday_present' : 'holiday';
             }
+
+            $attendance[$day] = [
+                'status' => $status,
+                'records' => $dayRecords,
+                'holidays' => $holidaysByDay[$day] ?? [],
+            ];
         }
 
         ksort($attendance);
 
         return $attendance;
+    }
+
+    private function shouldUseOperationalSchedule(
+        AttendanceRecord $record,
+        ?Carbon $officialIn,
+        ?Carbon $officialOut,
+        ?Carbon $operationalIn,
+        ?Carbon $operationalOut,
+    ): bool {
+        if (empty($record->internal_schedule_id)) {
+            return false;
+        }
+
+        if (! $officialIn || ! $officialOut || ! $operationalIn || ! $operationalOut) {
+            return false;
+        }
+
+        $sameStart = $officialIn->diffInMinutes($operationalIn, false) === 0;
+        $sameEnd = $officialOut->diffInMinutes($operationalOut, false) === 0;
+
+        return ! ($sameStart && $sameEnd);
+    }
+
+    private function calculateRenderedHours(?Carbon $dtrIn, ?Carbon $dtrOut, bool $hasActualAttendance): float
+    {
+        if (! $hasActualAttendance || ! $dtrIn || ! $dtrOut) {
+            return 0.0;
+        }
+
+        $totalMinutes = max(0, $dtrIn->diffInMinutes($dtrOut, false));
+        $breakMinutes = $totalMinutes >= 480 ? 60 : 0;
+
+        return round(max(0, $totalMinutes - $breakMinutes) / 60, 2);
     }
 }

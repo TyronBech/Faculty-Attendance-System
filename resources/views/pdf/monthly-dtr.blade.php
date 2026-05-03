@@ -6,7 +6,7 @@
     <style>
         @page {
             size: 210mm 297mm;
-            margin: 7mm 12mm 7mm 12mm;
+            margin: 6mm 10mm 6mm 10mm;
         }
 
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -15,8 +15,8 @@
             margin: 0;
             padding: 0;
             font-family: Arial, Helvetica, sans-serif;
-            font-size: 6.5pt;
-            line-height: 1.05;
+            font-size: 6.2pt;
+            line-height: 1.02;
             color: #000;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
@@ -45,9 +45,9 @@
             padding: 0 1mm;
         }
         .banner-text .line1 { font-size: 6.5pt; }
-        .banner-text .line2 { font-size: 8.5pt; font-weight: 700; margin-top: 0.2mm; }
-        .banner-text .line3 { font-size: 7pt; font-weight: 700; margin-top: 0.2mm; }
-        .banner-text .line4 { font-size: 8pt; font-weight: 700; margin-top: 0.3mm; }
+        .banner-text .line2 { font-size: 8.2pt; font-weight: 700; margin-top: 0.15mm; }
+        .banner-text .line3 { font-size: 6.8pt; font-weight: 700; margin-top: 0.15mm; }
+        .banner-text .line4 { font-size: 7.6pt; font-weight: 700; margin-top: 0.2mm; }
         .banner-form {
             width: 24mm;
             vertical-align: top;
@@ -57,11 +57,11 @@
         }
 
         /* ── META FIELDS ── */
-        .meta { font-size: 7.5pt; margin: 0.5mm 0 0; }
+        .meta { font-size: 7.1pt; margin: 0.4mm 0 0; }
         .meta-val { font-weight: 700; }
 
         /* ── MAIN TWO-COLUMN WRAPPER ── */
-        .main-wrap { width: 100%; table-layout: fixed; margin-top: 1mm; }
+        .main-wrap { width: 100%; table-layout: fixed; margin-top: 0.8mm; }
         .col-left  { width: 55%; vertical-align: top; padding-right: 1.5mm; }
         .col-right { width: 45%; vertical-align: top; }
 
@@ -72,51 +72,53 @@
             border: 1px solid #000;
             text-align: center;
             vertical-align: middle;
-            font-size: 6pt;
+            font-size: 5.8pt;
             padding: 0px 0.5px;
-            line-height: 1.0;
-            height: 5.5mm;
+            line-height: 0.98;
+            height: 5.1mm;
             word-wrap: break-word;
             overflow: hidden;
         }
         .logs-table th { font-weight: 700; }
         .logs-table .section-hdr {
-            font-size: 7.5pt;
+            font-size: 7.1pt;
             font-weight: 700;
             text-align: center;
             height: auto;
-            padding: 1.5px 2px;
+            padding: 1.2px 2px;
         }
         .logs-table .sub-hdr {
-            font-size: 6.5pt;
+            font-size: 6.2pt;
             font-weight: 700;
             height: auto;
-            padding: 1.5px 1px;
+            padding: 1.1px 1px;
         }
-        .logs-table .day-cell { font-weight: 700; font-size: 6.5pt; width: 6.5%; }
+        .logs-table .day-cell { font-weight: 700; font-size: 6.2pt; width: 6.5%; }
         .logs-table .col-time { width: 9%; }
         .logs-table .col-mins { width: 7%; font-size: 5.5pt; }
+        .logs-table .col-hours { width: 8%; font-size: 5.5pt; }
 
         .holiday-cell { font-style: italic; font-size: 6.5pt; }
 
         .txt-red   { color: red; }
         .txt-blue  { color: blue; }
         .txt-green { color: green; }
+        .txt-muted { color: #666; }
 
         /* ── SUMMARY TABLE ── */
-        .summary-table { width: 100%; max-width: 100%; border-collapse: collapse; border: 1.5px solid #000; margin-bottom: 1.5mm; }
+        .summary-table { width: 100%; max-width: 100%; border-collapse: collapse; border: 1.5px solid #000; margin-bottom: 1.1mm; }
         .summary-table th,
         .summary-table td {
             border: 1px solid #000;
-            font-size: 6.5pt;
-            padding: 1px 2px;
+            font-size: 6.1pt;
+            padding: 0.8px 2px;
             vertical-align: middle;
         }
         .summary-table .section-hdr {
             text-align: center;
             font-weight: 700;
-            font-size: 7.5pt;
-            padding: 1.5px 3px;
+            font-size: 7pt;
+            padding: 1.2px 3px;
         }
         .summary-table .label-col { width: 70%; }
         .summary-table .val-col   { width: 30%; text-align: center; }
@@ -126,41 +128,41 @@
         .manual-table th,
         .manual-table td {
             border: 1px solid #000;
-            font-size: 6.5pt;
-            padding: 1px 2px;
+            font-size: 6.1pt;
+            padding: 0.8px 2px;
             vertical-align: middle;
         }
         .manual-table .section-hdr {
             text-align: center;
             font-weight: 700;
-            font-size: 7.5pt;
-            padding: 1.5px 3px;
+            font-size: 7pt;
+            padding: 1.2px 3px;
         }
-        .manual-table .empty-row td { height: 6mm; }
+        .manual-table .empty-row td { height: 5.3mm; }
 
         /* ── CERT / SIGNATURES ── */
         .cert {
-            font-size: 6pt;
+            font-size: 5.6pt;
             font-style: italic;
-            margin-top: 1.5mm;
-            line-height: 1.25;
+            margin-top: 1.2mm;
+            line-height: 1.2;
             text-align: justify;
         }
-        .sig-line       { border-bottom: 1px solid #000; width: 70%; margin: 5mm auto 0.5mm; }
-        .sig-label      { text-align: center; font-size: 6pt; }
-        .verified       { font-size: 6pt; font-style: italic; margin-top: 1.5mm; }
-        .in-charge-line { border-bottom: 1px solid #000; width: 70%; margin: 5mm auto 0.5mm; }
-        .in-charge-label{ text-align: center; font-size: 6.5pt; font-weight: 700; }
+        .sig-line       { border-bottom: 1px solid #000; width: 70%; margin: 4.2mm auto 0.5mm; }
+        .sig-label      { text-align: center; font-size: 5.6pt; }
+        .verified       { font-size: 5.6pt; font-style: italic; margin-top: 1.2mm; }
+        .in-charge-line { border-bottom: 1px solid #000; width: 70%; margin: 4.2mm auto 0.5mm; }
+        .in-charge-label{ text-align: center; font-size: 6.2pt; font-weight: 700; }
 
         /* ── NOTICES / LEGEND / BIOMETRIC ── */
-        .notice-box { font-size: 7pt; line-height: 1.35; margin-top: 1.3mm; text-align: justify; }
-        .legend     { font-size: 6pt; line-height: 1.32; }
-        .biometric  { font-size: 6pt; line-height: 1.32; margin-top: 1.1mm; }
-        .date-printed { font-size: 7pt; font-weight: 700; margin-top: 1.7mm; }
+        .notice-box { font-size: 6.4pt; line-height: 1.25; margin-top: 1mm; text-align: justify; }
+        .legend     { font-size: 5.8pt; line-height: 1.25; }
+        .biometric  { font-size: 5.8pt; line-height: 1.25; margin-top: 0.9mm; }
+        .date-printed { font-size: 6.4pt; font-weight: 700; margin-top: 1.2mm; }
 
         /* Bottom strip */
-        .bottom-strip { width: 100%; max-width: 100%; margin-top: 1.8mm; }
-        .bottom-strip td { vertical-align: top; font-size: 6pt; line-height: 1.32; }
+        .bottom-strip { width: 100%; max-width: 100%; margin-top: 1.3mm; }
+        .bottom-strip td { vertical-align: top; font-size: 5.8pt; line-height: 1.25; }
     </style>
 </head>
 <body>
@@ -177,6 +179,17 @@
     $manualList = $manualEntries ?? [];
     $filledManual = count($manualList);
     $manualBlank = max(0, $totalDays - 7 - $filledManual);
+
+    $rowsCollection = collect($rows);
+    $absentRows = $rowsCollection->filter(fn (array $row): bool => ($row['status'] ?? '') === 'absent');
+    $presentRows = $rowsCollection->filter(fn (array $row): bool => ($row['status'] ?? '') !== 'absent'
+        && (float) ($row['required_hours'] ?? 0) > 0);
+
+    $totalHoursRendered = $presentRows->sum('total_hours_rendered');
+    $totalRequiredHours = $rowsCollection->sum('required_hours');
+    $totalHoursAbsent = $absentRows->sum('required_hours');
+    $daysPresent = $presentRows->count();
+    $daysAbsent = $absentRows->count();
 @endphp
 <div class="page">
 
@@ -229,12 +242,14 @@
         <td class="col-left">
             <table class="logs-table">
                 <tbody>
-                <tr><th colspan="8" class="section-hdr">TIME LOGS</th></tr>
+                <tr><th colspan="10" class="section-hdr">TIME LOGS</th></tr>
                 <tr>
                     <th class="day-cell sub-hdr" rowspan="2">Day</th>
                     <th colspan="2" class="sub-hdr">Morning</th>
                     <th colspan="2" class="sub-hdr">Afternoon</th>
                     <th colspan="2" class="sub-hdr">Night</th>
+                    <th class="col-hours sub-hdr" rowspan="2">Total<br>Hours</th>
+                    <th class="col-hours sub-hdr" rowspan="2">Required<br>Hours</th>
                     <th class="col-mins sub-hdr" rowspan="2">Minutes<br>Tardy&nbsp;/&nbsp;UT</th>
                 </tr>
                 <tr>
@@ -249,28 +264,45 @@
                     @php
                         $r = $rows[$d];
                         $isHoliday = $r['is_holiday'] ?? false;
-                        $hasTimes = ! empty($r['morning_in']) || ! empty($r['morning_out'])
-                            || ! empty($r['afternoon_in']) || ! empty($r['afternoon_out'])
-                            || ! empty($r['night_in']) || ! empty($r['night_out']);
+                        $hasTimes = ! empty($r['official_morning_in']) || ! empty($r['official_morning_out'])
+                            || ! empty($r['official_afternoon_in']) || ! empty($r['official_afternoon_out'])
+                            || ! empty($r['official_night_in']) || ! empty($r['official_night_out']);
                         $tardy = (int) ($r['tardy_minutes'] ?? 0);
                         $ut = (int) ($r['undertime_minutes'] ?? 0);
                         $isManual = $r['is_manual'] ?? false;
-                        $tdClass = $isManual ? 'txt-blue' : '';
+                        $isAbsent = ($r['status'] ?? '') === 'absent';
+                        $tdClass = trim(($isManual ? 'txt-blue' : '').' '.($isAbsent ? 'txt-muted' : ''));
                     @endphp
                     <tr>
                         <td class="day-cell">{{ $r['day'] }}</td>
                         @if ($isHoliday && ! $hasTimes)
-                            <td colspan="7" class="holiday-cell txt-green">HOLIDAY</td>
+                            <td colspan="9" class="holiday-cell txt-green">HOLIDAY</td>
                         @else
-                            <td class="{{ $tdClass }}">{{ $r['morning_in'] ?? '' }}</td>
-                            <td class="{{ $tdClass }}">{{ $r['morning_out'] ?? '' }}</td>
-                            <td class="{{ $tdClass }}">{{ $r['afternoon_in'] ?? '' }}</td>
-                            <td class="{{ $tdClass }}">{{ $r['afternoon_out'] ?? '' }}</td>
-                            <td class="{{ $tdClass }}">{{ $r['night_in'] ?? '' }}</td>
-                            <td class="{{ $tdClass }}">{{ $r['night_out'] ?? '' }}</td>
+                            <td class="{{ $tdClass }}">
+                                {{ $r['official_morning_in'] ?? '' }}@if(($r['official_morning_absent'] ?? false) && !empty($r['official_morning_in'])) <span class="txt-red">ABS</span>@endif
+                            </td>
+                            <td class="{{ $tdClass }}">
+                                {{ $r['official_morning_out'] ?? '' }}@if(($r['official_morning_absent'] ?? false) && !empty($r['official_morning_out'])) <span class="txt-red">ABS</span>@endif
+                            </td>
+                            <td class="{{ $tdClass }}">
+                                {{ $r['official_afternoon_in'] ?? '' }}@if(($r['official_afternoon_absent'] ?? false) && !empty($r['official_afternoon_in'])) <span class="txt-red">ABS</span>@endif
+                            </td>
+                            <td class="{{ $tdClass }}">
+                                {{ $r['official_afternoon_out'] ?? '' }}@if(($r['official_afternoon_absent'] ?? false) && !empty($r['official_afternoon_out'])) <span class="txt-red">ABS</span>@endif
+                            </td>
+                            <td class="{{ $tdClass }}">
+                                {{ $r['official_night_in'] ?? '' }}@if(($r['official_night_absent'] ?? false) && !empty($r['official_night_in'])) <span class="txt-red">ABS</span>@endif
+                            </td>
+                            <td class="{{ $tdClass }}">
+                                {{ $r['official_night_out'] ?? '' }}@if(($r['official_night_absent'] ?? false) && !empty($r['official_night_out'])) <span class="txt-red">ABS</span>@endif
+                            </td>
+                            <td class="{{ $tdClass }}">{{ number_format($isAbsent ? 0 : (float) ($r['total_hours_rendered'] ?? 0), 2) }}</td>
+                            <td class="{{ $tdClass }}">{{ number_format((float) ($r['required_hours'] ?? 0), 2) }}</td>
                             <td class="txt-red">
-                                @if ($tardy > 0 && $ut > 0)
-                                    {{ $tardy }} / {{ $ut }}
+                                @if ($isAbsent)
+                                    &nbsp;
+                                @elseif ($tardy > 0 && $ut > 0)
+                                    {{ $tardy }} + {{ $ut }}
                                 @elseif ($tardy > 0)
                                     {{ $tardy }}
                                 @elseif ($ut > 0)
@@ -302,8 +334,24 @@
             <table class="summary-table">
                 <tr><th colspan="2" class="section-hdr">SUMMARY</th></tr>
                 <tr>
+                    <td class="label-col">Total Hours Rendered:</td>
+                    <td class="val-col">{{ number_format((float) $totalHoursRendered, 2) }}</td>
+                </tr>
+                <tr>
+                    <td class="label-col">Total Required Hours:</td>
+                    <td class="val-col">{{ number_format((float) $totalRequiredHours, 2) }}</td>
+                </tr>
+                <tr>
+                    <td class="label-col">Total Days Present:</td>
+                    <td class="val-col">{{ $daysPresent }}</td>
+                </tr>
+                <tr>
                     <td class="label-col">No. of Days Absent:</td>
-                    <td class="val-col">{{ $summary['daysAbsent'] ?? 0 }}</td>
+                    <td class="val-col">{{ $daysAbsent }}</td>
+                </tr>
+                <tr>
+                    <td class="label-col">Total Hours Absent:</td>
+                    <td class="val-col">{{ number_format((float) $totalHoursAbsent, 2) }}</td>
                 </tr>
                 <tr>
                     <td class="label-col">No. of Times Tardy:</td>
@@ -366,10 +414,10 @@
     </tr>
     </table>
 
-    {{-- BOTTOM STRIP: Legend left, Biometric right --}}
-    <table class="bottom-strip">
+    {{-- BOTTOM STRIP: Legend left, Biometric right, Barcode bottom right --}}
+    <table class="bottom-strip" style="width:100%;">
         <tr>
-            <td>
+            <td style="width:70%; vertical-align:top;">
                 <div class="legend">
                     <strong>Legend:</strong><br>
                     <strong>Text Color</strong><br>
@@ -384,6 +432,17 @@
                     3 - CEA / COC / ITech (NDC Campus)<br>
                     4 - Hasmin (M. H. Del Pilar Campus)
                 </div>
+            </td>
+            <td style="width:30%; vertical-align:bottom; text-align:right; padding-right:2mm;">
+                {{-- Barcode: EmployeeNo as value, Code128 --}}
+                @if (!empty($barcodeImg))
+                    <div style="display:inline-block; margin-top:10mm;">
+                        <img src="{{ $barcodeImg }}" alt="Barcode" style="height:40px;">
+                        <div style="font-size:6pt; text-align:center; margin-top:2px; max-width:52mm;">
+                            {{ $barcodeValue ?? $employeeNo }}
+                        </div>
+                    </div>
+                @endif
             </td>
         </tr>
     </table>

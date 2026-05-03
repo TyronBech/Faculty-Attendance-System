@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\AdminDtrExportController;
 use App\Models\AttendanceAdjustment;
 use App\Models\Faculty;
 use App\Services\AttendanceToDtrService;
+use App\Support\MonthlyDtrBarcode;
 use Carbon\Carbon;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -37,12 +38,10 @@ class GenerateDtrPdfJob implements ShouldQueue
             ->with('department:id,name')
             ->findOrFail($this->facultyId);
 
-        $conversion = $service->convertToDtr($faculty->id, $this->month, $this->year);
-        $attendance = $conversion['attendance'] ?? [];
-        $summary = $conversion['summary'] ?? [];
-
         $controller = new AdminDtrExportController;
-        $rows = $controller->buildRows($attendance, $this->month, $this->year);
+        $payload = $controller->buildPdfPayload($service, $faculty->id, $this->month, $this->year);
+        $rows = $payload['rows'] ?? [];
+        $summary = $payload['summary'] ?? [];
 
         $manualEntries = AttendanceAdjustment::query()
             ->whereHas('attendanceRecord', function ($query) use ($faculty) {
@@ -67,13 +66,18 @@ class GenerateDtrPdfJob implements ShouldQueue
 
         $outputPath = Storage::disk('local')->path("dtr-exports/{$this->token}.pdf");
 
+        $printedAt = now();
+        $barcode = MonthlyDtrBarcode::build($faculty, $printedAt);
+
         Pdf::view('pdf.monthly-dtr', [
             'faculty' => $faculty,
             'rows' => $rows,
             'summary' => $summary,
             'manualEntries' => $manualEntries,
             'periodLabel' => $periodLabel,
-            'generatedAt' => now()->format('l, F d, Y'),
+            'generatedAt' => $printedAt->format('l, F d, Y'),
+            'barcodeImg' => $barcode['img'],
+            'barcodeValue' => $barcode['value'],
         ])
             ->driver('dompdf')
             ->paperSize(210, 297, 'mm')

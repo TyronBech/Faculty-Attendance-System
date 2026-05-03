@@ -3,12 +3,14 @@
 namespace App\Http\Controllers\Faculty;
 
 use App\Http\Controllers\Controller;
+use App\Models\RequestAttachment;
+use App\Models\Room;
 use App\Models\ScheduleChangeRequest;
 use App\Models\ScheduleDetail;
-use App\Models\RequestAttachment;
-use Illuminate\Http\Request;
-use Inertia\Inertia;
 use Carbon\Carbon;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Inertia\Inertia;
 
 class ScheduleChangeRequestController extends Controller
 {
@@ -19,10 +21,11 @@ class ScheduleChangeRequestController extends Controller
     {
         $faculty = $request->user()->faculty;
 
-        if (!$faculty) {
+        if (! $faculty) {
             return Inertia::render('Faculty/ScheduleChangeRequests', [
                 'requests' => ['data' => [], 'total' => 0, 'per_page' => 10, 'current_page' => 1, 'last_page' => 1],
                 'scheduleDetails' => [],
+                'rooms' => [],
                 'filters' => ['status' => ''],
             ]);
         }
@@ -30,6 +33,7 @@ class ScheduleChangeRequestController extends Controller
         return Inertia::render('Faculty/ScheduleChangeRequests', [
             'requests' => ScheduleChangeRequest::getForFaculty($faculty->id, $request),
             'scheduleDetails' => $faculty->getScheduleDetailsForChangeRequest(),
+            'rooms' => Room::orderBy('room_code')->get(),
             'filters' => [
                 'status' => $request->query('status', ''),
             ],
@@ -43,7 +47,7 @@ class ScheduleChangeRequestController extends Controller
     {
         $faculty = $request->user()->faculty;
 
-        if (!$faculty) {
+        if (! $faculty) {
             return response()->json([
                 'data' => [],
                 'total' => 0,
@@ -65,7 +69,7 @@ class ScheduleChangeRequestController extends Controller
     {
         $faculty = $request->user()->faculty;
 
-        if (!$faculty) {
+        if (! $faculty) {
             return back()->withErrors(['error' => 'Faculty profile not found.']);
         }
 
@@ -74,7 +78,7 @@ class ScheduleChangeRequestController extends Controller
             'requested_day_of_week' => 'required|string|in:Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday',
             'requested_time_in' => 'required|date_format:H:i',
             'requested_time_out' => 'required|date_format:H:i|after:requested_time_in',
-            'requested_room' => 'nullable|string|max:100',
+            'requested_room' => 'required|string|max:100',
             'effective_date' => 'required|date|after_or_equal:today',
             'reason' => 'required|string|max:1000',
             'attachments' => 'nullable|array',
@@ -84,7 +88,7 @@ class ScheduleChangeRequestController extends Controller
 
         $result = $faculty->createScheduleChangeRequest($validated);
 
-        if (!$result['success']) {
+        if (! $result['success']) {
             return back()->withErrors([$result['error_field'] => $result['error_message']]);
         }
 
@@ -95,15 +99,15 @@ class ScheduleChangeRequestController extends Controller
             ->first();
 
         // Handle multiple file attachments
-        if (!empty($validated['attachments']) && $scheduleChangeRequest) {
+        if (! empty($validated['attachments']) && $scheduleChangeRequest) {
             $facultyDir = "attachments/faculty_{$faculty->id}/schedule_change_requests";
-            
+
             foreach ($validated['attachments'] as $attachment) {
                 try {
                     $file = $attachment['file'];
                     $label = $attachment['label'];
                     $path = $file->store("{$facultyDir}/request_{$scheduleChangeRequest->id}", 'public');
-                    
+
                     if ($path) {
                         RequestAttachment::create([
                             'attachmentable_id' => $scheduleChangeRequest->id,
@@ -115,7 +119,7 @@ class ScheduleChangeRequestController extends Controller
                         ]);
                     }
                 } catch (\Exception $e) {
-                    \Illuminate\Support\Facades\Log::error('Failed to save schedule change attachment: ' . $e->getMessage());
+                    Log::error('Failed to save schedule change attachment: '.$e->getMessage());
                 }
             }
         }
@@ -130,13 +134,13 @@ class ScheduleChangeRequestController extends Controller
     {
         $faculty = $request->user()->faculty;
 
-        if (!$faculty) {
+        if (! $faculty) {
             return back()->withErrors(['error' => 'Unauthorized.']);
         }
 
         $result = $faculty->cancelScheduleChangeRequest($scheduleChangeRequest);
 
-        if (!$result['success']) {
+        if (! $result['success']) {
             return back()->withErrors(['error' => $result['error_message']]);
         }
 
@@ -150,31 +154,44 @@ class ScheduleChangeRequestController extends Controller
     {
         $validated = $request->validate([
             'schedule_detail_id' => 'required|integer',
-            'requested_day_of_week' => 'required|string',
-            'requested_time_in' => 'required|date_format:H:i',
-            'requested_time_out' => 'required|date_format:H:i|after:requested_time_in',
+            'requested_day_of_week' => 'nullable|string',
+            'requested_time_in' => 'nullable|date_format:H:i',
+            'requested_time_out' => 'nullable|date_format:H:i|after:requested_time_in',
             'requested_room' => 'nullable|string|max:100',
         ]);
 
         $faculty = $request->user()->faculty;
         $conflicts = [];
 
-        $reqDay = $validated['requested_day_of_week'];
-        $reqIn = $validated['requested_time_in'];
-        $reqOut = $validated['requested_time_out'];
+        // 1. Check if a pending request already exists for this schedule
+        $existingPending = $faculty->scheduleChangeRequests()
+            ->where('schedule_detail_id', $validated['schedule_detail_id'])
+            ->where('status', 'pending')
+            ->exists();
+
+        if ($existingPending) {
+            $conflicts[] = [
+                'type' => 'duplicate',
+                'message' => 'You already have a pending request for this schedule.',
+            ];
+        }
+
+        $reqDay = $validated['requested_day_of_week'] ?? null;
+        $reqIn = $validated['requested_time_in'] ?? null;
+        $reqOut = $validated['requested_time_out'] ?? null;
         $reqRoom = trim($validated['requested_room'] ?? '');
 
-        // Check room + time conflicts against ALL faculties' schedules (same room AND overlapping time)
-        if ($reqRoom !== '') {
+        // 2. Check room + time conflicts against ALL faculties' schedules (same room AND overlapping time)
+        if ($reqDay && $reqIn && $reqOut && $reqRoom !== '') {
             $roomConflict = ScheduleDetail::whereHas('schedule', function ($q) {
                 $q->where('status', 'active');
             })
                 ->where('id', '!=', $validated['schedule_detail_id'])
                 ->where('day', $reqDay)
-                ->where('room', $reqRoom)
+                ->where('room_code', $reqRoom)
                 ->where(function ($q) use ($reqIn, $reqOut) {
-                    $q->whereRaw("TIME(start_time) < ?", [$reqOut])
-                        ->whereRaw("TIME(end_time) > ?", [$reqIn]);
+                    $q->whereRaw('TIME(start_time) < ?', [$reqOut])
+                        ->whereRaw('TIME(end_time) > ?', [$reqIn]);
                 })
                 ->with('schedule.faculty')
                 ->first();
@@ -184,8 +201,8 @@ class ScheduleChangeRequestController extends Controller
                 $conflicts[] = [
                     'type' => 'room',
                     'message' => "Room {$reqRoom} is occupied by {$occupant} for {$roomConflict->course_code} ("
-                        . Carbon::parse($roomConflict->start_time)->format('H:i') . '–'
-                        . Carbon::parse($roomConflict->end_time)->format('H:i') . ") on {$reqDay}.",
+                        .Carbon::parse($roomConflict->start_time)->format('H:i').'–'
+                        .Carbon::parse($roomConflict->end_time)->format('H:i').") on {$reqDay}.",
                 ];
             }
 
@@ -205,7 +222,52 @@ class ScheduleChangeRequestController extends Controller
                 $changeOccupant = $roomChangeConflict->faculty?->full_name ?? 'another faculty';
                 $conflicts[] = [
                     'type' => 'room_request',
-                    'message' => "Room {$reqRoom} has a pending request by {$changeOccupant} ({$roomChangeConflict->requested_time_in}–{$roomChangeConflict->requested_time_out}) on {$reqDay}.",
+                    'message' => "Room {$reqRoom} has a pending/approved request by {$changeOccupant} ("
+                        .Carbon::parse($roomChangeConflict->requested_time_in)->format('H:i').'–'
+                        .Carbon::parse($roomChangeConflict->requested_time_out)->format('H:i').") on {$reqDay}.",
+                ];
+            }
+
+            // 3. Check if the faculty themselves has another class at this time (Faculty Schedule Conflict)
+            $facultyConflict = ScheduleDetail::whereHas('schedule', function ($q) use ($faculty) {
+                $q->where('faculty_id', $faculty->id)
+                    ->where('status', 'active');
+            })
+                ->where('id', '!=', $validated['schedule_detail_id'])
+                ->where('day', $reqDay)
+                ->where(function ($q) use ($reqIn, $reqOut) {
+                    $q->whereRaw('TIME(start_time) < ?', [$reqOut])
+                        ->whereRaw('TIME(end_time) > ?', [$reqIn]);
+                })
+                ->first();
+
+            if ($facultyConflict) {
+                $conflicts[] = [
+                    'type' => 'faculty',
+                    'message' => "You already have another class ({$facultyConflict->course_code}) on {$reqDay} at this time ("
+                        .Carbon::parse($facultyConflict->start_time)->format('H:i').'–'
+                        .Carbon::parse($facultyConflict->end_time)->format('H:i').').',
+                ];
+            }
+
+            // 4. Check if the faculty has another pending/approved request at this time
+            $facultyRequestConflict = ScheduleChangeRequest::where('faculty_id', $faculty->id)
+                ->where('id', '!=', $request->input('request_id')) // In case of editing
+                ->where('schedule_detail_id', '!=', $validated['schedule_detail_id'])
+                ->whereIn('status', ['pending', 'approved'])
+                ->where('requested_day_of_week', $reqDay)
+                ->where(function ($q) use ($reqIn, $reqOut) {
+                    $q->where('requested_time_in', '<', $reqOut)
+                        ->where('requested_time_out', '>', $reqIn);
+                })
+                ->first();
+
+            if ($facultyRequestConflict) {
+                $conflicts[] = [
+                    'type' => 'faculty_request',
+                    'message' => "You have another pending/approved request on {$reqDay} at this time ("
+                        .Carbon::parse($facultyRequestConflict->requested_time_in)->format('H:i').'–'
+                        .Carbon::parse($facultyRequestConflict->requested_time_out)->format('H:i').').',
                 ];
             }
         }
