@@ -1,10 +1,11 @@
 <?php
 
+use App\Models\OnlineAttendanceRequest;
+use App\Services\OnlineAttendanceSyncService;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
-use App\Models\OnlineAttendanceRequest;
-use App\Services\OnlineAttendanceSyncService;
+use Illuminate\Support\Facades\Schedule;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
@@ -32,7 +33,7 @@ Artisan::command('online-attendance:sync-approved', function () {
                         }
                     });
                     $updated++;
-                } catch (\RuntimeException $e) {
+                } catch (RuntimeException $e) {
                     $errors++;
                     $this->warn("Skipped request #{$request->id}: {$e->getMessage()}");
                 }
@@ -42,3 +43,11 @@ Artisan::command('online-attendance:sync-approved', function () {
     $this->info("Synced approved requests: {$updated}");
     $this->info("Skipped with issues: {$errors}");
 })->purpose('Sync approved online attendance requests into attendance_records');
+
+Schedule::command('backup:clean --disable-notifications')
+    ->daily()
+    ->at('01:00');
+
+Schedule::command('backup:run --disable-notifications')
+    ->daily()
+    ->at('01:30');

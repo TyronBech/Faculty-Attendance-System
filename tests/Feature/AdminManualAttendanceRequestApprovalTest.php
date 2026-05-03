@@ -10,6 +10,7 @@ use App\Models\Faculty;
 use App\Models\InternalSchedule;
 use App\Models\Schedule;
 use App\Models\ScheduleDetail;
+use App\Models\SystemSetting;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -73,16 +74,38 @@ class AdminManualAttendanceRequestApprovalTest extends TestCase
         $this->assertSame('pending', $context['request']->status);
     }
 
-    public function test_admin_cannot_approve_counted_manual_log_after_five_in_semester(): void
+    public function test_admin_can_update_manual_attendance_request_limit(): void
+    {
+        $admin = $this->createAdminUser();
+
+        $response = $this->actingAs($admin, 'admin')
+            ->from(route('admin.manual-attendance-requests.index'))
+            ->patch(route('admin.manual-attendance-requests.limit.update'), [
+                'manual_request_limit' => 7,
+            ]);
+
+        $response->assertSessionHasNoErrors();
+        $response->assertSessionHas('success');
+
+        $this->assertSame(7, SystemSetting::manualAttendanceRequestLimit());
+        $this->assertDatabaseHas('system_settings', [
+            'setting_key' => 'manual_attendance_request_limit',
+            'setting_value' => '7',
+            'setting_type' => 'integer',
+        ]);
+    }
+
+    public function test_admin_cannot_approve_counted_manual_log_after_configured_limit_is_reached(): void
     {
         $admin = $this->createAdminUser();
         $context = $this->createManualRequestContext();
         $faculty = $context['faculty'];
         $scheduleDetail = $context['scheduleDetail'];
         $internalSchedule = $context['internalSchedule'];
+        $this->setManualAttendanceRequestLimit(3, $admin);
 
         $baseDate = Carbon::create(2026, 4, 1, 0, 0, 0);
-        for ($index = 0; $index < 5; $index++) {
+        for ($index = 0; $index < 3; $index++) {
             $date = $baseDate->copy()->addDays($index);
             $attendanceRecord = $this->createAttendanceRecord(
                 faculty: $faculty,
@@ -125,9 +148,10 @@ class AdminManualAttendanceRequestApprovalTest extends TestCase
         $faculty = $context['faculty'];
         $scheduleDetail = $context['scheduleDetail'];
         $internalSchedule = $context['internalSchedule'];
+        $this->setManualAttendanceRequestLimit(3, $admin);
 
         $baseDate = Carbon::create(2026, 4, 1, 0, 0, 0);
-        for ($index = 0; $index < 5; $index++) {
+        for ($index = 0; $index < 3; $index++) {
             $date = $baseDate->copy()->addDays($index);
             $attendanceRecord = $this->createAttendanceRecord(
                 faculty: $faculty,
@@ -172,7 +196,7 @@ class AdminManualAttendanceRequestApprovalTest extends TestCase
             ->where('counts_as_manual_log', true)
             ->count();
 
-        $this->assertSame(5, $countedApprovals);
+        $this->assertSame(3, $countedApprovals);
     }
 
     public function test_filter_returns_reviewer_full_name_for_reviewed_requests(): void
@@ -314,8 +338,8 @@ class AdminManualAttendanceRequestApprovalTest extends TestCase
     {
         $department = Department::factory()->create();
         $user = User::create([
-            'username' => 'faculty.' . strtolower(str_replace('-', '', $biometricId)),
-            'email' => strtolower($biometricId) . '@example.com',
+            'username' => 'faculty.'.strtolower(str_replace('-', '', $biometricId)),
+            'email' => strtolower($biometricId).'@example.com',
             'password' => 'password',
             'is_active' => true,
         ]);
@@ -325,7 +349,7 @@ class AdminManualAttendanceRequestApprovalTest extends TestCase
             ->for($department)
             ->create([
                 'biometric_id' => $biometricId,
-                'faculty_code' => 'FC-' . substr($biometricId, -4),
+                'faculty_code' => 'FC-'.substr($biometricId, -4),
                 'is_active' => true,
             ]);
     }
@@ -333,10 +357,24 @@ class AdminManualAttendanceRequestApprovalTest extends TestCase
     private function createAdminUser(): User
     {
         return User::create([
-            'username' => 'admin.' . fake()->unique()->numerify('###'),
+            'username' => 'admin.'.fake()->unique()->numerify('###'),
             'email' => fake()->unique()->safeEmail(),
             'password' => 'password',
             'is_active' => true,
         ]);
+    }
+
+    private function setManualAttendanceRequestLimit(int $limit, User $admin): void
+    {
+        SystemSetting::query()->updateOrCreate(
+            ['setting_key' => 'manual_attendance_request_limit'],
+            [
+                'setting_value' => (string) $limit,
+                'setting_type' => 'integer',
+                'description' => 'Maximum counted manual attendance requests allowed per faculty each semester.',
+                'is_editable' => true,
+                'updated_by' => $admin->id,
+            ],
+        );
     }
 }
