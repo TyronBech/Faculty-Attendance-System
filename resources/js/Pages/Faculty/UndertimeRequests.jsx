@@ -63,7 +63,7 @@ export default function UndertimeRequests({ requests: initialRequests, filters, 
     const [currentPage, setCurrentPage] = useState(initialRequests.current_page || 1);
 
     // ── File preview & Modal state ───────────────────────────────
-    const [previewAttachment, setPreviewAttachment] = useState(null);
+    const [previewState, setPreviewState] = useState({ attachments: [], startIndex: 0 });
     const [showPreviewModal, setShowPreviewModal] = useState(false);
     const [attachmentFiles, setAttachmentFiles] = useState([]);
     const [fileUploadError, setFileUploadError] = useState(null);
@@ -110,7 +110,8 @@ export default function UndertimeRequests({ requests: initialRequests, filters, 
                 fetchRequests(filterStatus, 1);
             },
             onError: (errors) => {
-                toast.error(errors.reason || 'Please fix the errors and try again.');
+                const firstError = Object.values(errors)[0];
+                toast.error(firstError || 'Please fix the errors and try again.');
             },
         });
     };
@@ -233,7 +234,7 @@ export default function UndertimeRequests({ requests: initialRequests, filters, 
                             key={req.id}
                             req={req}
                             onCancel={() => { setSelectedRequest(req); setShowCancelModal(true); }}
-                            onPreviewAttachment={(attachment) => { setPreviewAttachment(attachment); setShowPreviewModal(true); }}
+                            onPreviewAttachment={(attachments, idx) => { setPreviewState({ attachments, startIndex: idx }); setShowPreviewModal(true); }}
                         />
                     ))}
 
@@ -370,7 +371,7 @@ export default function UndertimeRequests({ requests: initialRequests, filters, 
 
                                 {/* Reason for Undertime - Textarea */}
                                 <div>
-                                    <InputLabel value="Reason for Undertime" htmlFor="reason" />
+                                    <InputLabel htmlFor="reason">Reason for Undertime <span className="text-red-500">*</span></InputLabel>
                                     <textarea
                                         id="reason"
                                         rows={3}
@@ -432,8 +433,8 @@ export default function UndertimeRequests({ requests: initialRequests, filters, 
             <AttachmentPreviewModal
                 show={showPreviewModal}
                 onClose={() => setShowPreviewModal(false)}
-                url={previewAttachment?.url}
-                label={previewAttachment?.custom_label || 'Attachment Preview'}
+                attachments={previewState.attachments}
+                startIndex={previewState.startIndex}
             />
 
             <ScrollToTop />
@@ -564,7 +565,7 @@ function RequestCard({ req, onCancel, onPreviewAttachment }) {
                                             <button
                                                 key={attachment.id || idx}
                                                 type="button"
-                                                onClick={(event) => handleActionClick(event, () => onPreviewAttachment(attachment))}
+                                                onClick={(event) => handleActionClick(event, () => onPreviewAttachment(req.attachments_data, idx))}
                                                 className="group relative flex flex-col items-center justify-center rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-2 hover:border-blue-400 dark:hover:border-blue-500 transition-all w-24 h-24"
                                             >
                                                 {attachment.url.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? (

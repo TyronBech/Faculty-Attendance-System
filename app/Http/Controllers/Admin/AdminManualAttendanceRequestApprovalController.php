@@ -293,6 +293,7 @@ class AdminManualAttendanceRequestApprovalController extends Controller
                 'room_code' => $record?->scheduleDetail?->room_code,
                 'justification' => $justification->justification,
                 'attachment_url' => $justification->getAttachmentUrl(),
+                'attachments_data' => $justification->getAttachmentsData(),
                 'status' => $justification->status,
                 'review_remarks' => $justification->review_remarks,
                 'reviewed_at' => $justification->reviewed_at?->format('M d, Y h:i A'),
