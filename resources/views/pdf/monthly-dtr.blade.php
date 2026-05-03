@@ -103,6 +103,7 @@
         .txt-red   { color: red; }
         .txt-blue  { color: blue; }
         .txt-green { color: green; }
+        .txt-muted { color: #666; }
 
         /* ── SUMMARY TABLE ── */
         .summary-table { width: 100%; max-width: 100%; border-collapse: collapse; border: 1.5px solid #000; margin-bottom: 1.1mm; }
@@ -178,8 +179,17 @@
     $manualList = $manualEntries ?? [];
     $filledManual = count($manualList);
     $manualBlank = max(0, $totalDays - 7 - $filledManual);
-    $totalHoursRendered = collect($rows)->sum('total_hours_rendered');
-    $totalRequiredHours = collect($rows)->sum('required_hours');
+
+    $rowsCollection = collect($rows);
+    $absentRows = $rowsCollection->filter(fn (array $row): bool => ($row['status'] ?? '') === 'absent');
+    $presentRows = $rowsCollection->filter(fn (array $row): bool => ($row['status'] ?? '') !== 'absent'
+        && (float) ($row['required_hours'] ?? 0) > 0);
+
+    $totalHoursRendered = $presentRows->sum('total_hours_rendered');
+    $totalRequiredHours = $rowsCollection->sum('required_hours');
+    $totalHoursAbsent = $absentRows->sum('required_hours');
+    $daysPresent = $presentRows->count();
+    $daysAbsent = $absentRows->count();
 @endphp
 <div class="page">
 
@@ -260,23 +270,38 @@
                         $tardy = (int) ($r['tardy_minutes'] ?? 0);
                         $ut = (int) ($r['undertime_minutes'] ?? 0);
                         $isManual = $r['is_manual'] ?? false;
-                        $tdClass = $isManual ? 'txt-blue' : '';
+                        $isAbsent = ($r['status'] ?? '') === 'absent';
+                        $tdClass = trim(($isManual ? 'txt-blue' : '').' '.($isAbsent ? 'txt-muted' : ''));
                     @endphp
                     <tr>
                         <td class="day-cell">{{ $r['day'] }}</td>
                         @if ($isHoliday && ! $hasTimes)
                             <td colspan="9" class="holiday-cell txt-green">HOLIDAY</td>
                         @else
-                            <td class="{{ $tdClass }}">{{ $r['official_morning_in'] ?? '' }}</td>
-                            <td class="{{ $tdClass }}">{{ $r['official_morning_out'] ?? '' }}</td>
-                            <td class="{{ $tdClass }}">{{ $r['official_afternoon_in'] ?? '' }}</td>
-                            <td class="{{ $tdClass }}">{{ $r['official_afternoon_out'] ?? '' }}</td>
-                            <td class="{{ $tdClass }}">{{ $r['official_night_in'] ?? '' }}</td>
-                            <td class="{{ $tdClass }}">{{ $r['official_night_out'] ?? '' }}</td>
-                            <td class="{{ $tdClass }}">{{ number_format((float) ($r['total_hours_rendered'] ?? 0), 2) }}</td>
+                            <td class="{{ $tdClass }}">
+                                {{ $r['official_morning_in'] ?? '' }}@if(($r['official_morning_absent'] ?? false) && !empty($r['official_morning_in'])) <span class="txt-red">ABS</span>@endif
+                            </td>
+                            <td class="{{ $tdClass }}">
+                                {{ $r['official_morning_out'] ?? '' }}@if(($r['official_morning_absent'] ?? false) && !empty($r['official_morning_out'])) <span class="txt-red">ABS</span>@endif
+                            </td>
+                            <td class="{{ $tdClass }}">
+                                {{ $r['official_afternoon_in'] ?? '' }}@if(($r['official_afternoon_absent'] ?? false) && !empty($r['official_afternoon_in'])) <span class="txt-red">ABS</span>@endif
+                            </td>
+                            <td class="{{ $tdClass }}">
+                                {{ $r['official_afternoon_out'] ?? '' }}@if(($r['official_afternoon_absent'] ?? false) && !empty($r['official_afternoon_out'])) <span class="txt-red">ABS</span>@endif
+                            </td>
+                            <td class="{{ $tdClass }}">
+                                {{ $r['official_night_in'] ?? '' }}@if(($r['official_night_absent'] ?? false) && !empty($r['official_night_in'])) <span class="txt-red">ABS</span>@endif
+                            </td>
+                            <td class="{{ $tdClass }}">
+                                {{ $r['official_night_out'] ?? '' }}@if(($r['official_night_absent'] ?? false) && !empty($r['official_night_out'])) <span class="txt-red">ABS</span>@endif
+                            </td>
+                            <td class="{{ $tdClass }}">{{ number_format($isAbsent ? 0 : (float) ($r['total_hours_rendered'] ?? 0), 2) }}</td>
                             <td class="{{ $tdClass }}">{{ number_format((float) ($r['required_hours'] ?? 0), 2) }}</td>
                             <td class="txt-red">
-                                @if ($tardy > 0 && $ut > 0)
+                                @if ($isAbsent)
+                                    &nbsp;
+                                @elseif ($tardy > 0 && $ut > 0)
                                     {{ $tardy }} + {{ $ut }}
                                 @elseif ($tardy > 0)
                                     {{ $tardy }}
@@ -310,15 +335,23 @@
                 <tr><th colspan="2" class="section-hdr">SUMMARY</th></tr>
                 <tr>
                     <td class="label-col">Total Hours Rendered:</td>
-                    <td class="val-col">{{ number_format((float) ($summary['totalHoursRendered'] ?? $totalHoursRendered), 2) }}</td>
+                    <td class="val-col">{{ number_format((float) $totalHoursRendered, 2) }}</td>
                 </tr>
                 <tr>
                     <td class="label-col">Total Required Hours:</td>
-                    <td class="val-col">{{ number_format((float) ($summary['totalRequiredHours'] ?? $totalRequiredHours), 2) }}</td>
+                    <td class="val-col">{{ number_format((float) $totalRequiredHours, 2) }}</td>
+                </tr>
+                <tr>
+                    <td class="label-col">Total Days Present:</td>
+                    <td class="val-col">{{ $daysPresent }}</td>
                 </tr>
                 <tr>
                     <td class="label-col">No. of Days Absent:</td>
-                    <td class="val-col">{{ $summary['daysAbsent'] ?? 0 }}</td>
+                    <td class="val-col">{{ $daysAbsent }}</td>
+                </tr>
+                <tr>
+                    <td class="label-col">Total Hours Absent:</td>
+                    <td class="val-col">{{ number_format((float) $totalHoursAbsent, 2) }}</td>
                 </tr>
                 <tr>
                     <td class="label-col">No. of Times Tardy:</td>
