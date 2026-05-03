@@ -11,6 +11,7 @@ import MultiFileUploader from "@/Components/MultiFileUploader";
 import AttachmentPreviewModal from "@/Components/AttachmentPreviewModal";
 import { Head, Link, useForm, router } from "@inertiajs/react";
 import { useState, useCallback, useRef } from "react";
+import CustomTimePicker from "@/Components/CustomTimePicker";
 import toast from "react-hot-toast";
 
 const STATUS_STYLES = {
@@ -93,7 +94,7 @@ export default function ManualAttendanceRequests({
     const [requestLimit, setRequestLimit] = useState(manualRequestLimit);
 
     // ── File preview & Modal state ───────────────────────────────
-    const [previewAttachment, setPreviewAttachment] = useState(null);
+    const [previewState, setPreviewState] = useState({ attachments: [], startIndex: 0 });
     const [showPreviewModal, setShowPreviewModal] = useState(false);
     const [attachmentFiles, setAttachmentFiles] = useState([]);
     const [fileUploadError, setFileUploadError] = useState(null);
@@ -527,9 +528,10 @@ export default function ManualAttendanceRequests({
                                                                                     e,
                                                                                 ) => {
                                                                                     e.stopPropagation();
-                                                                                    setPreviewAttachment(
-                                                                                        attachment,
-                                                                                    );
+                                                                                    setPreviewState({
+                                                                                        attachments: request.attachments_data,
+                                                                                        startIndex: idx,
+                                                                                    });
                                                                                     setShowPreviewModal(
                                                                                         true,
                                                                                     );
@@ -711,10 +713,9 @@ export default function ManualAttendanceRequests({
                             <form onSubmit={handleCreate} className="space-y-6">
                                 {/* Date Selection */}
                                 <div>
-                                    <InputLabel
-                                        htmlFor="date-select"
-                                        value="Select Date"
-                                    />
+                                    <InputLabel htmlFor="date-select">
+                                        Select Date <span className="text-red-500">*</span>
+                                    </InputLabel>
                                     <select
                                         id="date-select"
                                         value={selectedDate?.id || ""}
@@ -776,24 +777,21 @@ export default function ManualAttendanceRequests({
                                     <div className="grid grid-cols-2 gap-4">
                                         {/* Time In */}
                                         <div>
-                                            <InputLabel
-                                                htmlFor="time-in"
-                                                value="Time In (HH:MM)"
-                                            />
-                                            <TextInput
+                                            <InputLabel htmlFor="time-in">
+                                                Time In (HH:MM) <span className="text-red-500">*</span>
+                                            </InputLabel>
+                                            <CustomTimePicker
                                                 id="time-in"
-                                                type="time"
                                                 value={
                                                     createForm.data
                                                         .requested_time_in
                                                 }
-                                                onChange={(e) =>
+                                                onChange={(val) =>
                                                     createForm.setData(
                                                         "requested_time_in",
-                                                        e.target.value,
+                                                        val,
                                                     )
                                                 }
-                                                className="mt-1"
                                             />
                                             <InputError
                                                 message={
@@ -805,24 +803,21 @@ export default function ManualAttendanceRequests({
 
                                         {/* Time Out */}
                                         <div>
-                                            <InputLabel
-                                                htmlFor="time-out"
-                                                value="Time Out (HH:MM)"
-                                            />
-                                            <TextInput
+                                            <InputLabel htmlFor="time-out">
+                                                Time Out (HH:MM) <span className="text-red-500">*</span>
+                                            </InputLabel>
+                                            <CustomTimePicker
                                                 id="time-out"
-                                                type="time"
                                                 value={
                                                     createForm.data
                                                         .requested_time_out
                                                 }
-                                                onChange={(e) =>
+                                                onChange={(val) =>
                                                     createForm.setData(
                                                         "requested_time_out",
-                                                        e.target.value,
+                                                        val,
                                                     )
                                                 }
-                                                className="mt-1"
                                             />
                                             <InputError
                                                 message={
@@ -841,10 +836,9 @@ export default function ManualAttendanceRequests({
                                     </h3>
 
                                     <div>
-                                        <InputLabel
-                                            htmlFor="justification"
-                                            value="Reason for Manual Entry"
-                                        />
+                                        <InputLabel htmlFor="justification">
+                                            Reason for Manual Entry <span className="text-red-500">*</span>
+                                        </InputLabel>
                                         <textarea
                                             id="justification"
                                             value={
@@ -949,8 +943,8 @@ export default function ManualAttendanceRequests({
             <AttachmentPreviewModal
                 show={showPreviewModal}
                 onClose={() => setShowPreviewModal(false)}
-                url={previewAttachment?.url}
-                label={previewAttachment?.custom_label || "Attachment Preview"}
+                attachments={previewState.attachments}
+                startIndex={previewState.startIndex}
             />
         </AuthenticatedLayout>
     );

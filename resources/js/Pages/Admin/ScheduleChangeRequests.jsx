@@ -8,7 +8,7 @@ import DangerButton from '@/Components/DangerButton';
 import Pagination from '@/Components/Pagination';
 import { Head, useForm } from '@inertiajs/react';
 import { useState, useCallback, useRef, useEffect } from 'react';
-import axios from 'axios';
+import AttachmentPreviewModal from '@/Components/AttachmentPreviewModal';
 import {
     CHANGE_REQUEST_STATUS_STYLES as STATUS_STYLES,
     DAY_AVATAR_COLORS,
@@ -543,7 +543,7 @@ export default function AdminScheduleChangeRequests({ requests: initialRequests,
 function RequestCard({ req, onApprove, onReject }) {
     const dayColor = DAY_AVATAR_COLORS[req.original_day] ?? 'from-gray-400 to-gray-500';
     const [isExpanded, setIsExpanded] = useState(false);
-    const [previewModalUrl, setPreviewModalUrl] = useState(null);
+    const [previewState, setPreviewState] = useState({ attachments: [], startIndex: 0 });
     const [showPreviewModal, setShowPreviewModal] = useState(false);
 
     const toggleExpand = () => {
@@ -697,27 +697,36 @@ function RequestCard({ req, onApprove, onReject }) {
                             <p className="text-sm text-gray-700 dark:text-gray-300">{req.reason}</p>
                         </div>
 
-                        {/* ── Supporting Document ── */}
-                        {req.supporting_document_url && (
+                        {/* ── Supporting Documents ── */}
+                        {req.attachments_data && req.attachments_data.length > 0 && (
                             <div className="mt-4">
-                                <p className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider">Supporting Document</p>
-                                <div
-                                    onClick={(e) => { e.stopPropagation(); setPreviewModalUrl(req.supporting_document_url); setShowPreviewModal(true); }}
-                                    className="group relative cursor-pointer overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 transition hover:border-blue-400 dark:hover:border-blue-500 w-full sm:w-48 h-32 flex items-center justify-center"
-                                >
-                                    {req.supporting_document_url.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? (
-                                        <img src={req.supporting_document_url} alt="Supporting Document" className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
-                                    ) : (
-                                        <div className="flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 group-hover:text-blue-500 transition-colors">
-                                            <svg className="h-10 w-10 mb-2" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-                                            </svg>
-                                            <span className="text-sm font-semibold">View Document</span>
+                                <p className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider">Supporting Documents</p>
+                                <div className="flex flex-wrap gap-3">
+                                    {req.attachments_data.map((attachment, idx) => (
+                                        <div
+                                            key={attachment.id || idx}
+                                            onClick={(e) => { 
+                                                e.stopPropagation(); 
+                                                setPreviewState({ attachments: req.attachments_data, startIndex: idx }); 
+                                                setShowPreviewModal(true); 
+                                            }}
+                                            className="group relative cursor-pointer overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 transition hover:border-blue-400 dark:hover:border-blue-500 w-32 h-32 flex items-center justify-center"
+                                        >
+                                            {attachment.url.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? (
+                                                <img src={attachment.url} alt={attachment.custom_label} className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
+                                            ) : (
+                                                <div className="flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 group-hover:text-blue-500 transition-colors">
+                                                    <svg className="h-8 w-8 mb-1" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                                                    </svg>
+                                                    <span className="text-[10px] font-semibold truncate w-full px-2 text-center">{attachment.custom_label || 'View Document'}</span>
+                                                </div>
+                                            )}
+                                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <svg className="h-6 w-6 text-white drop-shadow-md" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607zM10.5 7.5v6m3-3h-6" /></svg>
+                                            </div>
                                         </div>
-                                    )}
-                                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <svg className="h-8 w-8 text-white drop-shadow-md" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607zM10.5 7.5v6m3-3h-6" /></svg>
-                                    </div>
+                                    ))}
                                 </div>
                             </div>
                         )}
@@ -741,32 +750,13 @@ function RequestCard({ req, onApprove, onReject }) {
                 </div>
             </div>
 
-            {/* Document Preview Modal */}
-            <Modal show={showPreviewModal} onClose={() => setShowPreviewModal(false)} maxWidth="2xl">
-                <div onClick={(e) => e.stopPropagation()}>
-                    <div className="p-4 flex justify-between items-center border-b border-gray-100 dark:border-gray-700">
-                        <h2 className="text-lg font-bold text-gray-900 dark:text-white">Document Preview</h2>
-                        <button onClick={() => setShowPreviewModal(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
-                            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
-                    </div>
-                    <div className="p-4 relative bg-gray-50 dark:bg-gray-900 min-h-[50vh] flex items-center justify-center overflow-auto">
-                        {previewModalUrl && previewModalUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? (
-                            <img src={previewModalUrl} alt="Preview" className="max-w-full max-h-[70vh] rounded-lg object-contain shadow-sm" />
-                        ) : previewModalUrl ? (
-                            <iframe src={previewModalUrl} className="w-full h-[70vh] rounded-lg bg-white shadow-sm" title="Document Preview" />
-                        ) : null}
-                    </div>
-                    <div className="p-4 border-t border-gray-100 dark:border-gray-700 flex justify-end">
-                        <SecondaryButton onClick={() => setShowPreviewModal(false)}>Close</SecondaryButton>
-                        <a href={previewModalUrl} download target="_blank" rel="noopener noreferrer" className="ml-3 inline-flex items-center gap-2 rounded-xl bg-[#7a1315] px-4 py-2 bg-gradient-to-r from-red-600 to-red-800 text-sm font-bold text-white shadow-md hover:from-red-700 hover:to-red-900 transition-all dark:from-red-600 dark:to-red-800 focus:ring-2 focus:ring-red-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900">
-                            Download File
-                        </a>
-                    </div>
-                </div>
-            </Modal>
+            {/* Preview Modal */}
+            <AttachmentPreviewModal
+                show={showPreviewModal}
+                onClose={() => setShowPreviewModal(false)}
+                attachments={previewState.attachments}
+                startIndex={previewState.startIndex}
+            />
         </div>
     );
 }

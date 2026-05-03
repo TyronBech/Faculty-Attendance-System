@@ -4,12 +4,11 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\AttendanceJustification;
-use App\Models\Faculty;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use RuntimeException;
 use Inertia\Inertia;
+use RuntimeException;
 
 class AdminUndertimeJustificationController extends Controller
 {
@@ -23,13 +22,14 @@ class AdminUndertimeJustificationController extends Controller
                 'faculty:id,first_name,last_name,user_id',
                 'faculty.user:id,email',
                 'attendanceRecord:id,attendance_date,actual_time_in,actual_time_out,operational_time_in,operational_time_out,undertime_minutes',
-                'reviewer:id,email'
+                'reviewer:id,email',
+                'attachments',
             ])
             ->orderBy('created_at', 'desc');
 
         // ── Search Filter ──────────────────────────────────────────────────
         if ($request->has('search') && $request->search) {
-            $search = '%' . $request->search . '%';
+            $search = '%'.$request->search.'%';
             $query->whereHas('faculty', function ($q) use ($search) {
                 $q->where('first_name', 'like', $search)
                     ->orWhere('last_name', 'like', $search);
@@ -46,32 +46,33 @@ class AdminUndertimeJustificationController extends Controller
         // ── Format response ────────────────────────────────────────────────
         $formatted = $justifications->map(function ($j) {
             return [
-                'id'                  => $j->id,
-                'faculty_name'        => $j->faculty ? "{$j->faculty->first_name} {$j->faculty->last_name}" : 'Unknown',
-                'faculty_email'       => $j->faculty?->user?->email,
-                'attendance_date'     => $j->attendanceRecord?->attendance_date?->format('M d, Y'),
-                'undertime_minutes'   => $j->attendanceRecord?->undertime_minutes ?? 0,
-                'actual_time_in'      => $j->attendanceRecord?->actual_time_in?->format('H:i'),
-                'actual_time_out'     => $j->attendanceRecord?->actual_time_out?->format('H:i'),
-                'operational_time_out'=> $j->attendanceRecord?->operational_time_out?->format('H:i'),
-                'justification'       => $j->justification,
-                'status'              => $j->status,
-                'reviewed_at'         => $j->reviewed_at?->format('M d, Y h:i A'),
-                'review_remarks'      => $j->review_remarks,
-                'reviewer_email'      => $j->reviewer?->email,
-                'created_at'          => $j->created_at->format('M d, Y h:i A'),
-                'updated_at'          => $j->updated_at->format('M d, Y h:i A'),
+                'id' => $j->id,
+                'faculty_name' => $j->faculty ? "{$j->faculty->first_name} {$j->faculty->last_name}" : 'Unknown',
+                'faculty_email' => $j->faculty?->user?->email,
+                'attendance_date' => $j->attendanceRecord?->attendance_date?->format('M d, Y'),
+                'undertime_minutes' => $j->attendanceRecord?->undertime_minutes ?? 0,
+                'actual_time_in' => $j->attendanceRecord?->actual_time_in?->format('H:i'),
+                'actual_time_out' => $j->attendanceRecord?->actual_time_out?->format('H:i'),
+                'operational_time_out' => $j->attendanceRecord?->operational_time_out?->format('H:i'),
+                'justification' => $j->justification,
+                'status' => $j->status,
+                'reviewed_at' => $j->reviewed_at?->format('M d, Y h:i A'),
+                'review_remarks' => $j->review_remarks,
+                'reviewer_email' => $j->reviewer?->email,
+                'created_at' => $j->created_at->format('M d, Y h:i A'),
+                'updated_at' => $j->updated_at->format('M d, Y h:i A'),
+                'attachments_data' => $j->getAttachmentsData(),
             ];
         });
 
         return Inertia::render('Admin/UndertimeJustificationApproval', [
             'justifications' => $formatted,
             'paginator' => [
-                'current_page'  => $justifications->currentPage(),
-                'last_page'     => $justifications->lastPage(),
-                'total'         => $justifications->total(),
-                'per_page'      => $justifications->perPage(),
-                'path'          => $justifications->path(),
+                'current_page' => $justifications->currentPage(),
+                'last_page' => $justifications->lastPage(),
+                'total' => $justifications->total(),
+                'per_page' => $justifications->perPage(),
+                'path' => $justifications->path(),
             ],
             'filters' => [
                 'search' => $request->search ?? '',
@@ -93,13 +94,14 @@ class AdminUndertimeJustificationController extends Controller
                 'faculty:id,first_name,last_name,user_id',
                 'faculty.user:id,email',
                 'attendanceRecord:id,attendance_date,actual_time_in,actual_time_out,operational_time_in,operational_time_out,undertime_minutes',
-                'reviewer:id,email'
+                'reviewer:id,email',
+                'attachments',
             ])
             ->orderBy('created_at', 'desc');
 
         // ── Search ─────────────────────────────────────────────────────────
         if ($request->has('search') && $request->search) {
-            $search = '%' . $request->search . '%';
+            $search = '%'.$request->search.'%';
             $query->whereHas('faculty', function ($q) use ($search) {
                 $q->where('first_name', 'like', $search)
                     ->orWhere('last_name', 'like', $search);
@@ -116,29 +118,30 @@ class AdminUndertimeJustificationController extends Controller
         return response()->json([
             'data' => $justifications->map(function ($j) {
                 return [
-                    'id'                  => $j->id,
-                    'faculty_name'        => $j->faculty ? "{$j->faculty->first_name} {$j->faculty->last_name}" : 'Unknown',
-                    'faculty_email'       => $j->faculty?->user?->email,
-                    'attendance_date'     => $j->attendanceRecord?->attendance_date?->format('M d, Y'),
-                    'undertime_minutes'   => $j->attendanceRecord?->undertime_minutes ?? 0,
-                    'actual_time_in'      => $j->attendanceRecord?->actual_time_in?->format('H:i'),
-                    'actual_time_out'     => $j->attendanceRecord?->actual_time_out?->format('H:i'),
-                    'operational_time_out'=> $j->attendanceRecord?->operational_time_out?->format('H:i'),
-                    'justification'       => $j->justification,
-                    'status'              => $j->status,
-                    'reviewed_at'         => $j->reviewed_at?->format('M d, Y h:i A'),
-                    'review_remarks'      => $j->review_remarks,
-                    'reviewer_email'      => $j->reviewer?->email,
-                    'created_at'          => $j->created_at->format('M d, Y h:i A'),
-                    'updated_at'          => $j->updated_at->format('M d, Y h:i A'),
+                    'id' => $j->id,
+                    'faculty_name' => $j->faculty ? "{$j->faculty->first_name} {$j->faculty->last_name}" : 'Unknown',
+                    'faculty_email' => $j->faculty?->user?->email,
+                    'attendance_date' => $j->attendanceRecord?->attendance_date?->format('M d, Y'),
+                    'undertime_minutes' => $j->attendanceRecord?->undertime_minutes ?? 0,
+                    'actual_time_in' => $j->attendanceRecord?->actual_time_in?->format('H:i'),
+                    'actual_time_out' => $j->attendanceRecord?->actual_time_out?->format('H:i'),
+                    'operational_time_out' => $j->attendanceRecord?->operational_time_out?->format('H:i'),
+                    'justification' => $j->justification,
+                    'status' => $j->status,
+                    'reviewed_at' => $j->reviewed_at?->format('M d, Y h:i A'),
+                    'review_remarks' => $j->review_remarks,
+                    'reviewer_email' => $j->reviewer?->email,
+                    'created_at' => $j->created_at->format('M d, Y h:i A'),
+                    'updated_at' => $j->updated_at->format('M d, Y h:i A'),
+                    'attachments_data' => $j->getAttachmentsData(),
                 ];
             }),
             'pagination' => [
-                'current_page'  => $justifications->currentPage(),
-                'last_page'     => $justifications->lastPage(),
-                'total'         => $justifications->total(),
-                'per_page'      => $justifications->perPage(),
-                'path'          => $justifications->path(),
+                'current_page' => $justifications->currentPage(),
+                'last_page' => $justifications->lastPage(),
+                'total' => $justifications->total(),
+                'per_page' => $justifications->perPage(),
+                'path' => $justifications->path(),
             ],
         ]);
     }
@@ -168,20 +171,20 @@ class AdminUndertimeJustificationController extends Controller
                     ->lockForUpdate()
                     ->first();
 
-                if (!$locked || $locked->status !== 'pending') {
+                if (! $locked || $locked->status !== 'pending') {
                     throw new RuntimeException('This justification has already been reviewed.');
                 }
 
                 // When approved, adjust the actual_time_out to operational_time_out
                 if ($locked->attendanceRecord) {
                     $attendanceRecord = $locked->attendanceRecord;
-                    
+
                     // Update the actual timeout to expected timeout
                     $attendanceRecord->actual_time_out = $attendanceRecord->operational_time_out;
-                    
+
                     // Recalculate undertime (should be 0 after adjustment)
                     $attendanceRecord->undertime_minutes = 0;
-                    
+
                     // Update status based on other minutes
                     if ($attendanceRecord->late_minutes > 0 && $attendanceRecord->overtime_minutes === 0) {
                         $attendanceRecord->status = 'late';
@@ -192,14 +195,14 @@ class AdminUndertimeJustificationController extends Controller
                     } else {
                         $attendanceRecord->status = 'present';
                     }
-                    
+
                     $attendanceRecord->save();
                 }
 
                 $locked->update([
-                    'status'         => 'approved',
-                    'reviewed_by'    => Auth::id(),
-                    'reviewed_at'    => now(),
+                    'status' => 'approved',
+                    'reviewed_by' => Auth::id(),
+                    'reviewed_at' => now(),
                     'review_remarks' => $validated['review_remarks'] ?? null,
                 ]);
             });
@@ -234,14 +237,14 @@ class AdminUndertimeJustificationController extends Controller
                     ->lockForUpdate()
                     ->first();
 
-                if (!$locked || $locked->status !== 'pending') {
+                if (! $locked || $locked->status !== 'pending') {
                     throw new RuntimeException('This justification has already been reviewed.');
                 }
 
                 $locked->update([
-                    'status'         => 'rejected',
-                    'reviewed_by'    => Auth::id(),
-                    'reviewed_at'    => now(),
+                    'status' => 'rejected',
+                    'reviewed_by' => Auth::id(),
+                    'reviewed_at' => now(),
                     'review_remarks' => $validated['review_remarks'],
                 ]);
             });

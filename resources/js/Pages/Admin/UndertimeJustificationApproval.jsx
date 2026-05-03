@@ -9,6 +9,7 @@ import Pagination from '@/Components/Pagination';
 import { Head, useForm } from '@inertiajs/react';
 import { useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
+import AttachmentPreviewModal from '@/Components/AttachmentPreviewModal';
 
 const STATUS_BADGE = {
     pending: 'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-900/20 dark:text-amber-400 dark:ring-amber-400/30',
@@ -16,7 +17,7 @@ const STATUS_BADGE = {
     rejected: 'bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-900/20 dark:text-red-400 dark:ring-red-400/30',
 };
 
-function ApprovalCard({ justification, onApprove, onReject, isExpanded, toggleExpand }) {
+function ApprovalCard({ justification, onApprove, onReject, onPreview, isExpanded, toggleExpand }) {
     const handleActionClick = (event, callback) => {
         event.stopPropagation();
         callback();
@@ -162,6 +163,38 @@ function ApprovalCard({ justification, onApprove, onReject, isExpanded, toggleEx
                             </p>
                         </div>
 
+                        {justification.attachments_data && justification.attachments_data.length > 0 && (
+                            <div className="space-y-3">
+                                <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Supporting Documents</p>
+                                <div className="flex flex-wrap gap-3">
+                                    {justification.attachments_data.map((attachment, idx) => (
+                                        <button
+                                            key={attachment.id || idx}
+                                            type="button"
+                                            onClick={(event) => {
+                                                event.stopPropagation();
+                                                onPreview(justification.attachments_data, idx);
+                                            }}
+                                            className="group relative flex flex-col items-center justify-center rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-2 hover:border-blue-400 dark:hover:border-blue-500 transition-all w-24 h-24"
+                                        >
+                                            {attachment.url.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? (
+                                                <img src={attachment.url} alt={attachment.custom_label} className="w-full h-full object-cover rounded-lg opacity-80 group-hover:opacity-100" />
+                                            ) : (
+                                                <div className="flex flex-col items-center justify-center text-gray-400 group-hover:text-blue-500">
+                                                    <svg className="h-8 w-8 mb-1" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                                                    </svg>
+                                                </div>
+                                            )}
+                                            <span className="mt-1 text-[10px] font-medium text-gray-500 dark:text-gray-400 truncate w-full text-center">
+                                                {attachment.custom_label || 'File'}
+                                            </span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
                         {/* Review Details */}
                         {justification.status !== 'pending' && justification.reviewed_at && (
                             <div className="rounded-xl bg-gray-50 dark:bg-gray-700/30 border border-gray-100 dark:border-gray-700/50 p-4">
@@ -222,6 +255,8 @@ export default function UndertimeJustificationApproval({ justifications: initial
     const [showApproveModal, setShowApproveModal] = useState(false);
     const [showRejectModal, setShowRejectModal] = useState(false);
     const [selectedJustification, setSelectedJustification] = useState(null);
+    const [previewState, setPreviewState] = useState({ attachments: [], startIndex: 0 });
+    const [showPreviewModal, setShowPreviewModal] = useState(false);
 
     const approveForm = useForm({ review_remarks: '' });
     const rejectForm = useForm({ review_remarks: '' });
@@ -434,6 +469,10 @@ export default function UndertimeJustificationApproval({ justifications: initial
                             toggleExpand={() => toggleExpand(justification.id)}
                             onApprove={() => openApprove(justification)}
                             onReject={() => openReject(justification)}
+                            onPreview={(attachments, startIndex) => {
+                                setPreviewState({ attachments, startIndex });
+                                setShowPreviewModal(true);
+                            }}
                         />
                     ))}
 
@@ -591,6 +630,13 @@ export default function UndertimeJustificationApproval({ justifications: initial
                     </div>
                 </form>
             </Modal>
+
+            <AttachmentPreviewModal
+                show={showPreviewModal}
+                onClose={() => setShowPreviewModal(false)}
+                attachments={previewState.attachments}
+                startIndex={previewState.startIndex}
+            />
 
             <ScrollToTop />
         </AuthenticatedLayout>

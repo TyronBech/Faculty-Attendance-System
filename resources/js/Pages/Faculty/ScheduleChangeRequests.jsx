@@ -11,6 +11,8 @@ import MultiFileUploader from '@/Components/MultiFileUploader';
 import { Head, Link, useForm, usePage, router } from '@inertiajs/react';
 import { useState, useCallback, useEffect, useRef } from 'react';
 import AttachmentPreviewModal from '@/Components/AttachmentPreviewModal';
+import CustomDatePicker from '@/Components/CustomDatePicker';
+import CustomTimePicker from '@/Components/CustomTimePicker';
 import toast from 'react-hot-toast';
 
 const STATUS_STYLES = {
@@ -50,7 +52,7 @@ const formatDateTime = (dateString) => {
     }
 };
 
-export default function ScheduleChangeRequests({ requests: initialRequests, scheduleDetails, filters }) {
+export default function ScheduleChangeRequests({ requests: initialRequests, scheduleDetails, filters, rooms }) {
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showCancelModal, setShowCancelModal] = useState(false);
     const [selectedRequest, setSelectedRequest] = useState(null);
@@ -64,7 +66,7 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
     // ── File preview & Modal state ───────────────────────────────
     const [supportingDocuments, setSupportingDocuments] = useState([]);
     const [documentUploadError, setDocumentUploadError] = useState(null);
-    const [previewAttachment, setPreviewAttachment] = useState(null);
+    const [previewState, setPreviewState] = useState({ attachments: [], startIndex: 0 });
     const [showPreviewModal, setShowPreviewModal] = useState(false);
 
     // ── Create form ──────────────────────────────────────────
@@ -82,6 +84,9 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
         (d) => d.id === Number(createForm.data.schedule_detail_id),
     );
 
+    const { props } = usePage();
+    const csrf_token = props.csrf_token;
+
     // ── AJAX conflict detection ──────────────────────────────
     const [conflicts, setConflicts] = useState([]);
     const [isCheckingConflict, setIsCheckingConflict] = useState(false);
@@ -90,8 +95,8 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
     useEffect(() => {
         const { schedule_detail_id, requested_day_of_week, requested_time_in, requested_time_out, requested_room } = createForm.data;
 
-        // Need at least day + time in + time out to check
-        if (!requested_day_of_week || !requested_time_in || !requested_time_out) {
+        // Need at least a schedule_detail_id to check for pending duplicate requests
+        if (!schedule_detail_id) {
             setConflicts([]);
             return;
         }
@@ -100,8 +105,6 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
         if (conflictTimerRef.current) clearTimeout(conflictTimerRef.current);
         conflictTimerRef.current = setTimeout(() => {
             setIsCheckingConflict(true);
-
-            const { csrf_token } = usePage().props;
 
             fetch(route('faculty.schedule-change-requests.check-conflict'), {
                 method: 'POST',
@@ -135,6 +138,7 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
         createForm.data.requested_time_in,
         createForm.data.requested_time_out,
         createForm.data.requested_room,
+        csrf_token
     ]);
 
     const hasConflict = conflicts.length > 0;
@@ -180,8 +184,9 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
                 // Refresh the list via AJAX
                 fetchRequests(filterStatus, 1);
             },
-            onError: () => {
-                toast.error('Please fix the errors and try again.');
+            onError: (errors) => {
+                const firstError = Object.values(errors)[0];
+                toast.error(firstError || 'Please fix the errors and try again.');
             },
         });
     };
@@ -305,7 +310,7 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
                             key={req.id}
                             req={req}
                             onCancel={() => { setSelectedRequest(req); setShowCancelModal(true); }}
-                            onPreviewDocument={(attachment) => { setPreviewAttachment(attachment); setShowPreviewModal(true); }}
+                            onPreviewDocument={(attachments, startIndex) => { setPreviewState({ attachments, startIndex }); setShowPreviewModal(true); }}
                         />
                     ))}
 
@@ -371,7 +376,9 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
                     <div className="px-6 py-5 space-y-5 max-h-[60dvh] overflow-y-auto">
                         {/* Schedule detail selector */}
                         <div>
-                            <InputLabel value="Select Schedule to Change" htmlFor="schedule_detail_id" />
+                            <InputLabel htmlFor="schedule_detail_id">
+                                Select Schedule to Change <span className="text-red-500">*</span>
+                            </InputLabel>
                             <select
                                 id="schedule_detail_id"
                                 value={createForm.data.schedule_detail_id}
@@ -409,7 +416,9 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
                         {/* Requested changes */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
-                                <InputLabel value="New Day" htmlFor="requested_day_of_week" />
+                                <InputLabel htmlFor="requested_day_of_week">
+                                    New Day <span className="text-red-500">*</span>
+                                </InputLabel>
                                 <select
                                     id="requested_day_of_week"
                                     value={createForm.data.requested_day_of_week}
@@ -425,59 +434,68 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
                             </div>
 
                             <div>
-                                <InputLabel value="New Room (optional)" htmlFor="requested_room" />
-                                <TextInput
+                                <InputLabel htmlFor="requested_room">
+                                    New Room <span className="text-red-500">*</span>
+                                </InputLabel>
+                                <select
                                     id="requested_room"
-                                    type="text"
-                                    className="mt-1 block w-full text-sm"
                                     value={createForm.data.requested_room}
                                     onChange={(e) => { createForm.setData('requested_room', e.target.value); createForm.clearErrors('requested_room'); }}
-                                    placeholder="e.g. Room 301"
-                                />
+                                    className="mt-1 block w-full rounded-xl border-gray-300 shadow-sm focus:border-[#7a1315] focus:ring-[#7a1315] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 text-sm"
+                                >
+                                    <option value="">— Select Room —</option>
+                                    {rooms && rooms.map((r) => (
+                                        <option key={r.id} value={r.room_code}>
+                                            {r.room_code} {r.building_name ? `(${r.building_name})` : ''}
+                                        </option>
+                                    ))}
+                                </select>
                                 <InputError message={createForm.errors.requested_room} />
                             </div>
                         </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
-                                <InputLabel value="New Time In" htmlFor="requested_time_in" />
-                                <TextInput
+                                <InputLabel htmlFor="requested_time_in">
+                                    New Time In <span className="text-red-500">*</span>
+                                </InputLabel>
+                                <CustomTimePicker
                                     id="requested_time_in"
-                                    type="time"
-                                    className="mt-1 block w-full text-sm"
                                     value={createForm.data.requested_time_in}
-                                    onChange={(e) => { createForm.setData('requested_time_in', e.target.value); createForm.clearErrors('requested_time_in'); }}
+                                    onChange={(val) => { createForm.setData('requested_time_in', val); createForm.clearErrors('requested_time_in'); }}
                                 />
                                 <InputError message={createForm.errors.requested_time_in} />
                             </div>
 
                             <div>
-                                <InputLabel value="New Time Out" htmlFor="requested_time_out" />
-                                <TextInput
+                                <InputLabel htmlFor="requested_time_out">
+                                    New Time Out <span className="text-red-500">*</span>
+                                </InputLabel>
+                                <CustomTimePicker
                                     id="requested_time_out"
-                                    type="time"
-                                    className="mt-1 block w-full text-sm"
                                     value={createForm.data.requested_time_out}
-                                    onChange={(e) => { createForm.setData('requested_time_out', e.target.value); createForm.clearErrors('requested_time_out'); }}
+                                    onChange={(val) => { createForm.setData('requested_time_out', val); createForm.clearErrors('requested_time_out'); }}
                                 />
                                 <InputError message={createForm.errors.requested_time_out} />
                             </div>
                         </div>
 
                         <div>
-                            <InputLabel value="Effective Date" htmlFor="effective_date" />
-                            <TextInput
+                            <InputLabel htmlFor="effective_date">
+                                Effective Date <span className="text-red-500">*</span>
+                            </InputLabel>
+                            <CustomDatePicker
                                 id="effective_date"
-                                type="date"
-                                className="mt-1 block w-full text-sm"
                                 value={createForm.data.effective_date}
-                                onChange={(e) => { createForm.setData('effective_date', e.target.value); createForm.clearErrors('effective_date'); }}
+                                onChange={(val) => { createForm.setData('effective_date', val); createForm.clearErrors('effective_date'); }}
                             />
                             <InputError message={createForm.errors.effective_date} />
                         </div>
 
                         <div>
-                            <InputLabel value="Reason for Change" htmlFor="reason" />
+                            <InputLabel htmlFor="reason">
+                                Reason for Change <span className="text-red-500">*</span>
+                            </InputLabel>
                             <textarea
                                 id="reason"
                                 rows={3}
@@ -525,7 +543,7 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
                                     <ul className="mt-1 space-y-1">
                                         {conflicts.map((c, i) => (
                                             <li key={i} className="text-xs text-red-600 dark:text-red-300 flex items-start gap-1.5">
-                                                <span className="shrink-0 mt-0.5">🚪</span>
+                                                <span className="shrink-0 mt-0.5">•</span>
                                                 <span>{c.message}</span>
                                             </li>
                                         ))}
@@ -572,8 +590,8 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
             <AttachmentPreviewModal
                 show={showPreviewModal}
                 onClose={() => setShowPreviewModal(false)}
-                url={previewAttachment?.url}
-                label={previewAttachment?.custom_label || 'Attachment Preview'}
+                attachments={previewState.attachments}
+                startIndex={previewState.startIndex}
             />
 
             <ScrollToTop />
@@ -720,7 +738,7 @@ function RequestCard({ req, onCancel, onPreviewDocument }) {
                                     {req.attachments_data.map((attachment, idx) => (
                                         <div
                                             key={attachment.id || idx}
-                                            onClick={(e) => { e.stopPropagation(); onPreviewDocument(attachment); }}
+                                            onClick={(e) => { e.stopPropagation(); onPreviewDocument(req.attachments_data, idx); }}
                                             className="group relative cursor-pointer overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 transition hover:border-blue-400 dark:hover:border-blue-500 w-32 h-32 flex flex-col items-center justify-center p-1"
                                         >
                                             {attachment.url.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? (
