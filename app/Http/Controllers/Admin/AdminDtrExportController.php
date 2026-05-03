@@ -224,89 +224,115 @@ class AdminDtrExportController extends Controller
         $rows = [];
 
         for ($day = 1; $day <= $daysInMonth; $day++) {
-            $dayData = $attendance[$day] ?? ['status' => 'none', 'record' => null, 'holidays' => []];
-            $record = $dayData['record'] ?? null;
+            $dayData = $attendance[$day] ?? ['status' => 'none', 'records' => [], 'holidays' => []];
+            $records = $dayData['records'] ?? [];
             $officialDate = Carbon::create($year, $month, $day);
 
-            $officialMorningIn = $this->timeForPeriod($record?->official_time_in, 'morning');
-            $officialMorningOut = $this->timeForPeriod($record?->official_time_out, 'morning');
-            $officialAfternoonIn = $this->timeForPeriod($record?->official_time_in, 'afternoon');
-            $officialAfternoonOut = $this->timeForPeriod($record?->official_time_out, 'afternoon');
-            $officialNightIn = $this->timeForPeriod($record?->official_time_in, 'night');
-            $officialNightOut = $this->timeForPeriod($record?->official_time_out, 'night');
+            $sortedRecords = collect($records)
+                ->sortBy(function ($record) {
+                    $rawOfficial = $record?->raw_official_time_in ?? $record?->official_time_in;
 
-            $rawActualTimeIn = $record?->raw_actual_time_in ?? $record?->actual_time_in;
-            $rawActualTimeOut = $record?->raw_actual_time_out ?? $record?->actual_time_out;
+                    return $rawOfficial ? Carbon::parse($rawOfficial)->timestamp : PHP_INT_MAX;
+                })
+                ->values()
+                ->all();
 
-            $actualMorningIn = $this->timeForPeriod($rawActualTimeIn, 'morning');
-            $actualMorningOut = $this->timeForPeriod($rawActualTimeOut, 'morning');
-            $actualAfternoonIn = $this->timeForPeriod($rawActualTimeIn, 'afternoon');
-            $actualAfternoonOut = $this->timeForPeriod($rawActualTimeOut, 'afternoon');
-            $actualNightIn = $this->timeForPeriod($rawActualTimeIn, 'night');
-            $actualNightOut = $this->timeForPeriod($rawActualTimeOut, 'night');
-            $actualDateSource = $rawActualTimeIn ?: $rawActualTimeOut;
-            $actualDate = $actualDateSource ? Carbon::parse($actualDateSource) : null;
-            $actualDay = $actualDate?->day ?? $day;
-            $actualDayShift = $actualDate
-                ? $officialDate->diffInDays($actualDate->copy()->startOfDay(), false)
+            $slots = array_slice($sortedRecords, 0, 3);
+
+            $slotMap = [
+                'morning' => $slots[0] ?? null,
+                'afternoon' => $slots[1] ?? null,
+                'night' => $slots[2] ?? null,
+            ];
+
+            $officialTimes = [];
+            $internalTimes = [];
+
+            foreach ($slotMap as $slot => $record) {
+                $officialTimes[$slot] = [
+                    'in' => $this->formatTime($record?->dtr_official_time_in ?? $record?->official_time_in),
+                    'out' => $this->formatTime($record?->dtr_official_time_out ?? $record?->official_time_out),
+                ];
+
+                $internalTimes[$slot] = [
+                    'in' => $this->formatTime($record?->dtr_operational_time_in ?? $record?->operational_time_in),
+                    'out' => $this->formatTime($record?->dtr_operational_time_out ?? $record?->operational_time_out),
+                ];
+            }
+
+            $primaryRecord = $slots[0] ?? null;
+            $internalDateSource = $primaryRecord?->operational_time_in
+                ?? $primaryRecord?->operational_time_out
+                ?? $primaryRecord?->actual_time_in
+                ?? $primaryRecord?->actual_time_out;
+            $internalDate = $internalDateSource ? Carbon::parse($internalDateSource) : null;
+            $internalDay = $internalDate?->day ?? $day;
+            $internalDayShift = $internalDate
+                ? $officialDate->diffInDays($internalDate->copy()->startOfDay(), false)
                 : 0;
+
+            $tardyMinutes = collect($records)
+                ->sum(fn ($record) => (int) ($record?->computed_late_minutes ?? $record?->late_minutes ?? 0));
+            $undertimeMinutes = collect($records)
+                ->sum(fn ($record) => (int) ($record?->computed_undertime_minutes ?? $record?->undertime_minutes ?? 0));
+            $totalHoursRendered = collect($records)
+                ->sum(fn ($record) => (float) ($record?->computed_total_hours_rendered ?? 0));
+            $requiredHours = collect($records)
+                ->sum(fn ($record) => (float) ($record?->required_hours ?? 0));
+            $isManual = collect($records)->contains(fn ($record) => (bool) ($record?->is_manual_entry ?? false));
 
             $rows[] = [
                 'day' => $day,
                 'official_day' => $day,
-                'actual_day' => $actualDay,
-                'actual_day_shift' => (int) $actualDayShift,
-                // Keep export/default row values on official schedule times.
-                'morning_in' => $officialMorningIn,
-                'morning_out' => $officialMorningOut,
-                'afternoon_in' => $officialAfternoonIn,
-                'afternoon_out' => $officialAfternoonOut,
-                'night_in' => $officialNightIn,
-                'night_out' => $officialNightOut,
-                // Add both time sets for preview tabs in the modal.
-                'official_morning_in' => $officialMorningIn,
-                'official_morning_out' => $officialMorningOut,
-                'official_afternoon_in' => $officialAfternoonIn,
-                'official_afternoon_out' => $officialAfternoonOut,
-                'official_night_in' => $officialNightIn,
-                'official_night_out' => $officialNightOut,
-                'actual_morning_in' => $actualMorningIn,
-                'actual_morning_out' => $actualMorningOut,
-                'actual_afternoon_in' => $actualAfternoonIn,
-                'actual_afternoon_out' => $actualAfternoonOut,
-                'actual_night_in' => $actualNightIn,
-                'actual_night_out' => $actualNightOut,
-                'tardy_minutes' => (int) ($record?->late_minutes ?? 0),
-                'undertime_minutes' => (int) ($record?->undertime_minutes ?? 0),
+                'internal_day' => $internalDay,
+                'internal_day_shift' => (int) $internalDayShift,
+
+                // Legacy fallback keys (used by PDF generator if it reads these directly)
+                'morning_in' => $officialTimes['morning']['in'],
+                'morning_out' => $officialTimes['morning']['out'],
+                'afternoon_in' => $officialTimes['afternoon']['in'],
+                'afternoon_out' => $officialTimes['afternoon']['out'],
+                'night_in' => $officialTimes['night']['in'],
+                'night_out' => $officialTimes['night']['out'],
+
+                // Official tab
+                'official_morning_in' => $officialTimes['morning']['in'],
+                'official_morning_out' => $officialTimes['morning']['out'],
+                'official_afternoon_in' => $officialTimes['afternoon']['in'],
+                'official_afternoon_out' => $officialTimes['afternoon']['out'],
+                'official_night_in' => $officialTimes['night']['in'],
+                'official_night_out' => $officialTimes['night']['out'],
+
+                // Internal tab
+                'internal_morning_in' => $internalTimes['morning']['in'],
+                'internal_morning_out' => $internalTimes['morning']['out'],
+                'internal_afternoon_in' => $internalTimes['afternoon']['in'],
+                'internal_afternoon_out' => $internalTimes['afternoon']['out'],
+                'internal_night_in' => $internalTimes['night']['in'],
+                'internal_night_out' => $internalTimes['night']['out'],
+
+                'tardy_minutes' => (int) $tardyMinutes,
+                'undertime_minutes' => (int) $undertimeMinutes,
+                'total_hours_rendered' => round($totalHoursRendered, 2),
+                'required_hours' => round($requiredHours, 2),
                 'status' => $dayData['status'] ?? 'none',
                 'holiday_label' => collect($dayData['holidays'] ?? [])->pluck('name')->filter()->implode(', '),
                 'is_holiday' => ! empty($dayData['holidays']),
-                'is_manual' => (bool) ($record?->is_manual_entry ?? false),
+                'is_manual' => $isManual,
             ];
         }
 
         return $rows;
     }
 
-    public function timeForPeriod(mixed $value, string $period): string
+    public function formatTime(mixed $value): string
     {
         if (empty($value)) {
             return '';
         }
 
         $time = Carbon::parse($value);
-        $hour = $time->hour;
 
-        $isMorning = $hour < 12;
-        $isAfternoon = $hour >= 12 && $hour < 18;
-        $isNight = $hour >= 18;
-
-        if (($period === 'morning' && $isMorning)
-            || ($period === 'afternoon' && $isAfternoon)
-            || ($period === 'night' && $isNight)) {
-            return $time->format('g:iA');
-        }
-
-        return '';
+        return $time->format('g:iA');
     }
 }
