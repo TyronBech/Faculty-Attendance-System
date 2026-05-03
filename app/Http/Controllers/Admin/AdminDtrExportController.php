@@ -218,6 +218,18 @@ class AdminDtrExportController extends Controller
        Helpers
        ────────────────────────────────────────────────────────────── */
 
+    public function buildPdfPayload(AttendanceToDtrService $service, int $facultyId, int $month, int $year): array
+    {
+        $conversion = $service->convertToDtr($facultyId, $month, $year);
+        $attendance = $conversion['attendance'] ?? [];
+        $summary = $conversion['summary'] ?? [];
+
+        return [
+            'rows' => $this->buildRows($attendance, $month, $year),
+            'summary' => $summary,
+        ];
+    }
+
     public function buildRows(array $attendance, int $month, int $year): array
     {
         $daysInMonth = Carbon::create($year, $month, 1)->daysInMonth;
@@ -252,6 +264,7 @@ class AdminDtrExportController extends Controller
                 $officialTimes[$slot] = [
                     'in' => $this->formatTime($record?->dtr_official_time_in ?? $record?->official_time_in),
                     'out' => $this->formatTime($record?->dtr_official_time_out ?? $record?->official_time_out),
+                    'is_absent' => (bool) (($record?->status ?? '') === 'absent' && empty($record?->actual_time_in) && empty($record?->actual_time_out)),
                 ];
 
                 $internalTimes[$slot] = [
@@ -298,10 +311,13 @@ class AdminDtrExportController extends Controller
                 // Official tab
                 'official_morning_in' => $officialTimes['morning']['in'],
                 'official_morning_out' => $officialTimes['morning']['out'],
+                'official_morning_absent' => $officialTimes['morning']['is_absent'],
                 'official_afternoon_in' => $officialTimes['afternoon']['in'],
                 'official_afternoon_out' => $officialTimes['afternoon']['out'],
+                'official_afternoon_absent' => $officialTimes['afternoon']['is_absent'],
                 'official_night_in' => $officialTimes['night']['in'],
                 'official_night_out' => $officialTimes['night']['out'],
+                'official_night_absent' => $officialTimes['night']['is_absent'],
 
                 // Internal tab
                 'internal_morning_in' => $internalTimes['morning']['in'],
@@ -316,6 +332,9 @@ class AdminDtrExportController extends Controller
                 'total_hours_rendered' => round($totalHoursRendered, 2),
                 'required_hours' => round($requiredHours, 2),
                 'status' => $dayData['status'] ?? 'none',
+                'has_absent_slot' => collect($slots)->contains(function ($record): bool {
+                    return (bool) (($record?->status ?? '') === 'absent' && empty($record?->actual_time_in) && empty($record?->actual_time_out));
+                }),
                 'holiday_label' => collect($dayData['holidays'] ?? [])->pluck('name')->filter()->implode(', '),
                 'is_holiday' => ! empty($dayData['holidays']),
                 'is_manual' => $isManual,

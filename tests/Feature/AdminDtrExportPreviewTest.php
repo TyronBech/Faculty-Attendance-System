@@ -8,6 +8,7 @@ use App\Models\Faculty;
 use App\Models\Holiday;
 use App\Models\InternalSchedule;
 use App\Models\Schedule;
+use App\Models\ScheduleDetail;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -205,5 +206,152 @@ class AdminDtrExportPreviewTest extends TestCase
 
         $payload = $response->json();
         $this->assertCount(2, $payload['previews']);
+    }
+
+    public function test_preview_generates_absent_slots_from_active_schedule_without_attendance_records(): void
+    {
+        $admin = User::factory()->create();
+        $this->actingAs($admin, 'admin');
+
+        $faculty = Faculty::factory()->create();
+
+        $schedule = Schedule::create([
+            'faculty_id' => $faculty->id,
+            'schedule_code' => 'SCH-ABS-001',
+            'academic_year' => 2026,
+            'semester' => 1,
+            'effective_from' => Carbon::create(2026, 3, 1, 0, 0, 0),
+            'effective_until' => Carbon::create(2026, 3, 31, 23, 59, 59),
+            'status' => 'active',
+            'schedule_type' => 'fixed',
+            'created_by' => $admin->id,
+        ]);
+
+        ScheduleDetail::create([
+            'schedule_id' => $schedule->id,
+            'day' => 'Monday',
+            'start_time' => Carbon::parse('08:00:00'),
+            'end_time' => Carbon::parse('10:00:00'),
+            'subject_desc' => 'Algebra',
+            'course_code' => 'MATH101',
+            'room_code' => 'R101',
+            'hours_required' => 2,
+        ]);
+
+        $response = $this->getJson(route('admin.dtr-export.preview', [
+            'faculty_id' => $faculty->id,
+            'month' => 3,
+            'year' => 2026,
+        ]));
+
+        $response->assertOk();
+
+        $payload = $response->json();
+        $dayRow = collect($payload['rows'])->firstWhere('day', 2);
+
+        $this->assertNotNull($dayRow);
+        $this->assertSame('8:00AM', $dayRow['official_morning_in']);
+        $this->assertSame('10:00AM', $dayRow['official_morning_out']);
+        $this->assertTrue($dayRow['official_morning_absent']);
+        $this->assertSame('absent', $dayRow['status']);
+        $this->assertEquals(0.0, $dayRow['total_hours_rendered']);
+        $this->assertEquals(2.0, $dayRow['required_hours']);
+        $this->assertEquals(5, $payload['summary']['daysAbsent']);
+        $this->assertEquals(10.0, $payload['summary']['totalHoursAbsent']);
+    }
+
+    public function test_preview_does_not_mark_absent_for_holiday_expected_slot(): void
+    {
+        $admin = User::factory()->create();
+        $this->actingAs($admin, 'admin');
+
+        $faculty = Faculty::factory()->create();
+
+        $schedule = Schedule::create([
+            'faculty_id' => $faculty->id,
+            'schedule_code' => 'SCH-ABS-002',
+            'academic_year' => 2026,
+            'semester' => 1,
+            'effective_from' => Carbon::create(2026, 3, 1, 0, 0, 0),
+            'effective_until' => Carbon::create(2026, 3, 31, 23, 59, 59),
+            'status' => 'active',
+            'schedule_type' => 'fixed',
+            'created_by' => $admin->id,
+        ]);
+
+        ScheduleDetail::create([
+            'schedule_id' => $schedule->id,
+            'day' => 'Monday',
+            'start_time' => Carbon::parse('08:00:00'),
+            'end_time' => Carbon::parse('10:00:00'),
+            'subject_desc' => 'Algebra',
+            'course_code' => 'MATH101',
+            'room_code' => 'R101',
+            'hours_required' => 2,
+        ]);
+
+        Holiday::factory()->create([
+            'holiday_date' => '2026-03-02',
+            'name' => 'Special Day',
+            'is_recurring' => false,
+        ]);
+
+        $response = $this->getJson(route('admin.dtr-export.preview', [
+            'faculty_id' => $faculty->id,
+            'month' => 3,
+            'year' => 2026,
+        ]));
+
+        $response->assertOk();
+
+        $payload = $response->json();
+        $dayRow = collect($payload['rows'])->firstWhere('day', 2);
+        $this->assertNotNull($dayRow);
+        $this->assertSame('holiday', $dayRow['status']);
+        $this->assertFalse($dayRow['official_morning_absent']);
+        $this->assertEquals(4, $payload['summary']['daysAbsent']);
+    }
+
+    public function test_preview_skips_absence_detection_for_flexible_schedules(): void
+    {
+        $admin = User::factory()->create();
+        $this->actingAs($admin, 'admin');
+
+        $faculty = Faculty::factory()->create();
+
+        $schedule = Schedule::create([
+            'faculty_id' => $faculty->id,
+            'schedule_code' => 'SCH-FLEX-001',
+            'academic_year' => 2026,
+            'semester' => 1,
+            'effective_from' => Carbon::create(2026, 3, 1, 0, 0, 0),
+            'effective_until' => Carbon::create(2026, 3, 31, 23, 59, 59),
+            'status' => 'active',
+            'schedule_type' => 'flexible',
+            'created_by' => $admin->id,
+        ]);
+
+        ScheduleDetail::create([
+            'schedule_id' => $schedule->id,
+            'day' => 'Monday',
+            'start_time' => Carbon::parse('08:00:00'),
+            'end_time' => Carbon::parse('10:00:00'),
+            'subject_desc' => 'Algebra',
+            'course_code' => 'MATH101',
+            'room_code' => 'R101',
+            'hours_required' => 2,
+        ]);
+
+        $response = $this->getJson(route('admin.dtr-export.preview', [
+            'faculty_id' => $faculty->id,
+            'month' => 3,
+            'year' => 2026,
+        ]));
+
+        $response->assertOk();
+
+        $payload = $response->json();
+        $this->assertEquals(0, $payload['summary']['daysAbsent']);
+        $this->assertEquals(0.0, $payload['summary']['totalHoursAbsent']);
     }
 }
