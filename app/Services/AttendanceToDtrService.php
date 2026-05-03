@@ -8,6 +8,10 @@ use Carbon\Carbon;
 
 class AttendanceToDtrService
 {
+    public function __construct(
+        private readonly AbsenceDetectionService $absenceDetectionService,
+    ) {}
+
     public function convertToDtr(int $facultyId, int $month, int $year): array
     {
         $attendance = $this->buildConversionMap($facultyId, $month, $year);
@@ -15,7 +19,9 @@ class AttendanceToDtrService
         $finalizedAttendance = $this->finalizeAttendanceMapping($attendance, $holidaysByDay, $month, $year);
 
         $summary = [
+            'daysPresent' => 0,
             'daysAbsent' => 0,
+            'totalHoursAbsent' => 0,
             'timesLate' => 0,
             'totalLateMinutes' => 0,
             'timesUndertime' => 0,
@@ -74,6 +80,13 @@ class AttendanceToDtrService
             if (! empty($records) && ! $hasAnyActualAttendance && ($dayData['status'] ?? '') === 'absent') {
                 $summary['daysAbsent']++;
             }
+            if (($dayData['status'] ?? '') === 'present' || ($dayData['status'] ?? '') === 'holiday_present') {
+                $summary['daysPresent']++;
+            }
+
+            if (($dayData['status'] ?? '') === 'absent') {
+                $summary['totalHoursAbsent'] += (float) collect($records)->sum(fn ($record) => (float) ($record->required_hours ?? 0));
+            }
         }
 
         return [
@@ -89,6 +102,8 @@ class AttendanceToDtrService
             ->whereMonth('attendance_date', $month)
             ->with('faculty:id,first_name,middle_name,last_name,department_id')
             ->get();
+
+        $monthlyAttendance = $this->absenceDetectionService->buildMergedRecords($facultyId, $month, $year, $monthlyAttendance);
 
         $attendance = [];
 

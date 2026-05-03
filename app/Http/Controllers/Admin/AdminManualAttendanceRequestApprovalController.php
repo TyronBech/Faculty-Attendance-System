@@ -8,6 +8,7 @@ use App\Http\Requests\Admin\RejectManualAttendanceRequest;
 use App\Http\Requests\Admin\UpdateManualAttendanceRequestLimitRequest;
 use App\Models\AttendanceJustification;
 use App\Models\AttendanceRecord;
+use App\Models\Faculty;
 use App\Models\InternalSchedule;
 use App\Models\ScheduleDetail;
 use App\Models\SystemSetting;
@@ -405,6 +406,7 @@ class AdminManualAttendanceRequestApprovalController extends Controller
         Carbon $attendanceDate,
         ?int $preferredScheduleId = null,
     ): ?InternalSchedule {
+        $scheduleFacultyId = $this->resolveScheduleFacultyId((int) $attendanceRecord->faculty_id);
         $currentInternal = $attendanceRecord->internalSchedule;
 
         if (
@@ -419,11 +421,11 @@ class AdminManualAttendanceRequestApprovalController extends Controller
 
         $query = InternalSchedule::query()
             ->with('schedule')
-            ->where('faculty_id', $attendanceRecord->faculty_id)
+            ->where('faculty_id', $scheduleFacultyId)
             ->where('day_of_week', $dayOfWeek)
             ->where('is_operational', true)
-            ->whereHas('schedule', function ($scheduleQuery) use ($attendanceRecord, $attendanceDate): void {
-                $scheduleQuery->where('faculty_id', $attendanceRecord->faculty_id)
+            ->whereHas('schedule', function ($scheduleQuery) use ($scheduleFacultyId, $attendanceDate): void {
+                $scheduleQuery->where('faculty_id', $scheduleFacultyId)
                     ->where('status', 'active')
                     ->whereDate('effective_from', '<=', $attendanceDate->toDateString())
                     ->whereDate('effective_until', '>=', $attendanceDate->toDateString());
@@ -444,6 +446,7 @@ class AdminManualAttendanceRequestApprovalController extends Controller
         Carbon $attendanceDate,
         ?int $preferredScheduleId = null,
     ): ?ScheduleDetail {
+        $scheduleFacultyId = $this->resolveScheduleFacultyId((int) $attendanceRecord->faculty_id);
         $currentDetail = $attendanceRecord->scheduleDetail;
 
         if (
@@ -458,8 +461,8 @@ class AdminManualAttendanceRequestApprovalController extends Controller
         $query = ScheduleDetail::query()
             ->with('schedule')
             ->where('day', $dayOfWeek)
-            ->whereHas('schedule', function ($scheduleQuery) use ($attendanceRecord, $attendanceDate): void {
-                $scheduleQuery->where('faculty_id', $attendanceRecord->faculty_id)
+            ->whereHas('schedule', function ($scheduleQuery) use ($scheduleFacultyId, $attendanceDate): void {
+                $scheduleQuery->where('faculty_id', $scheduleFacultyId)
                     ->where('status', 'active')
                     ->whereDate('effective_from', '<=', $attendanceDate->toDateString())
                     ->whereDate('effective_until', '>=', $attendanceDate->toDateString());
@@ -606,5 +609,18 @@ class AdminManualAttendanceRequestApprovalController extends Controller
                 $query->where('aj.id', '!=', $excludedJustificationId);
             })
             ->count('aj.id');
+    }
+
+    private function resolveScheduleFacultyId(int $attendanceFacultyId): int
+    {
+        $externalMatch = Faculty::query()
+            ->where('external_faculty_id', $attendanceFacultyId)
+            ->value('id');
+
+        if (! empty($externalMatch)) {
+            return (int) $externalMatch;
+        }
+
+        return $attendanceFacultyId;
     }
 }

@@ -38,12 +38,10 @@ class GenerateDtrPdfJob implements ShouldQueue
             ->with('department:id,name')
             ->findOrFail($this->facultyId);
 
-        $conversion = $service->convertToDtr($faculty->id, $this->month, $this->year);
-        $attendance = $conversion['attendance'] ?? [];
-        $summary = $conversion['summary'] ?? [];
-
         $controller = new AdminDtrExportController;
-        $rows = $controller->buildRows($attendance, $this->month, $this->year);
+        $payload = $controller->buildPdfPayload($service, $faculty->id, $this->month, $this->year);
+        $rows = $payload['rows'] ?? [];
+        $summary = $payload['summary'] ?? [];
 
         $manualEntries = AttendanceAdjustment::query()
             ->whereHas('attendanceRecord', function ($query) use ($faculty) {
