@@ -1,12 +1,15 @@
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
+import Pagination from "@/Components/Pagination";
 import PrimaryButton from "@/Components/PrimaryButton";
-import SecondaryButton from "@/Components/SecondaryButton";
-import { Head, useForm } from "@inertiajs/react";
+import { Head, router, useForm } from "@inertiajs/react";
 
-export default function Backups({ backups = [], schedule }) {
+export default function Backups({ backups, filters = {}, schedule }) {
     const backupForm = useForm({});
+    const backupRows = backups?.data ?? [];
+    const currentPage = Number(backups?.current_page ?? 1);
+    const perPage = Number(filters?.per_page ?? backups?.per_page ?? 10);
 
-    const totalBytes = backups.reduce(
+    const totalBytes = backupRows.reduce(
         (sum, backup) => sum + (backup.size_bytes ?? 0),
         0,
     );
@@ -16,6 +19,28 @@ export default function Backups({ backups = [], schedule }) {
     const runBackup = () => {
         backupForm.post(route("admin.backups.store"), {
             preserveScroll: true,
+        });
+    };
+
+    const handlePageChange = (page) => {
+        router.get(route("admin.backups.index"), {
+            page,
+            per_page: perPage,
+        }, {
+            preserveState: true,
+            preserveScroll: true,
+            replace: true,
+        });
+    };
+
+    const handlePerPageChange = (nextPerPage) => {
+        router.get(route("admin.backups.index"), {
+            page: 1,
+            per_page: nextPerPage,
+        }, {
+            preserveState: true,
+            preserveScroll: true,
+            replace: true,
         });
     };
 
@@ -51,7 +76,7 @@ export default function Backups({ backups = [], schedule }) {
                             Stored Backups
                         </p>
                         <p className="mt-3 text-3xl font-extrabold text-gray-900 dark:text-white">
-                            {backups.length}
+                            {backups?.total ?? backupRows.length}
                         </p>
                     </div>
 
@@ -84,7 +109,7 @@ export default function Backups({ backups = [], schedule }) {
                         </h2>
                     </div>
 
-                    {backups.length === 0 ? (
+                    {backupRows.length === 0 ? (
                         <div className="px-5 py-12 text-center">
                             <p className="text-sm text-gray-500 dark:text-gray-400">
                                 No backup files are available yet.
@@ -92,7 +117,7 @@ export default function Backups({ backups = [], schedule }) {
                         </div>
                     ) : (
                         <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                            {backups.map((backup) => (
+                            {backupRows.map((backup) => (
                                 <div
                                     key={backup.id}
                                     className="flex flex-col gap-4 px-5 py-4 lg:flex-row lg:items-center lg:justify-between"
@@ -124,25 +149,18 @@ export default function Backups({ backups = [], schedule }) {
                             ))}
                         </div>
                     )}
-                </div>
 
-                <div className="rounded-2xl border border-blue-200 dark:border-blue-800/40 bg-blue-50 dark:bg-blue-900/10 p-5">
-                    <p className="text-sm text-blue-900 dark:text-blue-200">
-                        Backups are stored on the private
-                        <span className="mx-1 font-bold">backups</span>
-                        disk and are downloaded through Laravel.
-                    </p>
-                    <div className="mt-4">
-                        <SecondaryButton
-                            onClick={runBackup}
-                            disabled={backupForm.processing}
-                        >
-                            {backupForm.processing
-                                ? "Running Backup..."
-                                : "Run Backup Now"}
-                        </SecondaryButton>
+                    <div className="px-5 pb-4">
+                        <Pagination
+                            currentPage={currentPage}
+                            totalItems={Number(backups?.total ?? 0)}
+                            perPage={perPage}
+                            onPageChange={handlePageChange}
+                            onPerPageChange={handlePerPageChange}
+                        />
                     </div>
                 </div>
+
             </div>
         </AuthenticatedLayout>
     );

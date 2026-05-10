@@ -3,10 +3,13 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\RunBackupCommandJob;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -15,9 +18,12 @@ use Throwable;
 
 class AdminBackupController extends Controller
 {
-    public function index(): Response
+    public function index(Request $request): Response
     {
-        $backups = $this->backupFiles()
+        $perPage = max(5, min((int) $request->query('per_page', 10), 50));
+        $page = max(1, (int) $request->query('page', 1));
+
+        $backupCollection = $this->backupFiles()
             ->map(function (array $backup): array {
                 return [
                     'id' => $backup['id'],
@@ -29,11 +35,15 @@ class AdminBackupController extends Controller
                     'download_url' => route('admin.backups.download', $backup['id']),
                 ];
             })
-            ->values()
-            ->all();
+            ->values();
+
+        $backups = $this->paginateBackups($backupCollection, $page, $perPage, $request)->toArray();
 
         return Inertia::render('Admin/Backups', [
             'backups' => $backups,
+            'filters' => [
+                'per_page' => $perPage,
+            ],
             'schedule' => [
                 'cleanup' => 'Daily at 1:00 AM',
                 'backup' => 'Daily at 1:30 AM',
@@ -44,19 +54,19 @@ class AdminBackupController extends Controller
     public function store(): RedirectResponse
     {
         try {
-            $exitCode = Artisan::call('backup:run', [
-                '--disable-notifications' => true,
-                '--no-interaction' => true,
+            RunBackupCommandJob::dispatch();
+        } catch (Throwable $exception) {
+            Log::error('Backup job dispatch threw an exception.', [
+                'message' => $exception->getMessage(),
             ]);
 
-            if ($exitCode !== 0) {
-                return back()->with('error', 'Backup command failed to complete successfully.');
-            }
-        } catch (Throwable $exception) {
             return back()->with('error', 'Backup failed: '.$exception->getMessage());
         }
 
-        return to_route('admin.backups.index')->with('success', 'Backup created successfully.');
+        return to_route('admin.backups.index')->with(
+            'success',
+            'Backup request queued successfully. Refresh this page after a short while to see the new backup file.',
+        );
     }
 
     public function download(string $backup): StreamedResponse
@@ -126,5 +136,34 @@ class AdminBackupController extends Controller
         }
 
         return number_format($value, 2).' '.$units[$unitIndex];
+    }
+
+    /**
+     * @param  Collection<int, array{
+     *     id: string,
+     *     name: string,
+     *     directory: string,
+     *     size_bytes: int,
+     *     size_human: string,
+     *     created_at: string,
+     *     download_url: string
+     * }>  $backups
+     */
+    private function paginateBackups(
+        Collection $backups,
+        int $page,
+        int $perPage,
+        Request $request,
+    ): LengthAwarePaginator {
+        return new LengthAwarePaginator(
+            $backups->forPage($page, $perPage)->values(),
+            $backups->count(),
+            $perPage,
+            $page,
+            [
+                'path' => $request->url(),
+                'query' => $request->query(),
+            ],
+        );
     }
 }
