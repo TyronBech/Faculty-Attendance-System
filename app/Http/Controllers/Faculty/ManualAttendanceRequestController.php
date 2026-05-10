@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Faculty;
 use App\Http\Controllers\Controller;
 use App\Models\AttendanceJustification;
 use App\Models\AttendanceRecord;
+use App\Models\SystemSetting;
 use App\Models\RequestAttachment;
 use App\Models\SystemSetting;
 use Carbon\Carbon;

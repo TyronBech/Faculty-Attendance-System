@@ -94,7 +94,10 @@ export default function ManualAttendanceRequests({
     const [requestLimit, setRequestLimit] = useState(manualRequestLimit);
 
     // ── File preview & Modal state ───────────────────────────────
-    const [previewState, setPreviewState] = useState({ attachments: [], startIndex: 0 });
+    const [previewState, setPreviewState] = useState({
+        attachments: [],
+        startIndex: 0,
+    });
     const [showPreviewModal, setShowPreviewModal] = useState(false);
     const [attachmentFiles, setAttachmentFiles] = useState([]);
     const [fileUploadError, setFileUploadError] = useState(null);
@@ -528,10 +531,14 @@ export default function ManualAttendanceRequests({
                                                                                     e,
                                                                                 ) => {
                                                                                     e.stopPropagation();
-                                                                                    setPreviewState({
-                                                                                        attachments: request.attachments_data,
-                                                                                        startIndex: idx,
-                                                                                    });
+                                                                                    setPreviewState(
+                                                                                        {
+                                                                                            attachments:
+                                                                                                request.attachments_data,
+                                                                                            startIndex:
+                                                                                                idx,
+                                                                                        },
+                                                                                    );
                                                                                     setShowPreviewModal(
                                                                                         true,
                                                                                     );
@@ -714,7 +721,8 @@ export default function ManualAttendanceRequests({
                                 {/* Date Selection */}
                                 <div>
                                     <InputLabel htmlFor="date-select">
-                                        Select Date <span className="text-red-500">*</span>
+                                        Select Date{" "}
+                                        <span className="text-red-500">*</span>
                                     </InputLabel>
                                     <select
                                         id="date-select"
@@ -778,7 +786,10 @@ export default function ManualAttendanceRequests({
                                         {/* Time In */}
                                         <div>
                                             <InputLabel htmlFor="time-in">
-                                                Time In (HH:MM) <span className="text-red-500">*</span>
+                                                Time In (HH:MM){" "}
+                                                <span className="text-red-500">
+                                                    *
+                                                </span>
                                             </InputLabel>
                                             <CustomTimePicker
                                                 id="time-in"
@@ -804,7 +815,10 @@ export default function ManualAttendanceRequests({
                                         {/* Time Out */}
                                         <div>
                                             <InputLabel htmlFor="time-out">
-                                                Time Out (HH:MM) <span className="text-red-500">*</span>
+                                                Time Out (HH:MM){" "}
+                                                <span className="text-red-500">
+                                                    *
+                                                </span>
                                             </InputLabel>
                                             <CustomTimePicker
                                                 id="time-out"
@@ -837,7 +851,10 @@ export default function ManualAttendanceRequests({
 
                                     <div>
                                         <InputLabel htmlFor="justification">
-                                            Reason for Manual Entry <span className="text-red-500">*</span>
+                                            Reason for Manual Entry{" "}
+                                            <span className="text-red-500">
+                                                *
+                                            </span>
                                         </InputLabel>
                                         <textarea
                                             id="justification"
