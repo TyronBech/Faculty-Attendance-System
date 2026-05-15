@@ -139,6 +139,12 @@ class Faculty extends Model
             ->get()
             ->keyBy('schedule_detail_id');
 
+        // 3. Get all pending change requests to flag them in the dropdown
+        $pendingRequests = ScheduleChangeRequest::where('faculty_id', $this->id)
+            ->where('status', 'pending')
+            ->get()
+            ->keyBy('schedule_detail_id');
+
         $results = [];
 
         foreach ($allDetails as $detail) {
@@ -160,6 +166,7 @@ class Faculty extends Model
                     'program_code' => $detail->program_code,
                     'year_level' => $detail->year_level,
                     'section_name' => $detail->section_name,
+                    'has_pending_request' => $pendingRequests->has($detail->id),
                 ];
             } else {
                 // Otherwise show the official detail
@@ -176,6 +183,7 @@ class Faculty extends Model
                     'program_code' => $detail->program_code,
                     'year_level' => $detail->year_level,
                     'section_name' => $detail->section_name,
+                    'has_pending_request' => $pendingRequests->has($detail->id),
                 ];
             }
         }
@@ -289,6 +297,50 @@ class Faculty extends Model
                     'error_message' => "Room {$reqRoom} has a pending/approved change request by {$changeOccupant} ({$roomChangeConflict->requested_time_in}–{$roomChangeConflict->requested_time_out}) on {$reqDay}.",
                 ];
             }
+        }
+
+        // 3. Check if the faculty themselves has another class at this time (Faculty Schedule Conflict)
+        $facultyConflict = ScheduleDetail::whereHas('schedule', function ($q) {
+            $q->where('faculty_id', $this->id)
+                ->where('status', 'active');
+        })
+            ->where('id', '!=', $data['schedule_detail_id'])
+            ->where('day', $reqDay)
+            ->where(function ($q) use ($reqIn, $reqOut) {
+                $q->whereRaw('TIME(start_time) < ?', [$reqOut])
+                    ->whereRaw('TIME(end_time) > ?', [$reqIn]);
+            })
+            ->first();
+
+        if ($facultyConflict) {
+            return [
+                'success' => false,
+                'error_field' => 'requested_time_in',
+                'error_message' => "You already have another class ({$facultyConflict->course_code}) on {$reqDay} at this time ("
+                    .Carbon::parse($facultyConflict->start_time)->format('H:i').'–'
+                    .Carbon::parse($facultyConflict->end_time)->format('H:i').').',
+            ];
+        }
+
+        // 4. Check if the faculty has another pending/approved request at this time
+        $facultyRequestConflict = ScheduleChangeRequest::where('faculty_id', $this->id)
+            ->where('schedule_detail_id', '!=', $data['schedule_detail_id'])
+            ->whereIn('status', ['pending', 'approved'])
+            ->where('requested_day_of_week', $reqDay)
+            ->where(function ($q) use ($reqIn, $reqOut) {
+                $q->where('requested_time_in', '<', $reqOut)
+                    ->where('requested_time_out', '>', $reqIn);
+            })
+            ->first();
+
+        if ($facultyRequestConflict) {
+            return [
+                'success' => false,
+                'error_field' => 'requested_time_in',
+                'error_message' => "You have another pending/approved request on {$reqDay} at this time ("
+                    .Carbon::parse($facultyRequestConflict->requested_time_in)->format('H:i').'–'
+                    .Carbon::parse($facultyRequestConflict->requested_time_out)->format('H:i').').',
+            ];
         }
 
         // All checks passed — create

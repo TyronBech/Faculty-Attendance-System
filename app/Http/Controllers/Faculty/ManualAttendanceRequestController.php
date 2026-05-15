@@ -5,8 +5,8 @@ namespace App\Http\Controllers\Faculty;
 use App\Http\Controllers\Controller;
 use App\Models\AttendanceJustification;
 use App\Models\AttendanceRecord;
-use App\Models\SystemSetting;
 use App\Models\RequestAttachment;
+use App\Models\SystemSetting;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -135,8 +135,8 @@ class ManualAttendanceRequestController extends Controller
 
         // Combine date with time (store as datetime without timezone conversion)
         $attendanceDate = $attendanceRecord->attendance_date->toDateString();
-        $requestedTimeIn = Carbon::createFromFormat('Y-m-d H:i', "{$attendanceDate} {$validated['requested_time_in']}", 'Asia/Manila')->setTimezone('UTC');
-        $requestedTimeOut = Carbon::createFromFormat('Y-m-d H:i', "{$attendanceDate} {$validated['requested_time_out']}", 'Asia/Manila')->setTimezone('UTC');
+        $requestedTimeIn = Carbon::createFromFormat('Y-m-d H:i', "{$attendanceDate} {$validated['requested_time_in']}", 'Asia/Manila');
+        $requestedTimeOut = Carbon::createFromFormat('Y-m-d H:i', "{$attendanceDate} {$validated['requested_time_out']}", 'Asia/Manila');
 
         $justification = AttendanceJustification::create([
             'faculty_id' => $faculty->id,

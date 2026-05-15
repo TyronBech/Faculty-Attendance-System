@@ -11,6 +11,8 @@ import MultiFileUploader from '@/Components/MultiFileUploader';
 import { Head, Link, useForm, router } from '@inertiajs/react';
 import { useState, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
+import CustomDatePicker from '@/Components/CustomDatePicker';
+import CustomTimePicker from '@/Components/CustomTimePicker';
 
 const formatTime12 = (time24) => {
     if (!time24) return '';
@@ -208,7 +210,8 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
                 Object.keys(errors).forEach(key => {
                     createForm.setError(key, errors[key]);
                 });
-                toast.error('Please fix the errors and try again.');
+                const firstError = Object.values(errors)[0];
+                toast.error(firstError || 'Please fix the errors and try again.');
             },
         });
     };
@@ -433,7 +436,7 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
 
                         {/* Class type toggle */}
                         <div>
-                            <InputLabel value="Class Type" />
+                            <InputLabel>Class Type <span className="text-red-500">*</span></InputLabel>
                             <div className="mt-2 flex gap-3">
                                 {['synchronous', 'asynchronous'].map((type) => (
                                     <button
@@ -467,18 +470,15 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
 
                         {/* Date */}
                         <div>
-                            <InputLabel value="Date of Class" htmlFor="attendance_date" />
-                            <TextInput
+                            <InputLabel htmlFor="attendance_date">Date of Class <span className="text-red-500">*</span></InputLabel>
+                            <CustomDatePicker
                                 id="attendance_date"
-                                type="date"
-                                className="mt-1 block w-full text-sm"
                                 value={createForm.data.attendance_date}
-                                onChange={(e) => {
-                                    createForm.setData('attendance_date', e.target.value);
+                                onChange={(val) => {
+                                    createForm.setData('attendance_date', val);
                                     createForm.clearErrors('attendance_date');
-                                    checkAttendance(e.target.value);
+                                    checkAttendance(val);
                                 }}
-                                max={new Date().toISOString().split('T')[0]}
                             />
                             <InputError message={createForm.errors.attendance_date} />
                             {attendanceCheck.checked && (attendanceCheck.hasAttendance || attendanceCheck.hasPendingRequest) && (
@@ -493,24 +493,20 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
                         {/* Time In & Out */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
-                                <InputLabel value="Time In" htmlFor="time_in" />
-                                <TextInput
+                                <InputLabel htmlFor="time_in">Time In <span className="text-red-500">*</span></InputLabel>
+                                <CustomTimePicker
                                     id="time_in"
-                                    type="time"
-                                    className="mt-1 block w-full text-sm"
                                     value={createForm.data.time_in}
-                                    onChange={(e) => { createForm.setData('time_in', e.target.value); createForm.clearErrors('time_in'); }}
+                                    onChange={(val) => { createForm.setData('time_in', val); createForm.clearErrors('time_in'); }}
                                 />
                                 <InputError message={createForm.errors.time_in} />
                             </div>
                             <div>
                                 <InputLabel value="Time Out (optional)" htmlFor="time_out" />
-                                <TextInput
+                                <CustomTimePicker
                                     id="time_out"
-                                    type="time"
-                                    className="mt-1 block w-full text-sm"
                                     value={createForm.data.time_out}
-                                    onChange={(e) => { createForm.setData('time_out', e.target.value); createForm.clearErrors('time_out'); }}
+                                    onChange={(val) => { createForm.setData('time_out', val); createForm.clearErrors('time_out'); }}
                                 />
                                 <InputError message={createForm.errors.time_out} />
                             </div>
@@ -518,7 +514,7 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
 
                         {/* Screenshot: Time In */}
                         <div>
-                            <InputLabel value="Screenshot — Time In (proof)" />
+                            <InputLabel>Screenshot — Time In (proof) <span className="text-red-500">*</span></InputLabel>
                             <div
                                 onClick={() => fileInRef.current?.click()}
                                 className="mt-1 flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-700 p-6 cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition-colors bg-gray-50 dark:bg-gray-900"

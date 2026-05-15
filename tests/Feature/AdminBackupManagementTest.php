@@ -3,11 +3,12 @@
 namespace Tests\Feature;
 
 use App\Enums\Role;
+use App\Jobs\RunBackupCommandJob;
 use App\Models\Admin;
 use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
 use Spatie\Permission\Models\Role as SpatieRole;
@@ -33,8 +34,9 @@ class AdminBackupManagementTest extends TestCase
         $response->assertOk();
         $response->assertInertia(fn (Assert $page) => $page
             ->component('Admin/Backups')
-            ->has('backups', 1)
-            ->where('backups.0.name', 'backup-20260502-010000.zip')
+            ->has('backups.data', 1)
+            ->where('backups.data.0.name', 'backup-20260502-010000.zip')
+            ->where('backups.total', 1)
         );
     }
 
@@ -42,13 +44,7 @@ class AdminBackupManagementTest extends TestCase
     {
         $admin = $this->createAdminUserWithRole(Role::Admin->value);
 
-        Artisan::shouldReceive('call')
-            ->once()
-            ->with('backup:run', [
-                '--disable-notifications' => true,
-                '--no-interaction' => true,
-            ])
-            ->andReturn(0);
+        Queue::fake();
 
         $response = $this->actingAs($admin, 'admin')
             ->from(route('admin.backups.index'))
@@ -56,6 +52,7 @@ class AdminBackupManagementTest extends TestCase
 
         $response->assertRedirect(route('admin.backups.index'));
         $response->assertSessionHas('success');
+        Queue::assertPushed(RunBackupCommandJob::class);
     }
 
     public function test_admin_can_download_backup_file(): void
