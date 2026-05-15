@@ -249,7 +249,7 @@ class AdminDtrExportController extends Controller
                 ->values()
                 ->all();
 
-            $slots = array_slice($sortedRecords, 0, 3);
+            $slots = $this->selectDisplaySlots($sortedRecords);
 
             $slotMap = [
                 'morning' => $slots[0] ?? null,
@@ -353,5 +353,36 @@ class AdminDtrExportController extends Controller
         $time = Carbon::parse($value);
 
         return $time->format('g:iA');
+    }
+
+    private function selectDisplaySlots(array $records): array
+    {
+        if (count($records) <= 3) {
+            return $records;
+        }
+
+        $actualRecords = collect($records)
+            ->filter(fn ($record): bool => ! empty($record?->actual_time_in) || ! empty($record?->actual_time_out))
+            ->values();
+
+        $selected = $actualRecords->take(3);
+
+        if ($selected->count() < 3) {
+            $selected = $selected
+                ->concat(
+                    collect($records)
+                        ->reject(fn ($record): bool => $actualRecords->containsStrict($record))
+                        ->take(3 - $selected->count())
+                );
+        }
+
+        return $selected
+            ->sortBy(function ($record) {
+                $rawOfficial = $record?->raw_official_time_in ?? $record?->official_time_in;
+
+                return $rawOfficial ? Carbon::parse($rawOfficial)->timestamp : PHP_INT_MAX;
+            })
+            ->values()
+            ->all();
     }
 }
