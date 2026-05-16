@@ -25,7 +25,7 @@ class AdminActivityLogPageTest extends TestCase
             ->useLog('actions')
             ->causedBy($admin)
             ->event('action')
-            ->log('PATCH profile.update');
+            ->log('Admin updated profile');
 
         $response = $this->actingAs($admin, 'admin')
             ->get(route('admin.activity-logs.index'));
@@ -34,7 +34,7 @@ class AdminActivityLogPageTest extends TestCase
         $response->assertInertia(fn (Assert $page) => $page
             ->component('Admin/ActivityLogs')
             ->has('activityLogs.data', 1)
-            ->where('activityLogs.data.0.description', 'PATCH profile.update')
+            ->where('activityLogs.data.0.description', 'Admin updated profile')
         );
     }
 

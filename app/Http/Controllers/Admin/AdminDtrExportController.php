@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AdminDtrExportController extends Controller
 {
@@ -188,7 +189,7 @@ class AdminDtrExportController extends Controller
     /**
      * Serve the generated PDF file for download, then clean up.
      */
-    public function downloadFile(Request $request): BinaryFileResponse|JsonResponse
+    public function downloadFile(Request $request): BinaryFileResponse|StreamedResponse|JsonResponse
     {
         $token = $request->query('token');
         $fileName = $request->query('fileName', 'dtr.pdf');
@@ -208,10 +209,29 @@ class AdminDtrExportController extends Controller
         }
 
         $fullPath = Storage::disk('local')->path($path);
+        $size = Storage::disk('local')->size($path);
 
-        return response()
-            ->download($fullPath, $fileName)
-            ->deleteFileAfterSend(true);
+        // Prevent stray buffered output (e.g. a leading newline) from corrupting binary files.
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
+
+        return response()->streamDownload(function () use ($fullPath): void {
+            $stream = fopen($fullPath, 'rb');
+
+            if ($stream === false) {
+                return;
+            }
+
+            fpassthru($stream);
+            fclose($stream);
+        }, $fileName, [
+            'Content-Type' => $extension === 'zip' ? 'application/zip' : 'application/pdf',
+            'Content-Transfer-Encoding' => 'binary',
+            'Content-Length' => (string) $size,
+            'Cache-Control' => 'no-store, no-cache, must-revalidate',
+            'Pragma' => 'no-cache',
+        ]);
     }
 
     /* ──────────────────────────────────────────────────────────────
@@ -249,7 +269,7 @@ class AdminDtrExportController extends Controller
                 ->values()
                 ->all();
 
-            $slots = array_slice($sortedRecords, 0, 3);
+            $slots = $this->selectDisplaySlots($sortedRecords);
 
             $slotMap = [
                 'morning' => $slots[0] ?? null,
@@ -353,5 +373,36 @@ class AdminDtrExportController extends Controller
         $time = Carbon::parse($value);
 
         return $time->format('g:iA');
+    }
+
+    private function selectDisplaySlots(array $records): array
+    {
+        if (count($records) <= 3) {
+            return $records;
+        }
+
+        $actualRecords = collect($records)
+            ->filter(fn ($record): bool => ! empty($record?->actual_time_in) || ! empty($record?->actual_time_out))
+            ->values();
+
+        $selected = $actualRecords->take(3);
+
+        if ($selected->count() < 3) {
+            $selected = $selected
+                ->concat(
+                    collect($records)
+                        ->reject(fn ($record): bool => $actualRecords->containsStrict($record))
+                        ->take(3 - $selected->count())
+                );
+        }
+
+        return $selected
+            ->sortBy(function ($record) {
+                $rawOfficial = $record?->raw_official_time_in ?? $record?->official_time_in;
+
+                return $rawOfficial ? Carbon::parse($rawOfficial)->timestamp : PHP_INT_MAX;
+            })
+            ->values()
+            ->all();
     }
 }

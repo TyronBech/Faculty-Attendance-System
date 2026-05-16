@@ -10,6 +10,7 @@ export default function DtrExport({ facultyOptions = [], dtrExportDefaults = {},
     const [selectedMonth, setSelectedMonth] = useState(dtrExportDefaults.month ?? new Date().getMonth() + 1);
     const [selectedYear, setSelectedYear] = useState(dtrExportDefaults.year ?? new Date().getFullYear());
     const [showPreview, setShowPreview] = useState(false);
+    const [search, setSearch] = useState('');
 
     const monthOptions = [
         { value: 1, label: 'January' },
@@ -27,6 +28,18 @@ export default function DtrExport({ facultyOptions = [], dtrExportDefaults = {},
     ];
 
     const allFacultyIds = useMemo(() => facultyOptions.map((faculty) => faculty.id), [facultyOptions]);
+    const filteredFacultyOptions = useMemo(() => {
+        const query = search.trim().toLowerCase();
+
+        if (!query) return facultyOptions;
+
+        return facultyOptions.filter((faculty) => {
+            const name = String(faculty.name ?? '').toLowerCase();
+            const department = String(faculty.department ?? '').toLowerCase();
+
+            return name.includes(query) || department.includes(query);
+        });
+    }, [facultyOptions, search]);
     const allSelected = selectedFacultyIds.length > 0 && selectedFacultyIds.length === allFacultyIds.length;
 
     const toggleSelectAll = () => {
@@ -100,6 +113,15 @@ export default function DtrExport({ facultyOptions = [], dtrExportDefaults = {},
                 </div>
 
                 <div className="mt-5 overflow-x-auto rounded-2xl border border-gray-200 dark:border-gray-700">
+                    <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-700">
+                        <input
+                            type="text"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            placeholder="Search faculty or department..."
+                            className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 focus:border-[#7a1315] focus:ring-[#7a1315] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+                        />
+                    </div>
                     <table className="min-w-full text-sm">
                         <thead className="bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
                             <tr>
@@ -116,14 +138,14 @@ export default function DtrExport({ facultyOptions = [], dtrExportDefaults = {},
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                            {facultyOptions.length === 0 ? (
+                            {filteredFacultyOptions.length === 0 ? (
                                 <tr>
                                     <td colSpan={3} className="px-4 py-6 text-center text-sm text-gray-500 dark:text-gray-400">
-                                        No faculty available.
+                                        {facultyOptions.length === 0 ? 'No faculty available.' : 'No matching faculty found.'}
                                     </td>
                                 </tr>
                             ) : (
-                                facultyOptions.map((faculty) => {
+                                filteredFacultyOptions.map((faculty) => {
                                     const isSelected = selectedFacultyIds.includes(faculty.id);
 
                                     return (
