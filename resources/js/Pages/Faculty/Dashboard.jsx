@@ -149,6 +149,7 @@ function StatCard({ stat, index }) {
    ────────────────────────────────────────────── */
 function ScheduleCard({ item }) {
     const isCurrent = item.status === 'ongoing';
+    const isTemporarySubstitute = item.isTemporary === true || item.scheduleSource === 'temporary';
 
     return (
         <div
@@ -166,6 +167,11 @@ function ScheduleCard({ item }) {
                             <p className="mt-1 text-xs font-medium text-gray-500 dark:text-gray-400">
                                 {item.code}
                             </p>
+                        )}
+                        {isTemporarySubstitute && (
+                            <span className="mt-2 inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.18em] text-amber-700 ring-1 ring-inset ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-300 dark:ring-amber-400/30">
+                                Temporary Substitute
+                            </span>
                         )}
                         {(item.programCode || item.yearLevel || item.sectionName) && (
                             <p className="mt-1 text-xs font-semibold text-amber-600 dark:text-amber-500">

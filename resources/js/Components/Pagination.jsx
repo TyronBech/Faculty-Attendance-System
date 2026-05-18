@@ -1,3 +1,5 @@
+import CustomDatePicker from '@/Components/CustomDatePicker';
+
 /**
  * Reusable Pagination component.
  *
@@ -113,19 +115,23 @@ export default function Pagination({
                 {/* Optional Date Range Search */}
                 {showDateRange && (
                     <div className="flex items-center gap-2">
-                        <input
-                            type="date"
-                            value={dateRange.start}
-                            onChange={(e) => onDateRangeChange({ ...dateRange, start: e.target.value })}
-                            className="form-input-sm !w-auto [color-scheme:light] dark:[color-scheme:dark]"
-                        />
+                        <div className="w-[156px]">
+                            <CustomDatePicker
+                                id="pagination-date-start"
+                                value={dateRange.start}
+                                onChange={(value) => onDateRangeChange({ ...dateRange, start: value })}
+                                placeholder="mm/dd/yyyy"
+                            />
+                        </div>
                         <span className="text-gray-400 dark:text-gray-500 text-xs font-bold px-1">to</span>
-                        <input
-                            type="date"
-                            value={dateRange.end}
-                            onChange={(e) => onDateRangeChange({ ...dateRange, end: e.target.value })}
-                            className="form-input-sm !w-auto [color-scheme:light] dark:[color-scheme:dark]"
-                        />
+                        <div className="w-[156px]">
+                            <CustomDatePicker
+                                id="pagination-date-end"
+                                value={dateRange.end}
+                                onChange={(value) => onDateRangeChange({ ...dateRange, end: value })}
+                                placeholder="mm/dd/yyyy"
+                            />
+                        </div>
                     </div>
                 )}
             </div>
