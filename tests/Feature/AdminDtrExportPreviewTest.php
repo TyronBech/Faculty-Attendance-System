@@ -146,12 +146,73 @@ class AdminDtrExportPreviewTest extends TestCase
         $this->assertNotNull($dayRow);
         $this->assertSame('8:30AM', $dayRow['official_morning_in']);
         $this->assertSame('9:30AM', $dayRow['official_morning_out']);
+        $this->assertSame('10:30AM', $dayRow['internal_morning_in']);
+        $this->assertSame('11:30AM', $dayRow['internal_morning_out']);
+        $this->assertSame(8, $dayRow['internal_day']);
+        $this->assertSame(2, $dayRow['internal_day_shift']);
         $this->assertSame('1:00PM', $dayRow['official_afternoon_in']);
         $this->assertSame('3:00PM', $dayRow['official_afternoon_out']);
+        $this->assertSame('1:00PM', $dayRow['internal_afternoon_in']);
+        $this->assertSame('3:00PM', $dayRow['internal_afternoon_out']);
         $this->assertSame(30, $dayRow['tardy_minutes']);
         $this->assertSame(30, $dayRow['undertime_minutes']);
         $this->assertEquals(3.0, $dayRow['total_hours_rendered']);
         $this->assertEquals(4.0, $dayRow['required_hours']);
+    }
+
+    public function test_preview_applies_operational_deltas_to_official_and_internal_tabs_without_persisting(): void
+    {
+        $admin = User::factory()->create();
+        $this->actingAs($admin, 'admin');
+
+        $faculty = Faculty::factory()->create();
+        $officialDate = Carbon::create(2026, 3, 2, 7, 0, 0);
+        $movedDate = Carbon::create(2026, 3, 4, 18, 0, 0);
+
+        $record = AttendanceRecord::factory()->create([
+            'faculty_id' => $faculty->id,
+            'attendance_date' => $officialDate->toDateString(),
+            'day_of_week' => 'Monday',
+            'official_time_in' => $officialDate->copy()->setTime(7, 0, 0),
+            'official_time_out' => $officialDate->copy()->setTime(10, 0, 0),
+            'operational_day_of_week' => 'Wednesday',
+            'operational_time_in' => $movedDate->copy()->setTime(18, 0, 0),
+            'operational_time_out' => $movedDate->copy()->setTime(20, 0, 0),
+            'actual_time_in' => $movedDate->copy()->setTime(18, 10, 0),
+            'actual_time_out' => $movedDate->copy()->setTime(19, 55, 0),
+            'internal_schedule_id' => null,
+            'late_minutes' => 0,
+            'undertime_minutes' => 0,
+            'required_hours' => 3,
+            'total_hours_rendered' => 0,
+        ]);
+
+        $response = $this->getJson(route('admin.dtr-export.preview', [
+            'faculty_id' => $faculty->id,
+            'month' => 3,
+            'year' => 2026,
+        ]));
+
+        $response->assertOk();
+
+        $payload = $response->json();
+        $dayRow = collect($payload['rows'])->firstWhere('day', 2);
+
+        $this->assertNotNull($dayRow);
+        $this->assertSame('7:10AM', $dayRow['official_morning_in']);
+        $this->assertSame('9:55AM', $dayRow['official_morning_out']);
+        $this->assertSame('6:10PM', $dayRow['internal_morning_in']);
+        $this->assertSame('7:55PM', $dayRow['internal_morning_out']);
+        $this->assertSame(10, $dayRow['tardy_minutes']);
+        $this->assertSame(5, $dayRow['undertime_minutes']);
+        $this->assertSame(4, $dayRow['internal_day']);
+        $this->assertSame(2, $dayRow['internal_day_shift']);
+
+        $record->refresh();
+        $this->assertSame(0, (int) $record->late_minutes);
+        $this->assertSame(0, (int) $record->undertime_minutes);
+        $this->assertSame('2026-03-02 07:00:00', $record->official_time_in->format('Y-m-d H:i:s'));
+        $this->assertSame('2026-03-02 10:00:00', $record->official_time_out->format('Y-m-d H:i:s'));
     }
 
     public function test_dispatch_batch_queues_job(): void
@@ -252,6 +313,8 @@ class AdminDtrExportPreviewTest extends TestCase
         $this->assertNotNull($dayRow);
         $this->assertSame('8:00AM', $dayRow['official_morning_in']);
         $this->assertSame('10:00AM', $dayRow['official_morning_out']);
+        $this->assertSame('8:00AM', $dayRow['internal_morning_in']);
+        $this->assertSame('10:00AM', $dayRow['internal_morning_out']);
         $this->assertTrue($dayRow['official_morning_absent']);
         $this->assertSame('absent', $dayRow['status']);
         $this->assertEquals(0.0, $dayRow['total_hours_rendered']);

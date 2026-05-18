@@ -334,15 +334,15 @@
             <table class="summary-table">
                 <tr><th colspan="2" class="section-hdr">SUMMARY</th></tr>
                 <tr>
-                    <td class="label-col">Total Hours Rendered:</td>
+                    <td class="label-col">No. Hours Rendered:</td>
                     <td class="val-col">{{ number_format((float) $totalHoursRendered, 2) }}</td>
                 </tr>
                 <tr>
-                    <td class="label-col">Total Required Hours:</td>
+                    <td class="label-col">No. Required Hours:</td>
                     <td class="val-col">{{ number_format((float) $totalRequiredHours, 2) }}</td>
                 </tr>
                 <tr>
-                    <td class="label-col">Total Days Present:</td>
+                    <td class="label-col">No. Days Present:</td>
                     <td class="val-col">{{ $daysPresent }}</td>
                 </tr>
                 <tr>
@@ -350,7 +350,7 @@
                     <td class="val-col">{{ $daysAbsent }}</td>
                 </tr>
                 <tr>
-                    <td class="label-col">Total Hours Absent:</td>
+                    <td class="label-col">No. Hours Absent:</td>
                     <td class="val-col">{{ number_format((float) $totalHoursAbsent, 2) }}</td>
                 </tr>
                 <tr>

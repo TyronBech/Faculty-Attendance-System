@@ -24,6 +24,12 @@ class AdminActivityLogPageTest extends TestCase
         activity()
             ->useLog('actions')
             ->causedBy($admin)
+            ->withProperties([
+                'action_label' => 'updated admin profile',
+                'method' => 'PATCH',
+                'route_name' => 'admin.profile.update',
+                'path' => 'admin/profile',
+            ])
             ->event('action')
             ->log('Admin updated profile');
 
@@ -35,6 +41,10 @@ class AdminActivityLogPageTest extends TestCase
             ->component('Admin/ActivityLogs')
             ->has('activityLogs.data', 1)
             ->where('activityLogs.data.0.description', 'Admin updated profile')
+            ->where('activityLogs.data.0.action_label', 'updated admin profile')
+            ->where('activityLogs.data.0.method', 'PATCH')
+            ->where('activityLogs.data.0.route_name', 'admin.profile.update')
+            ->where('activityLogs.data.0.path', 'admin/profile')
         );
     }
 

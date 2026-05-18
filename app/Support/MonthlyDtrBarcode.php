@@ -4,7 +4,7 @@ namespace App\Support;
 
 use App\Models\Faculty;
 use Carbon\CarbonInterface;
-use Milon\Barcode\Facades\DNS1DFacade;
+use Milon\Barcode\DNS1D;
 
 final class MonthlyDtrBarcode
 {
@@ -17,7 +17,7 @@ final class MonthlyDtrBarcode
         $date = $printedAt->format('Y-m-d');
         $value = $facultyKey.'|'.$date;
 
-        $png = DNS1DFacade::getBarcodePNG($value, 'C128', 1.2, 40);
+        $png = (new DNS1D)->getBarcodePNG($value, 'C128', 1.2, 40);
 
         if (! is_string($png) || $png === '') {
             return ['img' => '', 'value' => $value];

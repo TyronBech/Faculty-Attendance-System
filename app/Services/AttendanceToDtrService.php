@@ -139,16 +139,8 @@ class AttendanceToDtrService
             $actualOut = $mt->actual_time_out ? Carbon::parse($mt->actual_time_out) : null;
 
             $hasActualAttendance = ! empty($mt->actual_time_in) || ! empty($mt->actual_time_out);
-            $useOperational = $this->shouldUseOperationalSchedule(
-                $mt,
-                $officialIn,
-                $officialOut,
-                $operationalIn,
-                $operationalOut,
-            );
-
-            $baseIn = $useOperational ? $operationalIn : $officialIn;
-            $baseOut = $useOperational ? $operationalOut : $officialOut;
+            $baseIn = $operationalIn ?? $officialIn;
+            $baseOut = $operationalOut ?? $officialOut;
 
             $lateMinutes = 0;
             $undertimeMinutes = 0;
@@ -169,21 +161,21 @@ class AttendanceToDtrService
             $mt->computed_undertime_minutes = $undertimeMinutes;
 
             if ($officialIn) {
-                $mt->dtr_official_time_in = $officialIn->copy()->addMinutes($lateMinutes);
+                $mt->official_time_in = $officialIn->copy()->addMinutes($lateMinutes);
             }
             if ($officialOut) {
-                $mt->dtr_official_time_out = $officialOut->copy()->subMinutes($undertimeMinutes);
+                $mt->official_time_out = $officialOut->copy()->subMinutes($undertimeMinutes);
             }
             if ($operationalIn) {
-                $mt->dtr_operational_time_in = $operationalIn->copy()->addMinutes($lateMinutes);
+                $mt->operational_time_in = $operationalIn->copy()->addMinutes($lateMinutes);
             }
             if ($operationalOut) {
-                $mt->dtr_operational_time_out = $operationalOut->copy()->subMinutes($undertimeMinutes);
+                $mt->operational_time_out = $operationalOut->copy()->subMinutes($undertimeMinutes);
             }
 
             $mt->computed_total_hours_rendered = $this->calculateRenderedHours(
-                $mt->dtr_official_time_in ?? null,
-                $mt->dtr_official_time_out ?? null,
+                $mt->official_time_in ? Carbon::parse($mt->official_time_in) : null,
+                $mt->official_time_out ? Carbon::parse($mt->official_time_out) : null,
                 $hasActualAttendance,
             );
 
@@ -251,27 +243,6 @@ class AttendanceToDtrService
         ksort($attendance);
 
         return $attendance;
-    }
-
-    private function shouldUseOperationalSchedule(
-        AttendanceRecord $record,
-        ?Carbon $officialIn,
-        ?Carbon $officialOut,
-        ?Carbon $operationalIn,
-        ?Carbon $operationalOut,
-    ): bool {
-        if (empty($record->internal_schedule_id)) {
-            return false;
-        }
-
-        if (! $officialIn || ! $officialOut || ! $operationalIn || ! $operationalOut) {
-            return false;
-        }
-
-        $sameStart = $officialIn->diffInMinutes($operationalIn, false) === 0;
-        $sameEnd = $officialOut->diffInMinutes($operationalOut, false) === 0;
-
-        return ! ($sameStart && $sameEnd);
     }
 
     private function calculateRenderedHours(?Carbon $dtrIn, ?Carbon $dtrOut, bool $hasActualAttendance): float

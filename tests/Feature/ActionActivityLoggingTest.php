@@ -35,5 +35,13 @@ class ActionActivityLoggingTest extends TestCase
             'causer_type' => User::class,
             'causer_id' => $user->id,
         ]);
+
+        $this->assertDatabaseHas('activity_log', [
+            'log_name' => 'actions',
+            'description' => $user->name.' updated profile',
+            'properties->action_label' => 'updated profile',
+            'properties->method' => 'PATCH',
+            'properties->route_name' => 'profile.update',
+        ]);
     }
 }
