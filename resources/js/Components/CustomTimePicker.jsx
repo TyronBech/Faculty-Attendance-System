@@ -87,8 +87,12 @@ export default function CustomTimePicker({ value, onChange, id, placeholder = '-
     };
 
     const handlePointerDown = (e, type) => {
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+
         const target = type === 'hour' ? hourRef.current : minuteRef.current;
         if (!target) return;
+
+        if (dragStateRef.current.pointerId !== null) return;
 
         dragStateRef.current = {
             type,
@@ -136,6 +140,32 @@ export default function CustomTimePicker({ value, onChange, id, placeholder = '-
 
         handleScroll({ target }, type);
     };
+
+    useEffect(() => {
+        if (isOpen) return undefined;
+
+        const activeType = dragStateRef.current.type;
+        const activeTarget = activeType === 'hour'
+            ? hourRef.current
+            : activeType === 'minute'
+                ? minuteRef.current
+                : null;
+
+        if (activeTarget) {
+            activeTarget.style.scrollBehavior = 'smooth';
+            activeTarget.style.cursor = 'grab';
+        }
+
+        dragStateRef.current = {
+            type: null,
+            pointerId: null,
+            startY: 0,
+            startScrollTop: 0,
+        };
+        document.body.style.userSelect = '';
+
+        return undefined;
+    }, [isOpen]);
 
     useEffect(() => {
         return () => {
