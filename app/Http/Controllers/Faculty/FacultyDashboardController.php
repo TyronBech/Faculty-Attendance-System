@@ -156,6 +156,8 @@ class FacultyDashboardController extends Controller
                 ->where('status', 'approved')
                 ->with('scheduleDetail')
                 ->get();
+
+            $matchedOnlineIds = [];
             
             // Get all active schedules and their details to map subjects to internal blocks
             $activeSchedules = $faculty->schedules()->where('status', 'active')->get();
