@@ -328,6 +328,7 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
 
     const findInternalLink = (entry) => {
         if (entry?.is_official_fallback) return entry;
+        if (entry?.is_official_fallback) return entry;
         if (!entry?.day || !entry.start_time || !entry.end_time) return null;
         const entryStart = toMinutes(entry.start_time);
         const entryEnd = toMinutes(entry.end_time);
