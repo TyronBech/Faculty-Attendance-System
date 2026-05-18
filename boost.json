@@ -2,13 +2,20 @@
     "agents": [
         "copilot"
     ],
+    "cloud": false,
     "guidelines": true,
-    "herd_mcp": false,
     "mcp": true,
-    "nightwatch_mcp": false,
+    "nightwatch": false,
+    "packages": [
+        "spatie/laravel-backup",
+        "spatie/laravel-pdf"
+    ],
     "sail": false,
     "skills": [
+        "laravel-best-practices",
         "inertia-react-development",
-        "tailwindcss-development"
+        "tailwindcss-development",
+        "laravel-backup",
+        "laravel-pdf"
     ]
 }

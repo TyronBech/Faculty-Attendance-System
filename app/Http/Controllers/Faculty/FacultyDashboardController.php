@@ -198,7 +198,8 @@ class FacultyDashboardController extends Controller
                 // If subjects are still empty, try matching based on the date and faculty's internal schedule mapping
                 if (empty($subjects)) {
                     // Try to find matching official subjects for this day and time
-                    // 1. Check for staying official details (not moved away)
+                    // 1. Check for staying official details (not moved away) that match the attendance record's time
+                    $foundMatch = false;
                     foreach ($detailsByScheduleAndDay as $key => $todayDetails) {
                         [$sId, $dDay] = explode('-', $key);
                         if ($dDay !== $dayName) continue;
@@ -207,32 +208,58 @@ class FacultyDashboardController extends Controller
                             return $approvedChangeRequests->contains('schedule_detail_id', $d->id);
                         });
 
+                        // Match by time: find a schedule detail whose time overlaps with the attendance record
                         foreach ($staying as $d) {
-                            $subjects[] = [
-                                'code' => $d->course_code ?? '',
-                                'desc' => $d->subject_desc ?: 'Operational Duty',
-                                'program_code' => $d->program_code,
-                                'year_level' => $d->year_level,
-                                'section_name' => $d->section_name,
-                            ];
+                            // Only add if times match or no specific time is recorded
+                            $timeMatches = true;
+                            if ($record->operational_time_in && $record->operational_time_out && $d->start_time && $d->end_time) {
+                                // Check if the schedule detail time overlaps with the attendance record's operational time
+                                $timeMatches = !($record->operational_time_out <= $d->start_time || $record->operational_time_in >= $d->end_time);
+                            }
+
+                            if ($timeMatches) {
+                                $subjects[] = [
+                                    'code' => $d->course_code ?? '',
+                                    'desc' => $d->subject_desc ?: 'Operational Duty',
+                                    'program_code' => $d->program_code,
+                                    'year_level' => $d->year_level,
+                                    'section_name' => $d->section_name,
+                                ];
+                                $foundMatch = true;
+                                break; // Only add the first matching subject for this day
+                            }
                         }
+                        
+                        if ($foundMatch) break; // Stop searching if we found a match
                     }
 
-                    // 2. Check for classes moved INTO this day
-                    $movedIn = $approvedChangeRequests->filter(function ($req) use ($dayName) {
-                        return $req->requested_day_of_week === $dayName;
-                    });
+                    // 2. Check for classes moved INTO this day (if no match found yet)
+                    if (!$foundMatch) {
+                        $movedIn = $approvedChangeRequests->filter(function ($req) use ($dayName) {
+                            return $req->requested_day_of_week === $dayName;
+                        });
 
-                    foreach ($movedIn as $req) {
-                        $d = $req->scheduleDetail;
-                        if ($d) {
-                            $subjects[] = [
-                                'code' => $d->course_code ?? '',
-                                'desc' => $d->subject_desc ?: 'Operational Duty',
-                                'program_code' => $d->program_code,
-                                'year_level' => $d->year_level,
-                                'section_name' => $d->section_name,
-                            ];
+                        foreach ($movedIn as $req) {
+                            $d = $req->scheduleDetail;
+                            if ($d) {
+                                // Check time match for moved classes too
+                                $timeMatches = true;
+                                if ($record->operational_time_in && $record->operational_time_out && $d->start_time && $d->end_time) {
+                                    $timeMatches = !($record->operational_time_out <= $d->start_time || $record->operational_time_in >= $d->end_time);
+                                }
+
+                                if ($timeMatches) {
+                                    $subjects[] = [
+                                        'code' => $d->course_code ?? '',
+                                        'desc' => $d->subject_desc ?: 'Operational Duty',
+                                        'program_code' => $d->program_code,
+                                        'year_level' => $d->year_level,
+                                        'section_name' => $d->section_name,
+                                    ];
+                                    $foundMatch = true;
+                                    break; // Only add the first matching subject
+                                }
+                            }
                         }
                     }
                 }
