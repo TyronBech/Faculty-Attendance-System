@@ -1201,14 +1201,28 @@ class Faculty extends Model
             ->orderByRaw($this->dayOfWeekOrderExpression('day'))
             ->orderBy('start_time', 'asc')
             ->get();
+        $temporarySchedules = $this->temporaryFacultySchedules()
+            ->orderByRaw($this->dayOfWeekOrderExpression('day'))
+            ->orderBy('start_time', 'asc')
+            ->get();
 
         $days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
         $schedule = [];
+        $temporaryByDay = $this->mapTemporarySchedulesByDay($temporarySchedules, $details, $scheduleMeta);
+        $consumedOfficialIds = collect($temporaryByDay)
+            ->flatten(1)
+            ->pluck('matchedOfficialId')
+            ->filter()
+            ->values()
+            ->all();
 
         foreach ($days as $day) {
-            $dayDetails = $details->where('day', $day);
+            $dayDetails = $details
+                ->where('day', $day)
+                ->reject(fn (ScheduleDetail $detail) => in_array($detail->id, $consumedOfficialIds, true));
+            $temporaryClasses = $temporaryByDay[$day] ?? [];
 
-            if ($dayDetails->isEmpty()) {
+            if ($dayDetails->isEmpty() && empty($temporaryClasses)) {
                 continue;
             }
 
@@ -1236,11 +1250,154 @@ class Faculty extends Model
                         'sectionName' => $detail->section_name ?? '',
                         'room' => $detail->room_code ?? 'TBA',
                     ];
+                })->values()->concat(collect($temporaryClasses))->sortBy(function (array $item) {
+                    return $this->minutesFromMeridiemTime($item['startTime'] ?? null);
                 })->values()->toArray(),
             ];
         }
 
         return $schedule;
+    }
+
+    private function mapTemporarySchedulesByDay($temporarySchedules, $officialDetails, $scheduleMeta): array
+    {
+        $days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+        $byDay = array_fill_keys($days, []);
+        $usedOfficialIds = [];
+
+        foreach ($temporarySchedules as $entry) {
+            $matchedDetail = $this->matchTemporaryScheduleToOfficialDetail($entry, $officialDetails, $usedOfficialIds);
+            $comparison = $matchedDetail ? [
+                'day' => $matchedDetail->day,
+                'startTime' => Carbon::parse($matchedDetail->start_time)->format('h:i A'),
+                'endTime' => Carbon::parse($matchedDetail->end_time)->format('h:i A'),
+                'room' => $matchedDetail->room_code ?: 'TBA',
+            ] : null;
+            $meta = $matchedDetail ? $scheduleMeta->get($matchedDetail->schedule_id) : null;
+            $hours = $entry->tuition_hours !== null
+                ? (float) $entry->tuition_hours
+                : $this->resolveTemporaryScheduleHours($entry->start_time, $entry->end_time);
+            $day = $entry->day ?: ($matchedDetail?->day ?? 'Monday');
+
+            if ($matchedDetail) {
+                $usedOfficialIds[] = $matchedDetail->id;
+            }
+
+            $byDay[$day][] = [
+                'id' => 'temporary-'.$entry->id,
+                'subject' => $entry->course_title ?: ($matchedDetail?->subject_desc ?? 'Temporary Assignment'),
+                'code' => $entry->course_code ?: ($matchedDetail?->course_code ?? ''),
+                'startTime' => $entry->start_time ? Carbon::parse($entry->start_time)->format('h:i A') : '--:--',
+                'endTime' => $entry->end_time ? Carbon::parse($entry->end_time)->format('h:i A') : '--:--',
+                'hours' => $hours,
+                'effectiveFrom' => $meta ? Carbon::parse($meta->effective_from)->format('M d, Y') : null,
+                'effectiveUntil' => $meta ? Carbon::parse($meta->effective_until)->format('M d, Y') : null,
+                'scheduleCode' => $meta?->schedule_code,
+                'programCode' => $entry->program_code ?? ($matchedDetail?->program_code ?? ''),
+                'programTitle' => $entry->program_title ?? ($matchedDetail?->program_title ?? ''),
+                'yearLevel' => $entry->year_level ?? ($matchedDetail?->year_level ?? ''),
+                'sectionName' => $entry->section_name ?? ($matchedDetail?->section_name ?? ''),
+                'room' => $entry->room_code ?: ($matchedDetail?->room_code ?? 'TBA'),
+                'isTemporary' => true,
+                'scheduleSource' => 'temporary',
+                'comparison' => $comparison,
+                'syncedAt' => $entry->synced_at ? Carbon::parse($entry->synced_at)->format('M d, Y h:i A') : null,
+                'matchedOfficialId' => $matchedDetail?->id,
+            ];
+        }
+
+        return $byDay;
+    }
+
+    private function matchTemporaryScheduleToOfficialDetail(TemporaryFacultySchedule $entry, $officialDetails, array $usedOfficialIds): ?ScheduleDetail
+    {
+        $availableDetails = $officialDetails->reject(
+            fn (ScheduleDetail $detail) => in_array($detail->id, $usedOfficialIds, true)
+        )->values();
+
+        if ($availableDetails->isEmpty()) {
+            return null;
+        }
+
+        $scored = $availableDetails->map(function (ScheduleDetail $detail) use ($entry) {
+            $score = 0;
+
+            if ($this->normalizedMatch($entry->course_code, $detail->course_code)) {
+                $score += 50;
+            }
+
+            if ($this->normalizedMatch($entry->program_code, $detail->program_code)) {
+                $score += 20;
+            }
+
+            if ($this->normalizedMatch($entry->section_name, $detail->section_name)) {
+                $score += 20;
+            }
+
+            if ($entry->year_level !== null && (int) $entry->year_level === (int) $detail->year_level) {
+                $score += 10;
+            }
+
+            if ($this->normalizedMatch($entry->course_title, $detail->subject_desc)) {
+                $score += 15;
+            }
+
+            if ($entry->day === $detail->day) {
+                $score += 8;
+            }
+
+            if ($entry->room_code && $detail->room_code && strcasecmp($entry->room_code, $detail->room_code) === 0) {
+                $score += 4;
+            }
+
+            return [
+                'detail' => $detail,
+                'score' => $score,
+            ];
+        })->sortByDesc('score')->values();
+
+        $bestMatch = $scored->first();
+
+        if (! $bestMatch || $bestMatch['score'] < 20) {
+            return null;
+        }
+
+        return $bestMatch['detail'];
+    }
+
+    private function resolveTemporaryScheduleHours(?string $startTime, ?string $endTime): float
+    {
+        if (! $startTime || ! $endTime) {
+            return 0.0;
+        }
+
+        $start = Carbon::parse($startTime);
+        $end = Carbon::parse($endTime);
+
+        return (float) max(0, round($end->diffInMinutes($start) / 60, 2));
+    }
+
+    private function minutesFromMeridiemTime(?string $time): int
+    {
+        if (! $time || $time === '--:--') {
+            return 9999;
+        }
+
+        $parsed = Carbon::createFromFormat('h:i A', $time);
+
+        return $parsed ? (((int) $parsed->format('H')) * 60) + (int) $parsed->format('i') : 9999;
+    }
+
+    private function normalizedMatch(mixed $left, mixed $right): bool
+    {
+        $leftValue = trim((string) ($left ?? ''));
+        $rightValue = trim((string) ($right ?? ''));
+
+        if ($leftValue === '' || $rightValue === '') {
+            return false;
+        }
+
+        return strcasecmp($leftValue, $rightValue) === 0;
     }
 
     /**

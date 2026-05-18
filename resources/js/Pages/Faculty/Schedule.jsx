@@ -47,6 +47,32 @@ const EMPTY_SLOT_COPY = {
     },
 };
 
+const TEMPORARY_BADGE_STYLES = {
+    card: 'bg-amber-100 text-amber-800 ring-1 ring-inset ring-amber-300/80 dark:bg-amber-400/15 dark:text-amber-200 dark:ring-amber-400/30',
+    modal: 'bg-amber-400/20 text-amber-300 ring-amber-400/30',
+};
+
+const isTemporarySchedule = (item) => {
+    if (!item) {
+        return false;
+    }
+
+    if (typeof item.isTemporary === 'boolean') {
+        return item.isTemporary;
+    }
+
+    return item.scheduleSource === 'temporary';
+};
+
+const hasOfficialComparison = (item) => {
+    return Boolean(
+        item?.comparison?.startTime
+        || item?.comparison?.endTime
+        || item?.comparison?.day
+        || item?.comparison?.room,
+    );
+};
+
 const CourseCell = ({ item }) => {
     const yearSection = [item.yearLevel, item.sectionName].filter(Boolean).join('-');
     const programSectionLabel = [item.programCode, yearSection].filter(Boolean).join(' ');
@@ -191,6 +217,8 @@ const ScheduleSlot = ({ item, title, variant, isActive, onClick, referenceDay = 
     }
 
     const roomLabel = item.room || item.comparison?.room || 'TBA';
+    const showTemporaryBadge = variant === 'official' && isTemporarySchedule(item);
+    const showOfficialComparison = showTemporaryBadge && hasOfficialComparison(item);
 
     return (
         <button
@@ -213,6 +241,12 @@ const ScheduleSlot = ({ item, title, variant, isActive, onClick, referenceDay = 
                 {title}
             </p>
 
+            {showTemporaryBadge && (
+                <span className={`mt-3 inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.2em] ${TEMPORARY_BADGE_STYLES.card}`}>
+                    Temporary
+                </span>
+            )}
+
             <p className="mt-2 text-sm font-semibold text-gray-900 dark:text-white">
                 {item.day || 'Unscheduled'}
             </p>
@@ -226,6 +260,27 @@ const ScheduleSlot = ({ item, title, variant, isActive, onClick, referenceDay = 
                     Room: <span className="font-semibold text-gray-900 dark:text-white">{roomLabel}</span>
                 </p>
             </div>
+
+            {showOfficialComparison && (
+                <div className="mt-3 w-full rounded-xl border border-blue-100 bg-blue-50/60 px-3 py-2 text-left dark:border-blue-800/30 dark:bg-blue-900/10">
+                    <p className="text-[9px] font-black uppercase tracking-[0.18em] text-blue-600 dark:text-blue-400">
+                        Official Schedule
+                    </p>
+                    <p className="mt-1 text-xs font-semibold text-gray-700 dark:text-gray-200">
+                        {item.comparison.day && item.comparison.day !== item.day ? `${item.comparison.day} • ` : ''}
+                        {item.comparison.startTime || '--:--'} - {item.comparison.endTime || '--:--'}
+                    </p>
+                    <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                        Room: {item.comparison.room || 'TBA'}
+                    </p>
+                </div>
+            )}
+
+            {showTemporaryBadge && (item.effectiveFrom || item.effectiveUntil) && (
+                <p className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-300">
+                    {item.effectiveFrom || 'Now'} - {item.effectiveUntil || 'Until further notice'}
+                </p>
+            )}
         </button>
     );
 };
@@ -328,6 +383,7 @@ export default function Schedule({ weeklySchedule, internalSchedule, facultyName
             ...item,
             day: dayData.day,
             type: 'official',
+            comparisonScheduleDetailId: item.matchedOfficialId ?? item.id,
         })))
         .sort((a, b) => sortByDayAndTime(a, b, daysArr, toMin));
 
@@ -339,7 +395,9 @@ export default function Schedule({ weeklySchedule, internalSchedule, facultyName
         })))
         .sort((a, b) => sortByDayAndTime(a, b, daysArr, toMin));
 
-    const officialClassIds = new Set(officialScheduleItems.map((item) => item.id));
+    const officialClassIds = new Set(
+        officialScheduleItems.map((item) => item.comparisonScheduleDetailId ?? item.id),
+    );
     const mirroredInternalByOfficialId = new Map(
         internalScheduleItems
             .filter((item) => item.originalScheduleDetailId)
@@ -348,7 +406,8 @@ export default function Schedule({ weeklySchedule, internalSchedule, facultyName
 
     const usedInternalIds = new Set();
     const parallelColumns = officialScheduleItems.map((officialItem) => {
-        const mirroredInternalItem = mirroredInternalByOfficialId.get(officialItem.id) || null;
+        const officialComparisonId = officialItem.comparisonScheduleDetailId ?? officialItem.id;
+        const mirroredInternalItem = mirroredInternalByOfficialId.get(officialComparisonId) || null;
 
         if (mirroredInternalItem) {
             usedInternalIds.add(mirroredInternalItem.id);
@@ -356,7 +415,7 @@ export default function Schedule({ weeklySchedule, internalSchedule, facultyName
 
         return {
             key: mirroredInternalItem
-                ? `pair-${officialItem.id}-${mirroredInternalItem.id}`
+                ? `pair-${officialComparisonId}-${mirroredInternalItem.id}`
                 : `official-${officialItem.id}`,
             officialItem,
             internalItem: mirroredInternalItem,
@@ -576,6 +635,8 @@ export default function Schedule({ weeklySchedule, internalSchedule, facultyName
 
             <Modal show={!!selectedSchedule} onClose={() => setSelectedSchedule(null)} maxWidth="xl">
                 {selectedSchedule && (() => {
+                    const selectedScheduleIsTemporary = selectedSchedule.type === 'official' && isTemporarySchedule(selectedSchedule);
+
                     // Find the corresponding row to get paired schedule info
                     const correspondingRow = comparisonRows.find(row => 
                         row.officialItem?.id === selectedSchedule.id || 
@@ -589,7 +650,7 @@ export default function Schedule({ weeklySchedule, internalSchedule, facultyName
 
                     return (
                     <div className="flex h-full flex-col overflow-hidden bg-white dark:bg-gray-800">
-                        <div className="relative h-32 w-full overflow-hidden bg-gradient-to-br from-[#7a1315] to-[#5a0d0f] p-6">
+                            <div className="relative h-32 w-full overflow-hidden bg-gradient-to-br from-[#7a1315] to-[#5a0d0f] p-6">
                             <div className="flex items-center gap-3">
                                 <span className={`rounded-lg px-2 py-1 text-[10px] font-black uppercase tracking-widest ring-1 ring-inset ${
                                     selectedSchedule.type === 'internal'
@@ -598,6 +659,11 @@ export default function Schedule({ weeklySchedule, internalSchedule, facultyName
                                 }`}>
                                     {selectedSchedule.type} load
                                 </span>
+                                {selectedScheduleIsTemporary && (
+                                    <span className={`rounded-lg px-2 py-1 text-[10px] font-black uppercase tracking-widest ring-1 ring-inset ${TEMPORARY_BADGE_STYLES.modal}`}>
+                                        Temporary
+                                    </span>
+                                )}
                                 {selectedSchedule.isChanged && (
                                     <span className="rounded-lg bg-orange-500/20 px-2 py-1 text-[10px] font-black uppercase tracking-widest text-orange-300 ring-1 ring-inset ring-orange-500/30">
                                         Modified
@@ -665,6 +731,14 @@ export default function Schedule({ weeklySchedule, internalSchedule, facultyName
                                                     <span className="text-xs font-bold text-gray-500 dark:text-gray-400">Active Period</span>
                                                     <span className="text-xs font-bold text-gray-900 dark:text-white">
                                                         {selectedSchedule.effectiveFrom} - {selectedSchedule.effectiveUntil || 'Present'}
+                                                    </span>
+                                                </div>
+                                            )}
+                                            {selectedScheduleIsTemporary && (
+                                                <div className="flex items-start justify-between">
+                                                    <span className="text-xs font-bold text-gray-500 dark:text-gray-400">Schedule Status</span>
+                                                    <span className="text-xs font-black uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                                                        Temporary schedule in effect
                                                     </span>
                                                 </div>
                                             )}
