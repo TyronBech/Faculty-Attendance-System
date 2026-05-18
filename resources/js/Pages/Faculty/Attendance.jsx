@@ -356,6 +356,11 @@ export default function FacultyAttendance({ attendanceLogs }) {
                                                                     {s.desc}
                                                                 </div>
                                                             )}
+                                                            {s.is_temporary && (
+                                                                <div className="mt-1 text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                                                                    Temporary Substitute
+                                                                </div>
+                                                            )}
                                                             {(s.program_code || s.year_level || s.section_name) && (
                                                                 <div className="mt-1 text-[10px] font-bold text-amber-600 dark:text-amber-500">
                                                                     {[s.program_code, (s.year_level || s.section_name) ? [s.year_level, s.section_name].filter(Boolean).join('-') : null].filter(Boolean).join(' ')}
@@ -373,6 +378,11 @@ export default function FacultyAttendance({ attendanceLogs }) {
                                                 <span className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-black uppercase tracking-wider ring-1 ring-inset ${statusStyle(log.status)}`}>
                                                     {log.status}
                                                 </span>
+                                                {log.temporary_substitute && (
+                                                    <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700 ring-1 ring-inset ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-300 dark:ring-amber-500/30">
+                                                        Temporary Substitute
+                                                    </span>
+                                                )}
                                                 {log.online_attendance && (
                                                     <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-blue-700 ring-1 ring-inset ring-blue-600/20 dark:bg-blue-900/30 dark:text-blue-400 dark:ring-blue-500/30">
                                                         Online

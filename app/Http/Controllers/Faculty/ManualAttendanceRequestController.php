@@ -21,6 +21,7 @@ class ManualAttendanceRequestController extends Controller
     {
         $faculty = $request->user()->faculty;
         $manualRequestLimit = SystemSetting::manualAttendanceRequestLimit();
+        $isTemporarySubstituteFaculty = $this->isTemporarySubstituteFaculty($faculty);
 
         if (! $faculty) {
             return Inertia::render('Faculty/ManualAttendanceRequests', [
@@ -46,13 +47,16 @@ class ManualAttendanceRequestController extends Controller
             ->paginate(10);
 
         // Add formatted data
-        $requests->through(function ($req) {
+        $requests->through(function ($req) use ($isTemporarySubstituteFaculty) {
             $req->attachment_url = $req->getAttachmentUrl();
             $req->attachments_data = $req->getAttachmentsData();
             if ($req->attendanceRecord) {
-                $req->course_name = $req->attendanceRecord->scheduleDetail?->course_title
+                $baseCourseName = $req->attendanceRecord->scheduleDetail?->course_title
                     ?? $req->attendanceRecord->internalSchedule?->name
                     ?? 'Unknown Course';
+                $req->course_name = $isTemporarySubstituteFaculty && $req->attendanceRecord->scheduleDetail
+                    ? $baseCourseName.' (Temporary Substitute)'
+                    : $baseCourseName;
                 $req->attendance_date = $req->attendanceRecord->attendance_date->format('Y-m-d');
             }
 
@@ -77,7 +81,7 @@ class ManualAttendanceRequestController extends Controller
             ->with(['scheduleDetail', 'internalSchedule'])
             ->orderBy('attendance_date', 'desc')
             ->get()
-            ->map(function ($record) use ($faculty) {
+            ->map(function ($record) use ($faculty, $isTemporarySubstituteFaculty) {
                 $hasPendingRequest = AttendanceJustification::query()
                     ->where('faculty_id', $faculty->id)
                     ->where('type', 'manual_time')
@@ -85,11 +89,17 @@ class ManualAttendanceRequestController extends Controller
                     ->where('status', 'pending')
                     ->exists();
 
+                $baseCourseName = $record->scheduleDetail?->course_title ?? $record->internalSchedule?->name ?? 'Unknown';
+
                 return [
                     'id' => $record->id,
                     'attendance_date' => $record->attendance_date->format('Y-m-d'),
-                    'course_name' => $record->scheduleDetail?->course_title ?? $record->internalSchedule?->name ?? 'Unknown',
-                    'schedule_type' => $record->scheduleDetail ? 'official' : 'operational',
+                    'course_name' => $isTemporarySubstituteFaculty && $record->scheduleDetail
+                        ? $baseCourseName.' (Temporary Substitute)'
+                        : $baseCourseName,
+                    'schedule_type' => $record->scheduleDetail
+                        ? ($isTemporarySubstituteFaculty ? 'temporary_substitute' : 'official')
+                        : 'operational',
                     'has_pending_request' => $hasPendingRequest,
                     'actual_time_in' => $record->actual_time_in?->format('H:i'),
                     'actual_time_out' => $record->actual_time_out?->format('H:i'),
@@ -231,13 +241,17 @@ class ManualAttendanceRequestController extends Controller
             ->orderBy('created_at', 'desc')
             ->paginate(10);
 
-        $requests->through(function ($req) {
+        $requests->through(function ($req) use ($faculty) {
+            $isTemporarySubstituteFaculty = $this->isTemporarySubstituteFaculty($faculty);
             $req->attachment_url = $req->getAttachmentUrl();
             $req->attachments_data = $req->getAttachmentsData();
             if ($req->attendanceRecord) {
-                $req->course_name = $req->attendanceRecord->scheduleDetail?->course_title
+                $baseCourseName = $req->attendanceRecord->scheduleDetail?->course_title
                     ?? $req->attendanceRecord->internalSchedule?->name
                     ?? 'N/A';
+                $req->course_name = $isTemporarySubstituteFaculty && $req->attendanceRecord->scheduleDetail
+                    ? $baseCourseName.' (Temporary Substitute)'
+                    : $baseCourseName;
             }
 
             return $req;
@@ -256,5 +270,15 @@ class ManualAttendanceRequestController extends Controller
         $responseData['manualRequestLimit'] = $manualRequestLimit;
 
         return response()->json($responseData);
+    }
+
+    private function isTemporarySubstituteFaculty(mixed $faculty): bool
+    {
+        if (! $faculty) {
+            return false;
+        }
+
+        return strcasecmp((string) ($faculty->employment_type ?? ''), 'substitute') === 0
+            || strcasecmp((string) ($faculty->faculty_type ?? ''), 'substitute') === 0;
     }
 }

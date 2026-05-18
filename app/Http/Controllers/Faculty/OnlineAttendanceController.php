@@ -90,8 +90,8 @@ class OnlineAttendanceController extends Controller
         }
 
         $validated = $request->validate([
-            'schedule_detail_id' => 'nullable|exists:schedule_details,id',
-            'internal_schedule_id' => 'nullable|exists:internal_schedules,id',
+            'schedule_detail_id' => 'nullable|required_without:internal_schedule_id|exists:schedule_details,id',
+            'internal_schedule_id' => 'nullable|required_without:schedule_detail_id|exists:internal_schedules,id',
             'class_type' => 'required|in:synchronous,asynchronous',
             'attendance_date' => 'required|date|before_or_equal:today',
             'time_in' => 'required|date_format:H:i',

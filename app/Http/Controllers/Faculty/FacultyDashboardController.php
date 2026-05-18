@@ -3,15 +3,18 @@
 namespace App\Http\Controllers\Faculty;
 
 use App\Http\Controllers\Controller;
+use App\Models\AttendanceRecord;
 use App\Models\Faculty;
 use App\Models\Holiday;
-use App\Models\AttendanceRecord;
 use App\Models\OnlineAttendanceRequest;
 use App\Models\ScheduleChangeRequest;
 use App\Models\ScheduleDetail;
+use App\Models\TemporaryFacultySchedule;
 use App\Services\AttendanceReconciliationService;
 use Carbon\Carbon;
+use Carbon\CarbonInterface;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Inertia\Inertia;
 
 class FacultyDashboardController extends Controller
@@ -27,7 +30,7 @@ class FacultyDashboardController extends Controller
         $faculty = $request->user()->faculty;
 
         // Fallback for users without a faculty profile
-        if (!$faculty) {
+        if (! $faculty) {
             return Inertia::render('Faculty/Dashboard', [
                 'stats' => [],
                 'todaySchedule' => [],
@@ -70,8 +73,8 @@ class FacultyDashboardController extends Controller
             'currentDate' => Carbon::now()->format('l, F j, Y'),
             'greeting' => $this->getGreeting(),
             'filters' => [
-                'range' => $range
-            ]
+                'range' => $range,
+            ],
         ]);
     }
 
@@ -81,8 +84,9 @@ class FacultyDashboardController extends Controller
     public function getAnalyticsData(Request $request)
     {
         $faculty = $request->user()->faculty;
-        if (!$faculty)
+        if (! $faculty) {
             return response()->json([], 404);
+        }
 
         $range = $request->query('range', 'Last 6 months');
         $months = match ($range) {
@@ -102,7 +106,6 @@ class FacultyDashboardController extends Controller
      * Display the full biometric logs page.
      */
 
-
     /**
      * Display the schedule & attendance page.
      */
@@ -110,7 +113,7 @@ class FacultyDashboardController extends Controller
     {
         $faculty = $request->user()->faculty;
 
-        if (!$faculty) {
+        if (! $faculty) {
             return Inertia::render('Faculty/Schedule', [
                 'weeklySchedule' => [],
                 'internalSchedule' => [],
@@ -140,6 +143,10 @@ class FacultyDashboardController extends Controller
                 ->with(['scheduleDetail', 'justifications'])
                 ->orderBy('attendance_date', 'desc')
                 ->get();
+            $temporarySchedulesByDay = $faculty->temporaryFacultySchedules()
+                ->get()
+                ->groupBy(fn (TemporaryFacultySchedule $schedule) => $schedule->day ?: 'Monday');
+            $isTemporarySubstituteFaculty = $this->isTemporarySubstituteFaculty($faculty);
 
             // Get all approved online attendance requests for this faculty
             $onlineRequests = OnlineAttendanceRequest::where('faculty_id', $faculty->id)
@@ -148,9 +155,9 @@ class FacultyDashboardController extends Controller
                 ->get();
 
             // Create indexes for matching
-            $onlineByDateAndSchedule = $onlineRequests->keyBy(fn($req) => $req->attendance_date->toDateString() . '-' . ($req->schedule_detail_id ?? ''));
-            $onlineByDate = $onlineRequests->keyBy(fn($req) => $req->attendance_date->toDateString());
-            
+            $onlineByDateAndSchedule = $onlineRequests->keyBy(fn ($req) => $req->attendance_date->toDateString().'-'.($req->schedule_detail_id ?? ''));
+            $onlineByDate = $onlineRequests->keyBy(fn ($req) => $req->attendance_date->toDateString());
+
             // Get all approved schedule change requests to handle moved classes
             $approvedChangeRequests = ScheduleChangeRequest::where('faculty_id', $faculty->id)
                 ->where('status', 'approved')
@@ -158,15 +165,15 @@ class FacultyDashboardController extends Controller
                 ->get();
 
             $matchedOnlineIds = [];
-            
+
             // Get all active schedules and their details to map subjects to internal blocks
             $activeSchedules = $faculty->schedules()->where('status', 'active')->get();
             $activeScheduleIds = $activeSchedules->pluck('id');
             $allDetails = ScheduleDetail::whereIn('schedule_id', $activeScheduleIds)->get();
-            $detailsByScheduleAndDay = $allDetails->groupBy(fn($d) => $d->schedule_id . '-' . $d->day);
+            $detailsByScheduleAndDay = $allDetails->groupBy(fn ($d) => $d->schedule_id.'-'.$d->day);
             $holidays = Holiday::all();
 
-            $attendanceLogs = $records->map(function ($record) use ($onlineByDateAndSchedule, $onlineByDate, &$matchedOnlineIds, $approvedChangeRequests, $detailsByScheduleAndDay, $holidays) {
+            $attendanceLogs = $records->map(function ($record) use ($onlineByDateAndSchedule, $onlineByDate, &$matchedOnlineIds, $approvedChangeRequests, $detailsByScheduleAndDay, $holidays, $temporarySchedulesByDay, $isTemporarySubstituteFaculty) {
                 $detail = $record->scheduleDetail;
                 $date = $record->attendance_date;
                 $dayName = $date->format('l');
@@ -174,14 +181,24 @@ class FacultyDashboardController extends Controller
                 // Check if there's an approved online attendance request for this record
                 $scheduleDetailId = $record->schedule_detail_id ?? $detail?->id ?? '';
                 $dateStr = $date->toDateString();
-                
+
                 // Try matching by date+schedule_detail_id first, then by date only
-                $onlineRequest = $onlineByDateAndSchedule->get($dateStr . '-' . $scheduleDetailId) 
+                $onlineRequest = $onlineByDateAndSchedule->get($dateStr.'-'.$scheduleDetailId)
                     ?? $onlineByDate->get($dateStr);
-                    
+
                 if ($onlineRequest) {
                     $matchedOnlineIds[] = $onlineRequest->id;
                 }
+
+                $temporarySchedule = $isTemporarySubstituteFaculty
+                    ? $this->findMatchingTemporarySchedule(
+                        $date,
+                        $temporarySchedulesByDay,
+                        $detail ?: ($onlineRequest ? $onlineRequest->scheduleDetail : null),
+                        $record->operational_time_in ?: ($detail?->start_time ? Carbon::parse($detail->start_time) : null),
+                        $record->operational_time_out ?: ($detail?->end_time ? Carbon::parse($detail->end_time) : null)
+                    )
+                    : null;
 
                 // Build subjects array from the linked schedule detail or online request
                 $subjects = [];
@@ -194,8 +211,9 @@ class FacultyDashboardController extends Controller
                         'program_code' => $resolvedDetail->program_code,
                         'year_level' => $resolvedDetail->year_level,
                         'section_name' => $resolvedDetail->section_name,
+                        'is_temporary' => $temporarySchedule !== null,
                     ];
-                } 
+                }
 
                 // If subjects are still empty, try matching based on the date and faculty's internal schedule mapping
                 if (empty($subjects)) {
@@ -204,7 +222,9 @@ class FacultyDashboardController extends Controller
                     $foundMatch = false;
                     foreach ($detailsByScheduleAndDay as $key => $todayDetails) {
                         [$sId, $dDay] = explode('-', $key);
-                        if ($dDay !== $dayName) continue;
+                        if ($dDay !== $dayName) {
+                            continue;
+                        }
 
                         $staying = $todayDetails->reject(function ($d) use ($approvedChangeRequests) {
                             return $approvedChangeRequests->contains('schedule_detail_id', $d->id);
@@ -216,7 +236,7 @@ class FacultyDashboardController extends Controller
                             $timeMatches = true;
                             if ($record->operational_time_in && $record->operational_time_out && $d->start_time && $d->end_time) {
                                 // Check if the schedule detail time overlaps with the attendance record's operational time
-                                $timeMatches = !($record->operational_time_out <= $d->start_time || $record->operational_time_in >= $d->end_time);
+                                $timeMatches = ! ($record->operational_time_out <= $d->start_time || $record->operational_time_in >= $d->end_time);
                             }
 
                             if ($timeMatches) {
@@ -226,17 +246,20 @@ class FacultyDashboardController extends Controller
                                     'program_code' => $d->program_code,
                                     'year_level' => $d->year_level,
                                     'section_name' => $d->section_name,
+                                    'is_temporary' => $temporarySchedule !== null,
                                 ];
                                 $foundMatch = true;
                                 break; // Only add the first matching subject for this day
                             }
                         }
-                        
-                        if ($foundMatch) break; // Stop searching if we found a match
+
+                        if ($foundMatch) {
+                            break;
+                        } // Stop searching if we found a match
                     }
 
                     // 2. Check for classes moved INTO this day (if no match found yet)
-                    if (!$foundMatch) {
+                    if (! $foundMatch) {
                         $movedIn = $approvedChangeRequests->filter(function ($req) use ($dayName) {
                             return $req->requested_day_of_week === $dayName;
                         });
@@ -247,7 +270,7 @@ class FacultyDashboardController extends Controller
                                 // Check time match for moved classes too
                                 $timeMatches = true;
                                 if ($record->operational_time_in && $record->operational_time_out && $d->start_time && $d->end_time) {
-                                    $timeMatches = !($record->operational_time_out <= $d->start_time || $record->operational_time_in >= $d->end_time);
+                                    $timeMatches = ! ($record->operational_time_out <= $d->start_time || $record->operational_time_in >= $d->end_time);
                                 }
 
                                 if ($timeMatches) {
@@ -257,6 +280,7 @@ class FacultyDashboardController extends Controller
                                         'program_code' => $d->program_code,
                                         'year_level' => $d->year_level,
                                         'section_name' => $d->section_name,
+                                        'is_temporary' => $temporarySchedule !== null,
                                     ];
                                     $foundMatch = true;
                                     break; // Only add the first matching subject
@@ -274,6 +298,7 @@ class FacultyDashboardController extends Controller
                         'program_code' => null,
                         'year_level' => null,
                         'section_name' => null,
+                        'is_temporary' => $temporarySchedule !== null,
                     ];
                 }
 
@@ -281,7 +306,7 @@ class FacultyDashboardController extends Controller
                 $totalMinutes = (int) round((float) $record->total_hours_rendered * 60);
                 $hours = intdiv($totalMinutes, 60);
                 $mins = $totalMinutes % 60;
-                $totalHours = ($hours > 0 ? $hours . 'h ' : '') . $mins . 'm';
+                $totalHours = ($hours > 0 ? $hours.'h ' : '').$mins.'m';
 
                 // Find undertime justification if any
                 $undertimeJustification = $record->justifications
@@ -297,12 +322,13 @@ class FacultyDashboardController extends Controller
                     if ($h->is_recurring) {
                         return $h->holiday_date->format('n') === $date->format('n') && $h->holiday_date->format('j') === $date->format('j');
                     }
+
                     return $h->holiday_date->toDateString() === $date->toDateString();
                 });
 
                 // Calculate undertime minutes on the fly for UI consistency if DB column is out of sync
                 $undertimeMinutes = $isHoliday ? 0 : ($record->undertime_minutes ?? 0);
-                if (!$isHoliday && $record->actual_time_out && $record->operational_time_out && $undertimeMinutes == 0) {
+                if (! $isHoliday && $record->actual_time_out && $record->operational_time_out && $undertimeMinutes == 0) {
                     if ($record->actual_time_out->lt($record->operational_time_out)) {
                         $undertimeMinutes = $record->actual_time_out->diffInMinutes($record->operational_time_out);
                     }
@@ -321,9 +347,9 @@ class FacultyDashboardController extends Controller
                 $isOvertime = ($record->overtime_minutes > 0 && $record->actual_time_out !== null);
 
                 // If no actual time-in, set to Absent (unless it's already Holiday or No Schedule)
-                if (!$hasActualTimeIn && !in_array(strtolower($displayStatus), ['holiday', 'no schedule', 'holiday present'])) {
+                if (! $hasActualTimeIn && ! in_array(strtolower($displayStatus), ['holiday', 'no schedule', 'holiday present'])) {
                     $displayStatus = 'Absent';
-                } elseif ($hasActualTimeIn && ($isUndertime || $isOvertime) && !$isHoliday) {
+                } elseif ($hasActualTimeIn && ($isUndertime || $isOvertime) && ! $isHoliday) {
                     // Override status if has actual time-in and has undertime or overtime
                     if ($isUndertime && $isOvertime) {
                         $displayStatus = 'UNDERTIME / OVERTIME';
@@ -383,29 +409,41 @@ class FacultyDashboardController extends Controller
                     'total_hours' => $totalHours,
                     'online_attendance' => $isOnlineAttendance,
                     'is_holiday' => $isHoliday,
+                    'temporary_substitute' => $temporarySchedule !== null,
                     'subjects' => $subjects,
                 ];
             })->toArray();
-            
+
             // Add unmatched approved online attendance requests
-            $unmatchedOnline = $onlineRequests->filter(fn($req) => !in_array($req->id, $matchedOnlineIds));
-            
-            $onlineOnlyLogs = $unmatchedOnline->map(function ($req) {
+            $unmatchedOnline = $onlineRequests->filter(fn ($req) => ! in_array($req->id, $matchedOnlineIds));
+
+            $onlineOnlyLogs = $unmatchedOnline->map(function ($req) use ($temporarySchedulesByDay, $isTemporarySubstituteFaculty) {
                 $detail = $req->scheduleDetail;
+                $temporarySchedule = $isTemporarySubstituteFaculty
+                    ? $this->findMatchingTemporarySchedule(
+                        $req->attendance_date,
+                        $temporarySchedulesByDay,
+                        $detail,
+                        $req->time_in ? Carbon::parse($req->time_in) : ($detail?->start_time ? Carbon::parse($detail->start_time) : null),
+                        $req->time_out ? Carbon::parse($req->time_out) : ($detail?->end_time ? Carbon::parse($detail->end_time) : null)
+                    )
+                    : null;
                 $subjects = ($detail && ($detail->course_code || $detail->subject_desc)) ? [[
                     'code' => $detail->course_code ?? '',
                     'desc' => (trim($detail->subject_desc) !== '') ? $detail->subject_desc : 'Operational Duty',
                     'program_code' => $detail->program_code ?? null,
                     'year_level' => $detail->year_level ?? null,
                     'section_name' => $detail->section_name ?? null,
+                    'is_temporary' => $temporarySchedule !== null,
                 ]] : [[
                     'code' => '',
                     'desc' => 'Operational Duty',
                     'program_code' => null,
                     'year_level' => null,
                     'section_name' => null,
+                    'is_temporary' => $temporarySchedule !== null,
                 ]];
-                
+
                 $timeIn = $req->time_in ? Carbon::parse($req->time_in) : null;
                 $timeOut = $req->time_out ? Carbon::parse($req->time_out) : null;
                 $hours = 0;
@@ -415,19 +453,19 @@ class FacultyDashboardController extends Controller
                 $totalMinutes = (int) round($hours * 60);
                 $h = intdiv($totalMinutes, 60);
                 $m = $totalMinutes % 60;
-                $totalHours = ($h > 0 ? $h . 'h ' : '') . $m . 'm';
-                
+                $totalHours = ($h > 0 ? $h.'h ' : '').$m.'m';
+
                 return [
-                    'id' => 'online-' . $req->id,
+                    'id' => 'online-'.$req->id,
                     'date' => $req->attendance_date->format('M d, Y'),
                     'raw_date' => $req->attendance_date->toDateString(),
                     'dayOfWeek' => $req->attendance_date->format('l'),
                     'status' => 'Present (Online)',
-                    'expected_time_in' => $detail && $detail->start_time 
-                        ? Carbon::parse($detail->start_time)->format('h:i A') 
+                    'expected_time_in' => $detail && $detail->start_time
+                        ? Carbon::parse($detail->start_time)->format('h:i A')
                         : '--:--',
-                    'expected_time_out' => $detail && $detail->end_time 
-                        ? Carbon::parse($detail->end_time)->format('h:i A') 
+                    'expected_time_out' => $detail && $detail->end_time
+                        ? Carbon::parse($detail->end_time)->format('h:i A')
                         : '--:--',
                     'actual_time_in' => $timeIn ? $timeIn->format('h:i A') : '--:--',
                     'actual_time_out' => $timeOut ? $timeOut->format('h:i A') : '--:--',
@@ -444,16 +482,134 @@ class FacultyDashboardController extends Controller
                     'required_hours' => (float) $hours,
                     'total_hours' => $totalHours,
                     'online_attendance' => true,
+                    'temporary_substitute' => $temporarySchedule !== null,
                     'subjects' => $subjects,
                 ];
             })->toArray();
-            
+
             $attendanceLogs = array_merge($attendanceLogs, $onlineOnlyLogs);
         }
 
         return Inertia::render('Faculty/Attendance', [
             'attendanceLogs' => $attendanceLogs,
         ]);
+    }
+
+    private function isTemporarySubstituteFaculty(?Faculty $faculty): bool
+    {
+        if (! $faculty) {
+            return false;
+        }
+
+        return strcasecmp((string) $faculty->employment_type, 'substitute') === 0
+            || strcasecmp((string) $faculty->faculty_type, 'substitute') === 0;
+    }
+
+    private function findMatchingTemporarySchedule(
+        CarbonInterface $date,
+        Collection $temporarySchedulesByDay,
+        ?ScheduleDetail $detail = null,
+        mixed $startTime = null,
+        mixed $endTime = null
+    ): ?TemporaryFacultySchedule {
+        $candidates = $temporarySchedulesByDay->get($date->format('l'), collect());
+
+        if ($candidates->isEmpty()) {
+            return null;
+        }
+
+        $normalizedStart = $this->normalizeTimeValue($startTime);
+        $normalizedEnd = $this->normalizeTimeValue($endTime);
+
+        /** @var Collection<int, array{schedule: TemporaryFacultySchedule, score: int}> $scored */
+        $scored = $candidates->map(function (TemporaryFacultySchedule $schedule) use ($detail, $normalizedStart, $normalizedEnd) {
+            $score = 0;
+
+            if ($detail) {
+                if ($this->normalizedMatch($schedule->course_code, $detail->course_code)) {
+                    $score += 50;
+                }
+
+                if ($this->normalizedMatch($schedule->course_title, $detail->subject_desc)) {
+                    $score += 25;
+                }
+
+                if ($this->normalizedMatch($schedule->program_code, $detail->program_code)) {
+                    $score += 15;
+                }
+
+                if ($this->normalizedMatch($schedule->section_name, $detail->section_name)) {
+                    $score += 15;
+                }
+
+                if ($schedule->year_level !== null && $detail->year_level !== null && (int) $schedule->year_level === (int) $detail->year_level) {
+                    $score += 10;
+                }
+            }
+
+            if ($normalizedStart !== null && $normalizedEnd !== null) {
+                $scheduleStart = $this->normalizeTimeValue($schedule->start_time);
+                $scheduleEnd = $this->normalizeTimeValue($schedule->end_time);
+
+                if ($scheduleStart !== null && $scheduleEnd !== null && $this->timesOverlap($normalizedStart, $normalizedEnd, $scheduleStart, $scheduleEnd)) {
+                    $score += 30;
+                }
+            }
+
+            return [
+                'schedule' => $schedule,
+                'score' => $score,
+            ];
+        })->sortByDesc('score')->values();
+
+        $bestMatch = $scored->first();
+
+        if (! $bestMatch || $bestMatch['score'] < 30) {
+            return null;
+        }
+
+        return $bestMatch['schedule'];
+    }
+
+    private function normalizeTimeValue(mixed $value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        if ($value instanceof CarbonInterface) {
+            return $value->format('H:i:s');
+        }
+
+        try {
+            return Carbon::parse((string) $value)->format('H:i:s');
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    private function timesOverlap(string $startA, string $endA, string $startB, string $endB): bool
+    {
+        return ! ($endA <= $startB || $startA >= $endB);
+    }
+
+    private function normalizedMatch(?string $left, ?string $right): bool
+    {
+        $normalizedLeft = $this->normalizeMatchValue($left);
+        $normalizedRight = $this->normalizeMatchValue($right);
+
+        return $normalizedLeft !== null && $normalizedRight !== null && $normalizedLeft === $normalizedRight;
+    }
+
+    private function normalizeMatchValue(?string $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $normalized = preg_replace('/[^A-Z0-9]/', '', strtoupper(trim($value)));
+
+        return $normalized !== '' ? $normalized : null;
     }
 
     /**
@@ -482,19 +638,20 @@ class FacultyDashboardController extends Controller
         ]);
 
         $faculty = $request->user()->faculty;
-        if (!$faculty)
+        if (! $faculty) {
             abort(403);
+        }
 
-        $record = \App\Models\AttendanceRecord::where('faculty_id', $faculty->id)
+        $record = AttendanceRecord::where('faculty_id', $faculty->id)
             ->findOrFail($id);
 
         // Check if there is actually undertime (dynamically check if DB is out of sync)
         $hasUndertime = ($record->undertime_minutes > 0);
-        if (!$hasUndertime && $record->actual_time_out && $record->operational_time_out) {
+        if (! $hasUndertime && $record->actual_time_out && $record->operational_time_out) {
             $hasUndertime = $record->actual_time_out->lt($record->operational_time_out);
         }
 
-        if (!$hasUndertime) {
+        if (! $hasUndertime) {
             return back()->with('error', 'No undertime to justify for this record.');
         }
 
@@ -537,23 +694,23 @@ class FacultyDashboardController extends Controller
         ]);
 
         $faculty = $request->user()->faculty;
-        if (!$faculty)
+        if (! $faculty) {
             abort(403);
+        }
 
-        $record = \App\Models\AttendanceRecord::where('faculty_id', $faculty->id)
+        $record = AttendanceRecord::where('faculty_id', $faculty->id)
             ->findOrFail($id);
 
         // Check if there is actually a missing time in or out
-        $isMissing = !$record->actual_time_in || !$record->actual_time_out
-            || $record->actual_time_in->format('H:i:s') === '00:00:00' // Assuming --:-- might be stored as midnight in some cases, but actually controller shows format check
-        ;
+        $isMissing = ! $record->actual_time_in || ! $record->actual_time_out
+            || $record->actual_time_in->format('H:i:s') === '00:00:00'; // Assuming --:-- might be stored as midnight in some cases, but actually controller shows format check
 
         // Re-check based on what we send to frontend
         $actualIn = $record->actual_time_in ? $record->actual_time_in->format('h:i A') : '--:--';
         $actualOut = $record->actual_time_out ? $record->actual_time_out->format('h:i A') : '--:--';
         $isMissing = ($actualIn === '--:--' || $actualOut === '--:--');
 
-        if (!$isMissing) {
+        if (! $isMissing) {
             return back()->with('error', 'No missing time in or out to justify for this record.');
         }
 

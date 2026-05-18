@@ -132,19 +132,27 @@ class Faculty extends Model
         $activeScheduleIds = $activeSchedules->pluck('id');
         $scheduleMeta = $activeSchedules->keyBy('id');
 
-        // 1. Get all official details for active schedules (unique source of truth for class slots)
         $allDetails = ScheduleDetail::whereIn('schedule_id', $activeScheduleIds)
             ->orderByRaw($this->dayOfWeekOrderExpression('day'))
             ->orderBy('start_time', 'asc')
             ->get();
+        $temporarySchedules = $this->temporaryFacultySchedules()
+            ->orderByRaw($this->dayOfWeekOrderExpression('day'))
+            ->orderBy('start_time', 'asc')
+            ->get();
+        $temporaryByDay = $this->mapTemporarySchedulesByDay($temporarySchedules, $allDetails, $scheduleMeta);
+        $consumedOfficialIds = collect($temporaryByDay)
+            ->flatten(1)
+            ->pluck('matchedOfficialId')
+            ->filter()
+            ->values()
+            ->all();
 
-        // 2. Get all approved change requests to determine the "effective" current slot
         $approvedRequests = ScheduleChangeRequest::where('faculty_id', $this->id)
             ->where('status', 'approved')
             ->get()
             ->keyBy('schedule_detail_id');
 
-        // 3. Get all pending change requests to flag them in the dropdown
         $pendingRequests = ScheduleChangeRequest::where('faculty_id', $this->id)
             ->where('status', 'pending')
             ->get()
@@ -153,6 +161,10 @@ class Faculty extends Model
         $results = [];
 
         foreach ($allDetails as $detail) {
+            if (in_array($detail->id, $consumedOfficialIds, true)) {
+                continue;
+            }
+
             $meta = $scheduleMeta->get($detail->schedule_id);
             $change = $approvedRequests->get($detail->id);
 
@@ -172,9 +184,9 @@ class Faculty extends Model
                     'year_level' => $detail->year_level,
                     'section_name' => $detail->section_name,
                     'has_pending_request' => $pendingRequests->has($detail->id),
+                    'is_temporary' => false,
                 ];
             } else {
-                // Otherwise show the official detail
                 $results[] = [
                     'id' => $detail->id,
                     'day_of_week' => $detail->day,
@@ -189,11 +201,43 @@ class Faculty extends Model
                     'year_level' => $detail->year_level,
                     'section_name' => $detail->section_name,
                     'has_pending_request' => $pendingRequests->has($detail->id),
+                    'is_temporary' => false,
                 ];
             }
         }
 
-        return $results;
+        foreach (collect($temporaryByDay)->flatten(1) as $temporary) {
+            $matchedOfficialId = (int) ($temporary['matchedOfficialId'] ?? 0);
+
+            if ($matchedOfficialId === 0) {
+                continue;
+            }
+
+            $results[] = [
+                'id' => $matchedOfficialId,
+                'day_of_week' => $temporary['day'] ?? '',
+                'time_in' => $this->toTwentyFourHourTime($temporary['startTime'] ?? null),
+                'time_out' => $this->toTwentyFourHourTime($temporary['endTime'] ?? null),
+                'subject_code' => $temporary['code'] ?? '',
+                'subject_desc' => $temporary['subject'] ?? 'Temporary Substitute',
+                'room' => $temporary['room'] ?? 'TBA',
+                'schedule_code' => $temporary['scheduleCode'] ?? null,
+                'is_changed' => false,
+                'program_code' => $temporary['programCode'] ?? '',
+                'year_level' => $temporary['yearLevel'] ?? '',
+                'section_name' => $temporary['sectionName'] ?? '',
+                'has_pending_request' => $pendingRequests->has($matchedOfficialId),
+                'is_temporary' => true,
+            ];
+        }
+
+        return collect($results)
+            ->sortBy(function (array $item): string {
+                return str_pad((string) array_search($item['day_of_week'] ?? '', ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], true), 2, '0', STR_PAD_LEFT)
+                    .'-'.($item['time_in'] ?? '');
+            })
+            ->values()
+            ->all();
     }
 
     /**
@@ -402,11 +446,21 @@ class Faculty extends Model
         $activeScheduleIds = $activeSchedules->pluck('id');
         $scheduleMeta = $activeSchedules->keyBy('id');
 
-        // 1. Get Official/Moved Classes (Same logic as Change Request)
         $allDetails = ScheduleDetail::whereIn('schedule_id', $activeScheduleIds)
             ->orderByRaw($this->dayOfWeekOrderExpression('day'))
             ->orderBy('start_time', 'asc')
             ->get();
+        $temporarySchedules = $this->temporaryFacultySchedules()
+            ->orderByRaw($this->dayOfWeekOrderExpression('day'))
+            ->orderBy('start_time', 'asc')
+            ->get();
+        $temporaryByDay = $this->mapTemporarySchedulesByDay($temporarySchedules, $allDetails, $scheduleMeta);
+        $consumedOfficialIds = collect($temporaryByDay)
+            ->flatten(1)
+            ->pluck('matchedOfficialId')
+            ->filter()
+            ->values()
+            ->all();
 
         $approvedChanges = ScheduleChangeRequest::where('faculty_id', $this->id)
             ->where('status', 'approved')
@@ -417,6 +471,10 @@ class Faculty extends Model
 
         // 2. Add classes first
         foreach ($allDetails as $detail) {
+            if (in_array($detail->id, $consumedOfficialIds, true)) {
+                continue;
+            }
+
             $meta = $scheduleMeta->get($detail->schedule_id);
             $change = $approvedChanges->get($detail->id);
 
@@ -442,6 +500,34 @@ class Faculty extends Model
                 'year_level' => $detail->year_level,
                 'section_name' => $detail->section_name,
                 'is_changed' => $isChanged,
+                'is_temporary' => false,
+            ];
+        }
+
+        foreach (collect($temporaryByDay)->flatten(1) as $temporary) {
+            $matchedOfficialId = (int) ($temporary['matchedOfficialId'] ?? 0);
+
+            if ($matchedOfficialId === 0) {
+                continue;
+            }
+
+            $results[] = [
+                'composite_id' => '0-'.$matchedOfficialId,
+                'id' => $matchedOfficialId,
+                'internal_schedule_id' => null,
+                'type' => 'Official',
+                'day_of_week' => $temporary['day'] ?? '',
+                'time_in' => $this->toTwentyFourHourTime($temporary['startTime'] ?? null),
+                'time_out' => $this->toTwentyFourHourTime($temporary['endTime'] ?? null),
+                'subject_code' => $temporary['code'] ?? '',
+                'subject_desc' => $temporary['subject'] ?? 'Temporary Substitute',
+                'room' => $temporary['room'] ?? 'TBA',
+                'schedule_code' => $temporary['scheduleCode'] ?? null,
+                'program_code' => $temporary['programCode'] ?? '',
+                'year_level' => $temporary['yearLevel'] ?? '',
+                'section_name' => $temporary['sectionName'] ?? '',
+                'is_changed' => false,
+                'is_temporary' => true,
             ];
         }
 
@@ -486,11 +572,18 @@ class Faculty extends Model
                     'year_level' => '',
                     'section_name' => '',
                     'is_changed' => false,
+                    'is_temporary' => false,
                 ];
             }
         }
 
-        return $results;
+        return collect($results)
+            ->sortBy(function (array $item): string {
+                return str_pad((string) array_search($item['day_of_week'] ?? '', ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], true), 2, '0', STR_PAD_LEFT)
+                    .'-'.($item['time_in'] ?? '');
+            })
+            ->values()
+            ->all();
     }
 
     /**
@@ -898,52 +991,126 @@ class Faculty extends Model
             })->values()->toArray();
         }
 
-        // Fallback to official schedule details
+        // Fallback to official schedule details, including temporary substitute
+        // entries that are mapped onto the faculty's official teaching load.
         $details = ScheduleDetail::whereIn('schedule_id', $activeScheduleIds)
             ->where('day', $todayName)
             ->orderBy('start_time', 'asc')
             ->get();
+        $temporarySchedules = $this->temporaryFacultySchedules()
+            ->where('day', $todayName)
+            ->orderBy('start_time', 'asc')
+            ->get();
+        $temporaryByDay = $this->mapTemporarySchedulesByDay($temporarySchedules, $details, $scheduleMeta);
+        $todayTemporaryClasses = collect($temporaryByDay[$todayName] ?? []);
+        $consumedOfficialIds = $todayTemporaryClasses
+            ->pluck('matchedOfficialId')
+            ->filter()
+            ->values()
+            ->all();
 
-        return $details->map(function (ScheduleDetail $detail) use ($now, $scheduleMeta) {
-            $timeIn = Carbon::parse($detail->start_time);
-            $timeOut = Carbon::parse($detail->end_time);
+        $officialEntries = $details
+            ->reject(fn (ScheduleDetail $detail) => in_array($detail->id, $consumedOfficialIds, true))
+            ->map(function (ScheduleDetail $detail) use ($now, $scheduleMeta) {
+                $timeIn = Carbon::parse($detail->start_time);
+                $timeOut = Carbon::parse($detail->end_time);
 
-            $todayTimeIn = $now->copy()->setTimeFrom($timeIn);
-            $todayTimeOut = $now->copy()->setTimeFrom($timeOut);
+                $todayTimeIn = $now->copy()->setTimeFrom($timeIn);
+                $todayTimeOut = $now->copy()->setTimeFrom($timeOut);
 
-            if ($now->greaterThan($todayTimeOut)) {
-                $status = 'completed';
-            } elseif ($now->greaterThanOrEqualTo($todayTimeIn) && $now->lessThanOrEqualTo($todayTimeOut)) {
-                $status = 'ongoing';
-            } else {
+                if ($now->greaterThan($todayTimeOut)) {
+                    $status = 'completed';
+                } elseif ($now->greaterThanOrEqualTo($todayTimeIn) && $now->lessThanOrEqualTo($todayTimeOut)) {
+                    $status = 'ongoing';
+                } else {
+                    $status = 'upcoming';
+                }
+
+                $meta = $scheduleMeta->get($detail->schedule_id);
+
+                return [
+                    'id' => $detail->id,
+                    'subject' => $detail->subject_desc ?? 'Untitled Subject',
+                    'code' => $detail->course_code ?? '',
+                    'section' => $detail->section_name ?? '',
+                    'room' => $detail->room_code ?? 'TBA',
+                    'startTime' => $timeIn->format('h:i A'),
+                    'endTime' => $timeOut->format('h:i A'),
+                    'status' => $status,
+                    'source' => 'official',
+                    'scheduleCode' => $meta?->schedule_code,
+                    'schedule_code' => $meta?->schedule_code,
+                    'effectiveFrom' => $meta ? Carbon::parse($meta->effective_from)->format('M d, Y') : null,
+                    'effectiveUntil' => $meta ? Carbon::parse($meta->effective_until)->format('M d, Y') : null,
+                    'programCode' => $detail->program_code ?? '',
+                    'program_code' => $detail->program_code ?? '',
+                    'programTitle' => $detail->program_title ?? '',
+                    'yearLevel' => $detail->year_level ?? '',
+                    'year_level' => $detail->year_level ?? '',
+                    'sectionName' => $detail->section_name ?? '',
+                    'section_name' => $detail->section_name ?? '',
+                ];
+            });
+
+        $temporaryEntries = $todayTemporaryClasses->map(function (array $item) use ($now) {
+            $timeIn = ! empty($item['startTime']) && $item['startTime'] !== '--:--'
+                ? Carbon::createFromFormat('h:i A', $item['startTime'])
+                : null;
+            $timeOut = ! empty($item['endTime']) && $item['endTime'] !== '--:--'
+                ? Carbon::createFromFormat('h:i A', $item['endTime'])
+                : null;
+
+            if ($timeIn === null) {
                 $status = 'upcoming';
+            } else {
+                $todayTimeIn = $now->copy()->setTimeFrom($timeIn);
+                $todayTimeOut = $timeOut ? $now->copy()->setTimeFrom($timeOut) : null;
+
+                if ($todayTimeOut && $now->greaterThan($todayTimeOut)) {
+                    $status = 'completed';
+                } elseif ($todayTimeOut && $now->greaterThanOrEqualTo($todayTimeIn) && $now->lessThanOrEqualTo($todayTimeOut)) {
+                    $status = 'ongoing';
+                } elseif (! $todayTimeOut && $now->greaterThanOrEqualTo($todayTimeIn)) {
+                    $status = 'ongoing';
+                } else {
+                    $status = 'upcoming';
+                }
             }
 
-            $meta = $scheduleMeta->get($detail->schedule_id);
-
             return [
-                'id' => $detail->id,
-                'subject' => $detail->subject_desc ?? 'Untitled Subject',
-                'code' => $detail->course_code ?? '',
-                'section' => $detail->section_name ?? '',
-                'room' => $detail->room_code ?? 'TBA',
-                'startTime' => $timeIn->format('h:i A'),
-                'endTime' => $timeOut->format('h:i A'),
+                'id' => $item['id'],
+                'subject' => $item['subject'] ?? 'Temporary Assignment',
+                'code' => $item['code'] ?? '',
+                'section' => $item['sectionName'] ?? '',
+                'room' => $item['room'] ?? 'TBA',
+                'startTime' => $item['startTime'] ?? '--:--',
+                'endTime' => $item['endTime'] ?? '--:--',
                 'status' => $status,
                 'source' => 'official',
-                'scheduleCode' => $meta?->schedule_code,
-                'schedule_code' => $meta?->schedule_code,
-                'effectiveFrom' => $meta ? Carbon::parse($meta->effective_from)->format('M d, Y') : null,
-                'effectiveUntil' => $meta ? Carbon::parse($meta->effective_until)->format('M d, Y') : null,
-                'programCode' => $detail->program_code ?? '',
-                'program_code' => $detail->program_code ?? '',
-                'programTitle' => $detail->program_title ?? '',
-                'yearLevel' => $detail->year_level ?? '',
-                'year_level' => $detail->year_level ?? '',
-                'sectionName' => $detail->section_name ?? '',
-                'section_name' => $detail->section_name ?? '',
+                'scheduleCode' => $item['scheduleCode'] ?? null,
+                'schedule_code' => $item['scheduleCode'] ?? null,
+                'effectiveFrom' => $item['effectiveFrom'] ?? null,
+                'effectiveUntil' => $item['effectiveUntil'] ?? null,
+                'programCode' => $item['programCode'] ?? '',
+                'program_code' => $item['programCode'] ?? '',
+                'programTitle' => $item['programTitle'] ?? '',
+                'yearLevel' => $item['yearLevel'] ?? '',
+                'year_level' => $item['yearLevel'] ?? '',
+                'sectionName' => $item['sectionName'] ?? '',
+                'section_name' => $item['sectionName'] ?? '',
+                'isTemporary' => (bool) ($item['isTemporary'] ?? false),
+                'scheduleSource' => $item['scheduleSource'] ?? null,
+                'comparison' => $item['comparison'] ?? null,
+                'matchedOfficialId' => $item['matchedOfficialId'] ?? null,
+                'syncedAt' => $item['syncedAt'] ?? null,
             ];
-        })->values()->toArray();
+        });
+
+        return $officialEntries
+            ->concat($temporaryEntries)
+            ->sortBy(fn (array $item): int => $this->minutesFromMeridiemTime($item['startTime'] ?? null))
+            ->values()
+            ->toArray();
     }
 
     /**
@@ -1386,6 +1553,15 @@ class Faculty extends Model
         $parsed = Carbon::createFromFormat('h:i A', $time);
 
         return $parsed ? (((int) $parsed->format('H')) * 60) + (int) $parsed->format('i') : 9999;
+    }
+
+    private function toTwentyFourHourTime(?string $time): ?string
+    {
+        if (! $time || $time === '--:--') {
+            return null;
+        }
+
+        return Carbon::createFromFormat('h:i A', $time)?->format('H:i');
     }
 
     private function normalizedMatch(mixed $left, mixed $right): bool
