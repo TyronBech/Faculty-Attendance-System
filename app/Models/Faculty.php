@@ -3,12 +3,14 @@
 namespace App\Models;
 
 use Carbon\Carbon;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Query\Builder;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
@@ -110,6 +112,19 @@ class Faculty extends Model
     public function undertimeRequests(): HasMany
     {
         return $this->hasMany(UndertimeRequest::class);
+    }
+
+    public function isTemporarySubstitute(): bool
+    {
+        return strcasecmp((string) ($this->employment_type ?? ''), 'substitute') === 0
+            || strcasecmp((string) ($this->faculty_type ?? ''), 'substitute') === 0;
+    }
+
+    public function hasTemporarySubstituteAttendanceRecord(
+        AttendanceRecord $record,
+        ?Collection $temporarySchedulesByDay = null
+    ): bool {
+        return $this->findMatchingTemporaryScheduleForAttendanceRecord($record, $temporarySchedulesByDay) !== null;
     }
 
     /* ------------------------------------------------------------------ */
@@ -1561,7 +1576,13 @@ class Faculty extends Model
             return null;
         }
 
-        return Carbon::createFromFormat('h:i A', $time)?->format('H:i');
+        $parsed = Carbon::createFromFormat('h:i A', $time);
+
+        if ($parsed === false) {
+            return null;
+        }
+
+        return $parsed->format('H:i');
     }
 
     private function normalizedMatch(mixed $left, mixed $right): bool
@@ -1574,6 +1595,103 @@ class Faculty extends Model
         }
 
         return strcasecmp($leftValue, $rightValue) === 0;
+    }
+
+    private function findMatchingTemporaryScheduleForAttendanceRecord(
+        AttendanceRecord $record,
+        ?Collection $temporarySchedulesByDay = null
+    ): ?TemporaryFacultySchedule {
+        if (! $this->isTemporarySubstitute() || ! $record->scheduleDetail) {
+            return null;
+        }
+
+        $groupedSchedules = $temporarySchedulesByDay
+            ?? $this->temporaryFacultySchedules()
+                ->get()
+                ->groupBy(fn (TemporaryFacultySchedule $schedule) => $schedule->day ?: 'Monday');
+
+        $candidates = $groupedSchedules->get($record->attendance_date?->format('l') ?? $record->day_of_week, collect());
+
+        if ($candidates->isEmpty()) {
+            return null;
+        }
+
+        $detail = $record->scheduleDetail;
+        $normalizedStart = $this->normalizeTimeValue(
+            $record->official_time_in ?: ($detail->start_time ? Carbon::parse($detail->start_time) : null)
+        );
+        $normalizedEnd = $this->normalizeTimeValue(
+            $record->official_time_out ?: ($detail->end_time ? Carbon::parse($detail->end_time) : null)
+        );
+
+        /** @var Collection<int, array{schedule: TemporaryFacultySchedule, score: int}> $scored */
+        $scored = $candidates->map(function (TemporaryFacultySchedule $schedule) use ($detail, $normalizedStart, $normalizedEnd) {
+            $score = 0;
+
+            if ($this->normalizedMatch($schedule->course_code, $detail->course_code)) {
+                $score += 50;
+            }
+
+            if ($this->normalizedMatch($schedule->course_title, $detail->subject_desc)) {
+                $score += 25;
+            }
+
+            if ($this->normalizedMatch($schedule->program_code, $detail->program_code)) {
+                $score += 15;
+            }
+
+            if ($this->normalizedMatch($schedule->section_name, $detail->section_name)) {
+                $score += 15;
+            }
+
+            if ($schedule->year_level !== null && $detail->year_level !== null && (int) $schedule->year_level === (int) $detail->year_level) {
+                $score += 10;
+            }
+
+            if ($normalizedStart !== null && $normalizedEnd !== null) {
+                $scheduleStart = $this->normalizeTimeValue($schedule->start_time);
+                $scheduleEnd = $this->normalizeTimeValue($schedule->end_time);
+
+                if ($scheduleStart !== null && $scheduleEnd !== null && $this->timesOverlap($normalizedStart, $normalizedEnd, $scheduleStart, $scheduleEnd)) {
+                    $score += 30;
+                }
+            }
+
+            return [
+                'schedule' => $schedule,
+                'score' => $score,
+            ];
+        })->sortByDesc('score')->values();
+
+        $bestMatch = $scored->first();
+
+        if (! $bestMatch || $bestMatch['score'] < 30) {
+            return null;
+        }
+
+        return $bestMatch['schedule'];
+    }
+
+    private function normalizeTimeValue(mixed $value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        if ($value instanceof CarbonInterface) {
+            return $value->format('H:i:s');
+        }
+
+        try {
+            return Carbon::parse((string) $value)->format('H:i:s');
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    private function timesOverlap(string $startA, string $endA, string $startB, string $endB): bool
+    {
+        return ! ($endA <= $startB || $startA >= $endB);
     }
 
     /**

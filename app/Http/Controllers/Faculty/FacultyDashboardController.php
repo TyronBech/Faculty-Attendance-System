@@ -146,7 +146,7 @@ class FacultyDashboardController extends Controller
             $temporarySchedulesByDay = $faculty->temporaryFacultySchedules()
                 ->get()
                 ->groupBy(fn (TemporaryFacultySchedule $schedule) => $schedule->day ?: 'Monday');
-            $isTemporarySubstituteFaculty = $this->isTemporarySubstituteFaculty($faculty);
+            $isTemporarySubstituteFaculty = $faculty->isTemporarySubstitute();
 
             // Get all approved online attendance requests for this faculty
             $onlineRequests = OnlineAttendanceRequest::where('faculty_id', $faculty->id)
@@ -493,16 +493,6 @@ class FacultyDashboardController extends Controller
         return Inertia::render('Faculty/Attendance', [
             'attendanceLogs' => $attendanceLogs,
         ]);
-    }
-
-    private function isTemporarySubstituteFaculty(?Faculty $faculty): bool
-    {
-        if (! $faculty) {
-            return false;
-        }
-
-        return strcasecmp((string) $faculty->employment_type, 'substitute') === 0
-            || strcasecmp((string) $faculty->faculty_type, 'substitute') === 0;
     }
 
     private function findMatchingTemporarySchedule(
