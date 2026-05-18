@@ -23,6 +23,12 @@ export default function CustomTimePicker({ value, onChange, id, placeholder = '-
 
     const hourRef = useRef(null);
     const minuteRef = useRef(null);
+    const dragStateRef = useRef({
+        type: null,
+        pointerId: null,
+        startY: 0,
+        startScrollTop: 0,
+    });
 
     useEffect(() => {
         if (value) {
@@ -80,6 +86,63 @@ export default function CustomTimePicker({ value, onChange, id, placeholder = '-
         }, 100);
     };
 
+    const handlePointerDown = (e, type) => {
+        const target = type === 'hour' ? hourRef.current : minuteRef.current;
+        if (!target) return;
+
+        dragStateRef.current = {
+            type,
+            pointerId: e.pointerId,
+            startY: e.clientY,
+            startScrollTop: target.scrollTop,
+        };
+
+        target.setPointerCapture?.(e.pointerId);
+        target.style.scrollBehavior = 'auto';
+        target.style.cursor = 'grabbing';
+        document.body.style.userSelect = 'none';
+    };
+
+    const handlePointerMove = (e, type) => {
+        const target = type === 'hour' ? hourRef.current : minuteRef.current;
+        const dragState = dragStateRef.current;
+
+        if (!target || dragState.type !== type || dragState.pointerId !== e.pointerId) {
+            return;
+        }
+
+        const deltaY = e.clientY - dragState.startY;
+        target.scrollTop = dragState.startScrollTop - deltaY;
+    };
+
+    const handlePointerEnd = (e, type) => {
+        const target = type === 'hour' ? hourRef.current : minuteRef.current;
+        const dragState = dragStateRef.current;
+
+        if (!target || dragState.type !== type || dragState.pointerId !== e.pointerId) {
+            return;
+        }
+
+        target.releasePointerCapture?.(e.pointerId);
+        target.style.scrollBehavior = 'smooth';
+        target.style.cursor = 'grab';
+        document.body.style.userSelect = '';
+        dragStateRef.current = {
+            type: null,
+            pointerId: null,
+            startY: 0,
+            startScrollTop: 0,
+        };
+
+        handleScroll({ target }, type);
+    };
+
+    useEffect(() => {
+        return () => {
+            document.body.style.userSelect = '';
+        };
+    }, []);
+
     // Scroll to active on open
     useEffect(() => {
         if (isOpen) {
@@ -136,7 +199,11 @@ export default function CustomTimePicker({ value, onChange, id, placeholder = '-
                             <div 
                                 ref={hourRef}
                                 onScroll={(e) => handleScroll(e, 'hour')}
-                                className="h-full overflow-y-auto snap-y snap-mandatory hide-scrollbar"
+                                onPointerDown={(e) => handlePointerDown(e, 'hour')}
+                                onPointerMove={(e) => handlePointerMove(e, 'hour')}
+                                onPointerUp={(e) => handlePointerEnd(e, 'hour')}
+                                onPointerCancel={(e) => handlePointerEnd(e, 'hour')}
+                                className="h-full overflow-y-auto snap-y snap-mandatory hide-scrollbar cursor-grab touch-none"
                                 style={{ scrollBehavior: 'smooth' }}
                             >
                                 <div className="h-10"></div> {/* padding top */}
@@ -162,7 +229,11 @@ export default function CustomTimePicker({ value, onChange, id, placeholder = '-
                             <div 
                                 ref={minuteRef}
                                 onScroll={(e) => handleScroll(e, 'minute')}
-                                className="h-full overflow-y-auto snap-y snap-mandatory hide-scrollbar"
+                                onPointerDown={(e) => handlePointerDown(e, 'minute')}
+                                onPointerMove={(e) => handlePointerMove(e, 'minute')}
+                                onPointerUp={(e) => handlePointerEnd(e, 'minute')}
+                                onPointerCancel={(e) => handlePointerEnd(e, 'minute')}
+                                className="h-full overflow-y-auto snap-y snap-mandatory hide-scrollbar cursor-grab touch-none"
                                 style={{ scrollBehavior: 'smooth' }}
                             >
                                 <div className="h-10"></div>
