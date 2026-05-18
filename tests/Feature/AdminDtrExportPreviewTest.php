@@ -8,6 +8,7 @@ use App\Models\Faculty;
 use App\Models\Holiday;
 use App\Models\InternalSchedule;
 use App\Models\Schedule;
+use App\Models\ScheduleChangeRequest;
 use App\Models\ScheduleDetail;
 use App\Models\User;
 use Carbon\Carbon;
@@ -404,6 +405,106 @@ class AdminDtrExportPreviewTest extends TestCase
         $this->assertEquals(1, $payload['summary']['daysPresent']);
         $this->assertEquals(4, $payload['summary']['daysAbsent']);
         $this->assertEquals(16.0, $payload['summary']['totalHoursAbsent']);
+    }
+
+    public function test_preview_separates_official_absences_from_internal_attendance(): void
+    {
+        $admin = User::factory()->create();
+        $this->actingAs($admin, 'admin');
+
+        $faculty = Faculty::factory()->create();
+        $date = Carbon::create(2026, 3, 2, 8, 0, 0);
+
+        $schedule = Schedule::create([
+            'faculty_id' => $faculty->id,
+            'schedule_code' => 'SCH-INTERNAL-001',
+            'academic_year' => 2026,
+            'semester' => 1,
+            'effective_from' => $date->copy()->startOfMonth(),
+            'effective_until' => $date->copy()->endOfMonth(),
+            'status' => 'active',
+            'schedule_type' => 'fixed',
+            'created_by' => $admin->id,
+        ]);
+
+        $details = collect([['07:30:00', '10:30:00'], ['10:30:00', '13:30:00'], ['14:00:00', '17:00:00']])
+            ->map(function (array $slot, int $index) use ($schedule) {
+                [$startTime, $endTime] = $slot;
+
+                return ScheduleDetail::create([
+                'schedule_id' => $schedule->id,
+                'day' => 'Monday',
+                'start_time' => Carbon::parse($startTime),
+                'end_time' => Carbon::parse($endTime),
+                'subject_desc' => 'Subject '.$index,
+                'course_code' => 'SUBJ'.$index,
+                'room_code' => 'R10'.$index,
+                'hours_required' => 3,
+                ]);
+            });
+
+        ScheduleChangeRequest::create([
+            'faculty_id' => $faculty->id,
+            'schedule_detail_id' => $details[1]->id,
+            'requested_day_of_week' => 'Wednesday',
+            'requested_time_in' => '12:30:00',
+            'requested_time_out' => '15:30:00',
+            'effective_date' => $date->copy()->subWeek()->toDateString(),
+            'reason' => 'Moved for internal schedule',
+            'status' => 'approved',
+        ]);
+
+        $internalSchedule = InternalSchedule::create([
+            'schedule_id' => $schedule->id,
+            'faculty_id' => $faculty->id,
+            'day_of_week' => 'Wednesday',
+            'device_time_in' => $date->copy()->addDays(2)->setTime(12, 30, 0),
+            'device_time_out' => $date->copy()->addDays(2)->setTime(15, 30, 0),
+            'is_operational' => true,
+            'required_hours' => 3,
+            'sync_status' => 'synced',
+        ]);
+
+        AttendanceRecord::factory()->create([
+            'faculty_id' => $faculty->id,
+            'schedule_detail_id' => null,
+            'internal_schedule_id' => $internalSchedule->id,
+            'attendance_date' => $date->copy()->addDays(2)->toDateString(),
+            'day_of_week' => 'Wednesday',
+            'official_time_in' => $date->copy()->addDays(2)->setTime(12, 30, 0),
+            'official_time_out' => $date->copy()->addDays(2)->setTime(15, 30, 0),
+            'operational_day_of_week' => 'Wednesday',
+            'operational_time_in' => $date->copy()->addDays(2)->setTime(12, 30, 0),
+            'operational_time_out' => $date->copy()->addDays(2)->setTime(15, 30, 0),
+            'actual_time_in' => $date->copy()->addDays(2)->setTime(12, 30, 0),
+            'actual_time_out' => $date->copy()->addDays(2)->setTime(15, 30, 0),
+            'required_hours' => 3,
+            'total_hours_rendered' => 3,
+            'status' => 'present',
+            'remarks' => 'Synced from biometric import (no matching official schedule)',
+        ]);
+
+        $response = $this->getJson(route('admin.dtr-export.preview', [
+            'faculty_id' => $faculty->id,
+            'month' => 3,
+            'year' => 2026,
+        ]));
+
+        $response->assertOk();
+
+        $payload = $response->json();
+        $dayRow = collect($payload['rows'])->firstWhere('day', 2);
+        $internalDayRow = collect($payload['rows'])->firstWhere('day', 4);
+
+        $this->assertNotNull($dayRow);
+        $this->assertSame('7:30AM', $dayRow['official_morning_in']);
+        $this->assertTrue($dayRow['official_morning_absent']);
+        $this->assertSame('10:30AM', $dayRow['official_afternoon_in']);
+        $this->assertFalse($dayRow['official_afternoon_absent']);
+        $this->assertSame('', $dayRow['internal_morning_in']);
+        $this->assertFalse($dayRow['internal_morning_absent']);
+        $this->assertSame('12:30PM', $internalDayRow['internal_morning_in']);
+        $this->assertSame('', $internalDayRow['official_morning_in']);
     }
 
     public function test_preview_shows_attended_slot_when_day_has_more_than_three_subjects(): void

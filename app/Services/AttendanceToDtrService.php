@@ -100,7 +100,10 @@ class AttendanceToDtrService
         $monthlyAttendance = AttendanceRecord::where('faculty_id', $facultyId)
             ->whereYear('attendance_date', $year)
             ->whereMonth('attendance_date', $month)
-            ->with('faculty:id,first_name,middle_name,last_name,department_id')
+            ->with([
+                'faculty:id,first_name,middle_name,last_name,department_id',
+                'internalSchedule:id,device_time_in,device_time_out',
+            ])
             ->get();
 
         $monthlyAttendance = $this->absenceDetectionService->buildMergedRecords($facultyId, $month, $year, $monthlyAttendance);
@@ -137,10 +140,38 @@ class AttendanceToDtrService
             $operationalOut = $mt->operational_time_out ? Carbon::parse($mt->operational_time_out) : null;
             $actualIn = $mt->actual_time_in ? Carbon::parse($mt->actual_time_in) : null;
             $actualOut = $mt->actual_time_out ? Carbon::parse($mt->actual_time_out) : null;
+            $internalBaseIn = null;
+            $internalBaseOut = null;
+
+            if (! empty($mt->internal_schedule_id) && $mt->internalSchedule) {
+                $attendanceDate = Carbon::parse($mt->attendance_date ?? $daySource);
+                $internalTimeIn = $mt->internalSchedule->device_time_in
+                    ? Carbon::parse($mt->internalSchedule->device_time_in)
+                    : null;
+                $internalTimeOut = $mt->internalSchedule->device_time_out
+                    ? Carbon::parse($mt->internalSchedule->device_time_out)
+                    : null;
+
+                if ($internalTimeIn) {
+                    $internalBaseIn = $attendanceDate->copy()->setTime(
+                        $internalTimeIn->hour,
+                        $internalTimeIn->minute,
+                        $internalTimeIn->second
+                    );
+                }
+
+                if ($internalTimeOut) {
+                    $internalBaseOut = $attendanceDate->copy()->setTime(
+                        $internalTimeOut->hour,
+                        $internalTimeOut->minute,
+                        $internalTimeOut->second
+                    );
+                }
+            }
 
             $hasActualAttendance = ! empty($mt->actual_time_in) || ! empty($mt->actual_time_out);
-            $baseIn = $operationalIn ?? $officialIn;
-            $baseOut = $operationalOut ?? $officialOut;
+            $baseIn = $internalBaseIn ?? $operationalIn ?? $officialIn;
+            $baseOut = $internalBaseOut ?? $operationalOut ?? $officialOut;
 
             $lateMinutes = 0;
             $undertimeMinutes = 0;

@@ -38,7 +38,8 @@ export function DtrSummary({ summary }) {
 }
 
 export function DtrTimeLog({ rows, totalHours, mode = 'official', onModeChange }) {
-    const totalHoursText = Number(totalHours ?? 0).toFixed(2);
+    const activePrefix = mode === 'internal' ? 'internal_' : 'official_';
+    const totalHoursText = Number(rows.reduce((total, row) => total + Number(row[`${activePrefix}total_hours_rendered`] ?? row.total_hours_rendered ?? 0), 0)).toFixed(2);
 
     return (
         <div>
@@ -101,9 +102,11 @@ export function DtrTimeLog({ rows, totalHours, mode = 'official', onModeChange }
                     <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                         {rows.map((row) => {
                             const isHoliday = row.is_holiday;
-                            const hasTardy = row.tardy_minutes > 0 || row.undertime_minutes > 0;
                             const isAbsent = row.status === 'absent' && !isHoliday;
                             const prefix = mode === 'internal' ? 'internal_' : 'official_';
+                            const tardyMinutes = Number(row[`${prefix}tardy_minutes`] ?? row.tardy_minutes ?? 0);
+                            const undertimeMinutes = Number(row[`${prefix}undertime_minutes`] ?? row.undertime_minutes ?? 0);
+                            const hasTardy = tardyMinutes > 0 || undertimeMinutes > 0;
                             const displayDay = mode === 'internal' ? (row.internal_day ?? row.day) : (row.official_day ?? row.day);
                             const dayShift = mode === 'internal' ? (row.internal_day_shift ?? 0) : 0;
                             const morningIn = row[`${prefix}morning_in`] ?? row.morning_in ?? '';
@@ -112,12 +115,12 @@ export function DtrTimeLog({ rows, totalHours, mode = 'official', onModeChange }
                             const afternoonOut = row[`${prefix}afternoon_out`] ?? row.afternoon_out ?? '';
                             const nightIn = row[`${prefix}night_in`] ?? row.night_in ?? '';
                             const nightOut = row[`${prefix}night_out`] ?? row.night_out ?? '';
-                            const morningAbsent = Boolean(row.official_morning_absent);
-                            const afternoonAbsent = Boolean(row.official_afternoon_absent);
-                            const nightAbsent = Boolean(row.official_night_absent);
+                            const morningAbsent = Boolean(row[`${prefix}morning_absent`]);
+                            const afternoonAbsent = Boolean(row[`${prefix}afternoon_absent`]);
+                            const nightAbsent = Boolean(row[`${prefix}night_absent`]);
                             const hasTimes = Boolean(morningIn || morningOut || afternoonIn || afternoonOut || nightIn || nightOut);
-                            const totalHours = Number(row.total_hours_rendered ?? 0).toFixed(2);
-                            const requiredHours = Number(row.required_hours ?? 0).toFixed(2);
+                            const totalHours = Number(row[`${prefix}total_hours_rendered`] ?? row.total_hours_rendered ?? 0).toFixed(2);
+                            const requiredHours = Number(row[`${prefix}required_hours`] ?? row.required_hours ?? 0).toFixed(2);
 
                             let rowClass = '';
                             if (isHoliday) {
@@ -178,10 +181,10 @@ export function DtrTimeLog({ rows, totalHours, mode = 'official', onModeChange }
                                         {requiredHours}
                                     </td>
                                     <td className="px-2 py-1.5 text-center text-xs font-medium">
-                                        {row.tardy_minutes > 0 ? row.tardy_minutes : ''}
+                                        {tardyMinutes > 0 ? tardyMinutes : ''}
                                     </td>
                                     <td className="px-2 py-1.5 text-center text-xs font-medium">
-                                        {row.undertime_minutes > 0 ? row.undertime_minutes : ''}
+                                        {undertimeMinutes > 0 ? undertimeMinutes : ''}
                                     </td>
                                 </tr>
                             );
@@ -196,13 +199,13 @@ export function DtrTimeLog({ rows, totalHours, mode = 'official', onModeChange }
                                 {totalHoursText}
                             </td>
                             <td className="px-2 py-2 text-center text-xs font-bold">
-                                {Number(rows.reduce((total, row) => total + Number(row.required_hours ?? 0), 0)).toFixed(2)}
+                                {Number(rows.reduce((total, row) => total + Number(row[`${activePrefix}required_hours`] ?? row.required_hours ?? 0), 0)).toFixed(2)}
                             </td>
                             <td className="px-2 py-2 text-center text-xs font-bold">
-                                {rows.reduce((total, row) => total + Number(row.tardy_minutes ?? 0), 0)}
+                                {rows.reduce((total, row) => total + Number(row[`${activePrefix}tardy_minutes`] ?? row.tardy_minutes ?? 0), 0)}
                             </td>
                             <td className="px-2 py-2 text-center text-xs font-bold">
-                                {rows.reduce((total, row) => total + Number(row.undertime_minutes ?? 0), 0)}
+                                {rows.reduce((total, row) => total + Number(row[`${activePrefix}undertime_minutes`] ?? row.undertime_minutes ?? 0), 0)}
                             </td>
                         </tr>
                     </tfoot>
