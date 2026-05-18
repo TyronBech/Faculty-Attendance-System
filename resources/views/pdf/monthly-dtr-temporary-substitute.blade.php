@@ -169,7 +169,6 @@
 @php
     $totalDays = count($rows);
     $employeeNo = $faculty->faculty_code ?: ($faculty->biometric_id ?: ('ID-'.$faculty->id));
-    $isPartTime = in_array(strtolower((string) ($faculty->employment_type ?? '')), ['part-time', 'part_time'], true);
     $pupLogoPath = public_path('images/PUP Taguig Logo.jpg');
     $dtrLogoDataUri = '';
     if (is_file($pupLogoPath)) {
@@ -209,9 +208,7 @@
                 <div class="line3">Human Resources Management Department</div>
                 <div class="line4">
                     Monthly Time Record
-                    @if ($isPartTime)
-                        <span style="font-style:italic;">(Part-Time)</span>
-                    @endif
+                    <span style="font-style:italic;">(Temporary Substitute)</span>
                 </div>
             </td>
             <td class="banner-form">

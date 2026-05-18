@@ -26,6 +26,7 @@ class AdminDtrExportController extends Controller
             'faculty_id' => ['required', 'integer', 'exists:faculties,id'],
             'month' => ['required', 'integer', 'between:1,12'],
             'year' => ['required', 'integer', 'between:2000,2100'],
+            'export_type' => ['nullable', 'in:default,temporary_substitute'],
         ]);
 
         $faculty = Faculty::query()
@@ -128,6 +129,7 @@ class AdminDtrExportController extends Controller
             (int) $validated['year'],
             $token,
             $fileName,
+            $validated['export_type'] ?? 'default',
         );
 
         return response()->json([
@@ -147,6 +149,7 @@ class AdminDtrExportController extends Controller
             'faculty_ids.*' => ['required', 'integer', 'exists:faculties,id'],
             'month' => ['required', 'integer', 'between:1,12'],
             'year' => ['required', 'integer', 'between:2000,2100'],
+            'export_type' => ['nullable', 'in:default,temporary_substitute'],
         ]);
 
         $token = Str::uuid()->toString();
@@ -157,6 +160,7 @@ class AdminDtrExportController extends Controller
             (int) $validated['month'],
             (int) $validated['year'],
             $token,
+            $validated['export_type'] ?? 'default',
         );
 
         return response()->json([
@@ -282,14 +286,20 @@ class AdminDtrExportController extends Controller
 
             foreach ($slotMap as $slot => $record) {
                 $officialTimes[$slot] = [
-                    'in' => $this->formatTime($record?->dtr_official_time_in ?? $record?->official_time_in),
-                    'out' => $this->formatTime($record?->dtr_official_time_out ?? $record?->official_time_out),
+                    'in' => $this->formatTime($record?->official_time_in),
+                    'out' => $this->formatTime($record?->official_time_out),
                     'is_absent' => (bool) (($record?->status ?? '') === 'absent' && empty($record?->actual_time_in) && empty($record?->actual_time_out)),
                 ];
 
                 $internalTimes[$slot] = [
-                    'in' => $this->formatTime($record?->dtr_operational_time_in ?? $record?->operational_time_in),
-                    'out' => $this->formatTime($record?->dtr_operational_time_out ?? $record?->operational_time_out),
+                    'in' => $this->formatTime(
+                        $record?->operational_time_in
+                            ?? $record?->official_time_in
+                    ),
+                    'out' => $this->formatTime(
+                        $record?->operational_time_out
+                            ?? $record?->official_time_out
+                    ),
                 ];
             }
 

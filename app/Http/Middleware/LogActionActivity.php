@@ -22,11 +22,33 @@ class LogActionActivity
      * @var array<string, string>
      */
     private const ACTION_LABELS = [
+        'admin.logout' => 'logged out',
+        'admin.profile.update' => 'updated admin profile',
         'profile.update' => 'updated profile',
+        'profile.destroy' => 'deleted account',
         'password.update' => 'updated password',
         'faculty.dtr.dispatch' => 'exported DTR',
         'admin.dtr-export.dispatch' => 'exported DTR',
         'admin.dtr-export.dispatch-batch' => 'exported DTR batch',
+        'admin.rbac.roles.store' => 'created role',
+        'admin.rbac.roles.update' => 'updated role',
+        'admin.rbac.roles.destroy' => 'deleted role',
+        'admin.rbac.users.roles.update' => 'updated user roles',
+        'admin.schedules.store' => 'created schedule',
+        'admin.schedules.update' => 'updated schedule',
+        'admin.schedules.destroy' => 'deleted schedule',
+        'admin.schedule-change-requests.approve' => 'approved schedule change request',
+        'admin.schedule-change-requests.reject' => 'rejected schedule change request',
+        'admin.online-requests.approve' => 'approved online attendance request',
+        'admin.online-requests.reject' => 'rejected online attendance request',
+        'admin.undertime-justifications.approve' => 'approved undertime justification',
+        'admin.undertime-justifications.reject' => 'rejected undertime justification',
+        'admin.manual-attendance-requests.limit.update' => 'updated manual attendance request limit',
+        'admin.manual-attendance-requests.approve' => 'approved manual attendance request',
+        'admin.manual-attendance-requests.reject' => 'rejected manual attendance request',
+        'admin.holidays.store' => 'created holiday',
+        'admin.holidays.update' => 'updated holiday',
+        'admin.holidays.destroy' => 'deleted holiday',
         'admin.attendance-imports.store' => 'imported attendance logs',
         'admin.attendance-imports.sync' => 'synced attendance import',
         'admin.attendance-imports.logs.update' => 'updated attendance import log',
@@ -34,6 +56,17 @@ class LogActionActivity
         'admin.attendance-imports.destroy' => 'deleted attendance import batch',
         'admin.manual-attendance.store' => 'recorded manual attendance',
         'admin.backups.store' => 'generated backup',
+        'faculty.attendance.justify' => 'submitted undertime justification',
+        'faculty.attendance.missing-justify' => 'submitted missing attendance justification',
+        'faculty.schedule-change-requests.store' => 'submitted schedule change request',
+        'faculty.schedule-change-requests.destroy' => 'cancelled schedule change request',
+        'faculty.schedule-change-requests.check-conflict' => 'checked schedule change conflict',
+        'faculty.online-attendance.store' => 'submitted online attendance request',
+        'faculty.online-attendance.destroy' => 'cancelled online attendance request',
+        'faculty.undertime-requests.store' => 'submitted undertime request',
+        'faculty.undertime-requests.destroy' => 'cancelled undertime request',
+        'faculty.manual-attendance-requests.store' => 'submitted manual attendance request',
+        'faculty.manual-attendance-requests.destroy' => 'cancelled manual attendance request',
     ];
 
     public function handle(Request $request, Closure $next): Response
@@ -53,10 +86,15 @@ class LogActionActivity
         $actor = auth('admin')->user() ?? auth('web')->user() ?? $request->user();
         $route = $request->route();
         $routeName = $route?->getName() ?? 'unknown';
-        $description = $this->buildDescription($actor, $routeName);
+        $actionLabel = $this->resolveActionLabel($request, $routeName);
+        $description = $this->buildDescription($actor, $actionLabel);
 
         $properties = [
+            'action_label' => $actionLabel,
+            'method' => $request->method(),
             'path' => $request->path(),
+            'route_name' => $routeName,
+            'route_parameters' => $this->formatRouteParameters($route?->parameters() ?? []),
             'status' => $statusCode,
             'ip' => $request->ip(),
             'input' => $request->except(self::SENSITIVE_FIELDS),
@@ -72,12 +110,25 @@ class LogActionActivity
         return $response;
     }
 
-    private function buildDescription(mixed $actor, string $routeName): string
+    private function buildDescription(mixed $actor, string $actionLabel): string
     {
         $actorLabel = $this->resolveActorLabel($actor);
-        $actionLabel = self::ACTION_LABELS[$routeName] ?? 'performed an action';
 
         return "{$actorLabel} {$actionLabel}";
+    }
+
+    private function resolveActionLabel(Request $request, string $routeName): string
+    {
+        if (isset(self::ACTION_LABELS[$routeName])) {
+            return self::ACTION_LABELS[$routeName];
+        }
+
+        return match ($request->method()) {
+            'POST' => 'created or submitted a record',
+            'PUT', 'PATCH' => 'updated a record',
+            'DELETE' => 'deleted or cancelled a record',
+            default => 'performed an action',
+        };
     }
 
     private function resolveActorLabel(mixed $actor): string
@@ -96,5 +147,25 @@ class LogActionActivity
         }
 
         return 'User';
+    }
+
+    /**
+     * @param  array<string, mixed>  $parameters
+     * @return array<string, mixed>
+     */
+    private function formatRouteParameters(array $parameters): array
+    {
+        return collect($parameters)
+            ->map(function (mixed $value): mixed {
+                if (is_object($value) && method_exists($value, 'getKey')) {
+                    return [
+                        'type' => class_basename($value),
+                        'id' => $value->getKey(),
+                    ];
+                }
+
+                return $value;
+            })
+            ->all();
     }
 }

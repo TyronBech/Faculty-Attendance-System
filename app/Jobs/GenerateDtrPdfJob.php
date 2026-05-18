@@ -30,6 +30,7 @@ class GenerateDtrPdfJob implements ShouldQueue
         public int $year,
         public string $token,
         public string $fileName,
+        public string $exportType = 'default',
     ) {}
 
     public function handle(AttendanceToDtrService $service): void
@@ -69,7 +70,7 @@ class GenerateDtrPdfJob implements ShouldQueue
         $printedAt = now();
         $barcode = MonthlyDtrBarcode::build($faculty, $printedAt);
 
-        Pdf::view('pdf.monthly-dtr', [
+        Pdf::view($this->pdfView(), [
             'faculty' => $faculty,
             'rows' => $rows,
             'summary' => $summary,
@@ -84,5 +85,12 @@ class GenerateDtrPdfJob implements ShouldQueue
             ->portrait()
             ->margins(0, 0, 0, 0, 'mm')
             ->save($outputPath);
+    }
+
+    private function pdfView(): string
+    {
+        return $this->exportType === 'temporary_substitute'
+            ? 'pdf.monthly-dtr-temporary-substitute'
+            : 'pdf.monthly-dtr';
     }
 }

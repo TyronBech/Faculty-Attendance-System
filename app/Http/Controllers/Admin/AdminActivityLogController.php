@@ -31,6 +31,7 @@ class AdminActivityLogController extends Controller
             ->latest('id')
             ->paginate($perPage)
             ->through(function (Activity $activity): array {
+                $properties = $activity->properties;
                 $causerName = null;
                 if ($activity->causer) {
                     $causerName = $activity->causer->username
@@ -43,12 +44,16 @@ class AdminActivityLogController extends Controller
                     'log_name' => $activity->log_name,
                     'description' => $activity->description,
                     'event' => $activity->event,
+                    'action_label' => data_get($properties, 'action_label'),
+                    'method' => data_get($properties, 'method'),
+                    'route_name' => data_get($properties, 'route_name'),
+                    'path' => data_get($properties, 'path'),
                     'subject_type' => $activity->subject_type,
                     'subject_id' => $activity->subject_id,
                     'causer_type' => $activity->causer_type,
                     'causer_id' => $activity->causer_id,
                     'causer_name' => $causerName,
-                    'properties' => $activity->properties,
+                    'properties' => $properties,
                     'created_at' => optional($activity->created_at)->toDateTimeString(),
                 ];
             })

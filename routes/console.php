@@ -2,6 +2,7 @@
 
 use App\Models\OnlineAttendanceRequest;
 use App\Services\OnlineAttendanceSyncService;
+use App\Services\TemporaryFacultyScheduleSyncService;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
@@ -43,6 +44,20 @@ Artisan::command('online-attendance:sync-approved', function () {
     $this->info("Synced approved requests: {$updated}");
     $this->info("Skipped with issues: {$errors}");
 })->purpose('Sync approved online attendance requests into attendance_records');
+
+Artisan::command('flss:sync-temporary-schedules {--per-page=500} {--url=}', function (TemporaryFacultyScheduleSyncService $syncService) {
+    $perPage = max(1, (int) $this->option('per-page'));
+    $url = trim((string) $this->option('url')) ?: null;
+    $summary = $syncService->syncFromApi(['per_page' => $perPage], $url);
+
+    $this->info("Temporary schedules processed: {$summary['processed']}");
+    $this->info("Created: {$summary['created']}");
+    $this->info("Updated: {$summary['updated']}");
+    $this->info("Unmatched faculty codes: {$summary['unmatched_faculty']}");
+    $this->info("Skipped rows: {$summary['skipped']}");
+})->purpose('Sync FLSS temporary faculty schedules and match them to local faculty by faculty_code')
+    ->daily()
+    ->at('1:00');
 
 Schedule::command('backup:clean --disable-notifications')
     ->daily()

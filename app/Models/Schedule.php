@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Http\Request;
 use App\Models\ScheduleChangeRequest;
+use Illuminate\Support\Facades\Schema;
 
 class Schedule extends Model
 {
@@ -146,6 +147,7 @@ class Schedule extends Model
         // Pre-load all approved change requests for this page's schedules in a
         // single query, keyed by schedule_id, to avoid N+1 round-trips.
         $scheduleIds = $items->pluck('id')->all();
+        $facultyIds = $items->pluck('faculty_id')->filter()->unique()->values()->all();
 
         $approvedRequestsBySchedule = ScheduleChangeRequest::where('status', 'approved')
             ->whereHas('scheduleDetail', function ($q) use ($scheduleIds): void {
@@ -155,8 +157,18 @@ class Schedule extends Model
             ->get()
             ->groupBy(fn (ScheduleChangeRequest $r): int => $r->scheduleDetail?->schedule_id ?? 0);
 
-        $formatted = $items->map(function (Schedule $schedule) use ($approvedRequestsBySchedule) {
+        $temporarySchedulesByFaculty = Schema::hasTable('temporary_faculty_schedules')
+            ? TemporaryFacultySchedule::query()
+                ->whereIn('faculty_id', $facultyIds)
+                ->orderBy('start_time')
+                ->get()
+                ->sortBy(fn (TemporaryFacultySchedule $entry): string => str_pad((string) array_search($entry->day, ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], true), 2, '0', STR_PAD_LEFT).'-'.($entry->start_time ?? ''))
+                ->groupBy('faculty_id')
+            : collect();
+
+        $formatted = $items->map(function (Schedule $schedule) use ($approvedRequestsBySchedule, $temporarySchedulesByFaculty) {
             $approvedRequests = $approvedRequestsBySchedule->get($schedule->id, collect());
+            $temporarySchedules = $temporarySchedulesByFaculty->get($schedule->faculty_id, collect());
 
             return [
                 'id'             => $schedule->id,
@@ -194,6 +206,24 @@ class Schedule extends Model
                         'required_hours' => $entry->required_hours,
                         'sync_status'    => $entry->sync_status,
                         'synced_at'      => $entry->synced_at ? Carbon::parse($entry->synced_at)->format('M d, Y h:i A') : null,
+                    ];
+                })->toArray(),
+                'temporary_substitute_schedule' => $temporarySchedules->map(function (TemporaryFacultySchedule $entry) {
+                    return [
+                        'id' => $entry->id,
+                        'day' => $entry->day,
+                        'start_time' => $entry->start_time ? Carbon::parse($entry->start_time)->format('H:i') : null,
+                        'end_time' => $entry->end_time ? Carbon::parse($entry->end_time)->format('H:i') : null,
+                        'course_code' => $entry->course_code,
+                        'subject_desc' => $entry->course_title,
+                        'room_code' => $entry->room_code,
+                        'program_code' => $entry->program_code,
+                        'program_title' => $entry->program_title,
+                        'year_level' => $entry->year_level,
+                        'section_name' => $entry->section_name,
+                        'units' => $entry->units,
+                        'tuition_hours' => $entry->tuition_hours,
+                        'synced_at' => $entry->synced_at ? Carbon::parse($entry->synced_at)->format('M d, Y h:i A') : null,
                     ];
                 })->toArray(),
                 'approved_change_requests' => $approvedRequests->map(function (ScheduleChangeRequest $req) {

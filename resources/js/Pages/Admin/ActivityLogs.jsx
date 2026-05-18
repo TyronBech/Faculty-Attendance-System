@@ -25,6 +25,18 @@ function formatDateTime(value) {
     });
 }
 
+function formatActionDetail(log) {
+    if (log.action_label) {
+        return log.action_label.charAt(0).toUpperCase() + log.action_label.slice(1);
+    }
+
+    if (log.description) {
+        return 'System recorded this activity.';
+    }
+
+    return 'Recorded activity.';
+}
+
 export default function ActivityLogs({ activityLogs, filters }) {
     const [searchText, setSearchText] = useState(filters?.search ?? '');
 
@@ -153,7 +165,7 @@ export default function ActivityLogs({ activityLogs, filters }) {
                                             <td className="py-3 pr-3 align-top whitespace-nowrap">{formatDateTime(log.created_at)}</td>
                                             <td className="py-3 px-3 align-top">
                                                 <p className="font-semibold text-gray-800 dark:text-gray-100">{log.description ?? '—'}</p>
-                                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{log.event ?? '—'}</p>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{formatActionDetail(log)}</p>
                                             </td>
                                             <td className="py-3 px-3 align-top">
                                                 <p className="font-medium text-gray-800 dark:text-gray-100">{log.causer_name ?? 'System'}</p>
