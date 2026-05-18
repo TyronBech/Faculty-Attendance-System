@@ -8,7 +8,7 @@ import { DtrSummary, DtrTimeLog } from '@/Components/Dtr/DtrPreviewContent';
    Shows a preview of the DTR data + summary,
    then dispatches a background job to generate PDF.
 */
-export default function DtrPreviewModal({ open, onClose, facultyIds = [], month, year }) {
+export default function DtrPreviewModal({ open, onClose, facultyIds = [], month, year, exportType = 'default' }) {
     const [loading, setLoading] = useState(false);
     const [data, setData] = useState(null);
     const [downloading, setDownloading] = useState(false);
@@ -79,6 +79,7 @@ export default function DtrPreviewModal({ open, onClose, facultyIds = [], month,
                 faculty_ids: facultyIds,
                 month,
                 year,
+                export_type: exportType,
             });
 
             const { token, fileName } = dispatch;
@@ -142,7 +143,7 @@ export default function DtrPreviewModal({ open, onClose, facultyIds = [], month,
             setDownloading(false);
             setExportStatusText('');
         }
-    }, [downloading, facultyIds, month, year, onClose]);
+    }, [downloading, facultyIds, month, year, exportType, onClose]);
 
     if (!open) return null;
 
