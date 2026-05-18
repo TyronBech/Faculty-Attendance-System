@@ -30,6 +30,7 @@ class UndertimeRequestController extends Controller
         $temporarySchedulesByDay = $faculty->temporaryFacultySchedules()
             ->get()
             ->groupBy(fn ($schedule) => $schedule->day ?: 'Monday');
+        $isTemporarySubstituteFaculty = $faculty->isTemporarySubstitute();
 
         $status = $request->query('status', '');
         $query = $faculty->undertimeRequests()->where('type', 'undertime');
@@ -43,17 +44,18 @@ class UndertimeRequestController extends Controller
             ->paginate(10);
 
         // Add attachment URLs and course info to each request
-        $requests->through(function ($req) use ($faculty, $temporarySchedulesByDay) {
+        $requests->through(function ($req) use ($faculty, $temporarySchedulesByDay, $isTemporarySubstituteFaculty) {
             $req->attachment_url = $req->getAttachmentUrl();
             $req->attachments_data = $req->getAttachmentsData();
 
             // Add course information for display
             if ($req->attendanceRecord) {
                 if ($req->attendanceRecord->scheduleDetail) {
-                    $isTemporarySubstituteRecord = $faculty->hasTemporarySubstituteAttendanceRecord(
-                        $req->attendanceRecord,
-                        $temporarySchedulesByDay
-                    );
+                    $isTemporarySubstituteRecord = $isTemporarySubstituteFaculty
+                        && $faculty->hasTemporarySubstituteAttendanceRecord(
+                            $req->attendanceRecord,
+                            $temporarySchedulesByDay
+                        );
                     $baseCourseName = $req->attendanceRecord->scheduleDetail->course_title
                         ?? $req->attendanceRecord->scheduleDetail->course_code
                         ?? 'Unknown Course';
@@ -79,7 +81,7 @@ class UndertimeRequestController extends Controller
             ->with(['scheduleDetail', 'internalSchedule'])
             ->orderBy('attendance_date', 'desc')
             ->get()
-            ->map(function ($record) use ($faculty, $temporarySchedulesByDay) {
+            ->map(function ($record) use ($faculty, $temporarySchedulesByDay, $isTemporarySubstituteFaculty) {
                 $hasRequest = $faculty->undertimeRequests()
                     ->where('type', 'undertime')
                     ->where('attendance_record_id', $record->id)
@@ -98,10 +100,11 @@ class UndertimeRequestController extends Controller
                 $program_code = '';
 
                 if ($record->scheduleDetail) {
-                    $isTemporarySubstituteRecord = $faculty->hasTemporarySubstituteAttendanceRecord(
-                        $record,
-                        $temporarySchedulesByDay
-                    );
+                    $isTemporarySubstituteRecord = $isTemporarySubstituteFaculty
+                        && $faculty->hasTemporarySubstituteAttendanceRecord(
+                            $record,
+                            $temporarySchedulesByDay
+                        );
                     $scheduleType = $isTemporarySubstituteRecord ? 'temporary_substitute' : 'official';
                     $baseSubject = $record->scheduleDetail->course_title ?? $record->scheduleDetail->course_code ?? 'Unknown Course';
                     $subject = $isTemporarySubstituteRecord
@@ -284,6 +287,7 @@ class UndertimeRequestController extends Controller
         $temporarySchedulesByDay = $faculty->temporaryFacultySchedules()
             ->get()
             ->groupBy(fn ($schedule) => $schedule->day ?: 'Monday');
+        $isTemporarySubstituteFaculty = $faculty->isTemporarySubstitute();
 
         $status = $request->query('status', '');
         $query = $faculty->undertimeRequests()->where('type', 'undertime');
@@ -297,17 +301,18 @@ class UndertimeRequestController extends Controller
             ->paginate(10);
 
         // Add attachment URLs and course info to each request
-        $requests->through(function ($req) use ($faculty, $temporarySchedulesByDay) {
+        $requests->through(function ($req) use ($faculty, $temporarySchedulesByDay, $isTemporarySubstituteFaculty) {
             $req->attachment_url = $req->getAttachmentUrl();
             $req->attachments_data = $req->getAttachmentsData();
 
             // Add course information for display
             if ($req->attendanceRecord) {
                 if ($req->attendanceRecord->scheduleDetail) {
-                    $isTemporarySubstituteRecord = $faculty->hasTemporarySubstituteAttendanceRecord(
-                        $req->attendanceRecord,
-                        $temporarySchedulesByDay
-                    );
+                    $isTemporarySubstituteRecord = $isTemporarySubstituteFaculty
+                        && $faculty->hasTemporarySubstituteAttendanceRecord(
+                            $req->attendanceRecord,
+                            $temporarySchedulesByDay
+                        );
                     $baseCourseName = $req->attendanceRecord->scheduleDetail->course_title
                         ?? $req->attendanceRecord->scheduleDetail->course_code
                         ?? 'Unknown Course';

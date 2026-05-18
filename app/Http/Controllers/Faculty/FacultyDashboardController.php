@@ -9,12 +9,9 @@ use App\Models\Holiday;
 use App\Models\OnlineAttendanceRequest;
 use App\Models\ScheduleChangeRequest;
 use App\Models\ScheduleDetail;
-use App\Models\TemporaryFacultySchedule;
 use App\Services\AttendanceReconciliationService;
 use Carbon\Carbon;
-use Carbon\CarbonInterface;
 use Illuminate\Http\Request;
-use Illuminate\Support\Collection;
 use Inertia\Inertia;
 
 class FacultyDashboardController extends Controller
@@ -173,7 +170,7 @@ class FacultyDashboardController extends Controller
             $detailsByScheduleAndDay = $allDetails->groupBy(fn ($d) => $d->schedule_id.'-'.$d->day);
             $holidays = Holiday::all();
 
-            $attendanceLogs = $records->map(function ($record) use ($onlineByDateAndSchedule, $onlineByDate, &$matchedOnlineIds, $approvedChangeRequests, $detailsByScheduleAndDay, $holidays, $temporarySchedulesByDay, $isTemporarySubstituteFaculty) {
+            $attendanceLogs = $records->map(function ($record) use ($faculty, $onlineByDateAndSchedule, $onlineByDate, &$matchedOnlineIds, $approvedChangeRequests, $detailsByScheduleAndDay, $holidays, $temporarySchedulesByDay, $isTemporarySubstituteFaculty) {
                 $detail = $record->scheduleDetail;
                 $date = $record->attendance_date;
                 $dayName = $date->format('l');
@@ -191,14 +188,13 @@ class FacultyDashboardController extends Controller
                 }
 
                 $temporarySchedule = $isTemporarySubstituteFaculty
-                    ? $this->findMatchingTemporarySchedule(
+                    && $faculty->matchesTemporarySubstituteSchedule(
                         $date,
-                        $temporarySchedulesByDay,
                         $detail ?: ($onlineRequest ? $onlineRequest->scheduleDetail : null),
                         $record->operational_time_in ?: ($detail?->start_time ? Carbon::parse($detail->start_time) : null),
-                        $record->operational_time_out ?: ($detail?->end_time ? Carbon::parse($detail->end_time) : null)
-                    )
-                    : null;
+                        $record->operational_time_out ?: ($detail?->end_time ? Carbon::parse($detail->end_time) : null),
+                        $temporarySchedulesByDay
+                    );
 
                 // Build subjects array from the linked schedule detail or online request
                 $subjects = [];
@@ -409,7 +405,7 @@ class FacultyDashboardController extends Controller
                     'total_hours' => $totalHours,
                     'online_attendance' => $isOnlineAttendance,
                     'is_holiday' => $isHoliday,
-                    'temporary_substitute' => $temporarySchedule !== null,
+                    'temporary_substitute' => (bool) $temporarySchedule,
                     'subjects' => $subjects,
                 ];
             })->toArray();
@@ -417,17 +413,16 @@ class FacultyDashboardController extends Controller
             // Add unmatched approved online attendance requests
             $unmatchedOnline = $onlineRequests->filter(fn ($req) => ! in_array($req->id, $matchedOnlineIds));
 
-            $onlineOnlyLogs = $unmatchedOnline->map(function ($req) use ($temporarySchedulesByDay, $isTemporarySubstituteFaculty) {
+            $onlineOnlyLogs = $unmatchedOnline->map(function ($req) use ($faculty, $temporarySchedulesByDay, $isTemporarySubstituteFaculty) {
                 $detail = $req->scheduleDetail;
                 $temporarySchedule = $isTemporarySubstituteFaculty
-                    ? $this->findMatchingTemporarySchedule(
+                    && $faculty->matchesTemporarySubstituteSchedule(
                         $req->attendance_date,
-                        $temporarySchedulesByDay,
                         $detail,
                         $req->time_in ? Carbon::parse($req->time_in) : ($detail?->start_time ? Carbon::parse($detail->start_time) : null),
-                        $req->time_out ? Carbon::parse($req->time_out) : ($detail?->end_time ? Carbon::parse($detail->end_time) : null)
-                    )
-                    : null;
+                        $req->time_out ? Carbon::parse($req->time_out) : ($detail?->end_time ? Carbon::parse($detail->end_time) : null),
+                        $temporarySchedulesByDay
+                    );
                 $subjects = ($detail && ($detail->course_code || $detail->subject_desc)) ? [[
                     'code' => $detail->course_code ?? '',
                     'desc' => (trim($detail->subject_desc) !== '') ? $detail->subject_desc : 'Operational Duty',
@@ -482,7 +477,7 @@ class FacultyDashboardController extends Controller
                     'required_hours' => (float) $hours,
                     'total_hours' => $totalHours,
                     'online_attendance' => true,
-                    'temporary_substitute' => $temporarySchedule !== null,
+                    'temporary_substitute' => (bool) $temporarySchedule,
                     'subjects' => $subjects,
                 ];
             })->toArray();
@@ -493,113 +488,6 @@ class FacultyDashboardController extends Controller
         return Inertia::render('Faculty/Attendance', [
             'attendanceLogs' => $attendanceLogs,
         ]);
-    }
-
-    private function findMatchingTemporarySchedule(
-        CarbonInterface $date,
-        Collection $temporarySchedulesByDay,
-        ?ScheduleDetail $detail = null,
-        mixed $startTime = null,
-        mixed $endTime = null
-    ): ?TemporaryFacultySchedule {
-        $candidates = $temporarySchedulesByDay->get($date->format('l'), collect());
-
-        if ($candidates->isEmpty()) {
-            return null;
-        }
-
-        $normalizedStart = $this->normalizeTimeValue($startTime);
-        $normalizedEnd = $this->normalizeTimeValue($endTime);
-
-        /** @var Collection<int, array{schedule: TemporaryFacultySchedule, score: int}> $scored */
-        $scored = $candidates->map(function (TemporaryFacultySchedule $schedule) use ($detail, $normalizedStart, $normalizedEnd) {
-            $score = 0;
-
-            if ($detail) {
-                if ($this->normalizedMatch($schedule->course_code, $detail->course_code)) {
-                    $score += 50;
-                }
-
-                if ($this->normalizedMatch($schedule->course_title, $detail->subject_desc)) {
-                    $score += 25;
-                }
-
-                if ($this->normalizedMatch($schedule->program_code, $detail->program_code)) {
-                    $score += 15;
-                }
-
-                if ($this->normalizedMatch($schedule->section_name, $detail->section_name)) {
-                    $score += 15;
-                }
-
-                if ($schedule->year_level !== null && $detail->year_level !== null && (int) $schedule->year_level === (int) $detail->year_level) {
-                    $score += 10;
-                }
-            }
-
-            if ($normalizedStart !== null && $normalizedEnd !== null) {
-                $scheduleStart = $this->normalizeTimeValue($schedule->start_time);
-                $scheduleEnd = $this->normalizeTimeValue($schedule->end_time);
-
-                if ($scheduleStart !== null && $scheduleEnd !== null && $this->timesOverlap($normalizedStart, $normalizedEnd, $scheduleStart, $scheduleEnd)) {
-                    $score += 30;
-                }
-            }
-
-            return [
-                'schedule' => $schedule,
-                'score' => $score,
-            ];
-        })->sortByDesc('score')->values();
-
-        $bestMatch = $scored->first();
-
-        if (! $bestMatch || $bestMatch['score'] < 30) {
-            return null;
-        }
-
-        return $bestMatch['schedule'];
-    }
-
-    private function normalizeTimeValue(mixed $value): ?string
-    {
-        if ($value === null || $value === '') {
-            return null;
-        }
-
-        if ($value instanceof CarbonInterface) {
-            return $value->format('H:i:s');
-        }
-
-        try {
-            return Carbon::parse((string) $value)->format('H:i:s');
-        } catch (\Throwable) {
-            return null;
-        }
-    }
-
-    private function timesOverlap(string $startA, string $endA, string $startB, string $endB): bool
-    {
-        return ! ($endA <= $startB || $startA >= $endB);
-    }
-
-    private function normalizedMatch(?string $left, ?string $right): bool
-    {
-        $normalizedLeft = $this->normalizeMatchValue($left);
-        $normalizedRight = $this->normalizeMatchValue($right);
-
-        return $normalizedLeft !== null && $normalizedRight !== null && $normalizedLeft === $normalizedRight;
-    }
-
-    private function normalizeMatchValue(?string $value): ?string
-    {
-        if ($value === null) {
-            return null;
-        }
-
-        $normalized = preg_replace('/[^A-Z0-9]/', '', strtoupper(trim($value)));
-
-        return $normalized !== '' ? $normalized : null;
     }
 
     /**

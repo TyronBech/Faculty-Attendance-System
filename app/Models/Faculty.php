@@ -124,7 +124,33 @@ class Faculty extends Model
         AttendanceRecord $record,
         ?Collection $temporarySchedulesByDay = null
     ): bool {
-        return $this->findMatchingTemporaryScheduleForAttendanceRecord($record, $temporarySchedulesByDay) !== null;
+        if (! $record->attendance_date) {
+            return false;
+        }
+
+        return $this->matchesTemporarySubstituteSchedule(
+            $record->attendance_date,
+            $record->scheduleDetail,
+            $record->official_time_in ?: ($record->scheduleDetail?->start_time ? Carbon::parse($record->scheduleDetail->start_time) : null),
+            $record->official_time_out ?: ($record->scheduleDetail?->end_time ? Carbon::parse($record->scheduleDetail->end_time) : null),
+            $temporarySchedulesByDay
+        );
+    }
+
+    public function matchesTemporarySubstituteSchedule(
+        CarbonInterface $date,
+        ?ScheduleDetail $detail = null,
+        mixed $startTime = null,
+        mixed $endTime = null,
+        ?Collection $temporarySchedulesByDay = null
+    ): bool {
+        return $this->findMatchingTemporarySchedule(
+            $date,
+            $detail,
+            $startTime,
+            $endTime,
+            $temporarySchedulesByDay
+        ) !== null;
     }
 
     /* ------------------------------------------------------------------ */
@@ -1576,7 +1602,11 @@ class Faculty extends Model
             return null;
         }
 
-        $parsed = Carbon::createFromFormat('h:i A', $time);
+        try {
+            $parsed = Carbon::createFromFormat('h:i A', $time);
+        } catch (\Throwable) {
+            return null;
+        }
 
         if ($parsed === false) {
             return null;
@@ -1587,21 +1617,24 @@ class Faculty extends Model
 
     private function normalizedMatch(mixed $left, mixed $right): bool
     {
-        $leftValue = trim((string) ($left ?? ''));
-        $rightValue = trim((string) ($right ?? ''));
+        $leftValue = $this->normalizeMatchValue($left);
+        $rightValue = $this->normalizeMatchValue($right);
 
-        if ($leftValue === '' || $rightValue === '') {
+        if ($leftValue === null || $rightValue === null) {
             return false;
         }
 
-        return strcasecmp($leftValue, $rightValue) === 0;
+        return $leftValue === $rightValue;
     }
 
-    private function findMatchingTemporaryScheduleForAttendanceRecord(
-        AttendanceRecord $record,
+    private function findMatchingTemporarySchedule(
+        CarbonInterface $date,
+        ?ScheduleDetail $detail = null,
+        mixed $startTime = null,
+        mixed $endTime = null,
         ?Collection $temporarySchedulesByDay = null
     ): ?TemporaryFacultySchedule {
-        if (! $this->isTemporarySubstitute() || ! $record->scheduleDetail) {
+        if (! $this->isTemporarySubstitute() || ! $detail) {
             return null;
         }
 
@@ -1610,18 +1643,17 @@ class Faculty extends Model
                 ->get()
                 ->groupBy(fn (TemporaryFacultySchedule $schedule) => $schedule->day ?: 'Monday');
 
-        $candidates = $groupedSchedules->get($record->attendance_date?->format('l') ?? $record->day_of_week, collect());
+        $candidates = $groupedSchedules->get($date->format('l'), collect());
 
         if ($candidates->isEmpty()) {
             return null;
         }
 
-        $detail = $record->scheduleDetail;
         $normalizedStart = $this->normalizeTimeValue(
-            $record->official_time_in ?: ($detail->start_time ? Carbon::parse($detail->start_time) : null)
+            $startTime ?: ($detail->start_time ? Carbon::parse($detail->start_time) : null)
         );
         $normalizedEnd = $this->normalizeTimeValue(
-            $record->official_time_out ?: ($detail->end_time ? Carbon::parse($detail->end_time) : null)
+            $endTime ?: ($detail->end_time ? Carbon::parse($detail->end_time) : null)
         );
 
         /** @var Collection<int, array{schedule: TemporaryFacultySchedule, score: int}> $scored */
@@ -1692,6 +1724,17 @@ class Faculty extends Model
     private function timesOverlap(string $startA, string $endA, string $startB, string $endB): bool
     {
         return ! ($endA <= $startB || $startA >= $endB);
+    }
+
+    private function normalizeMatchValue(mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $normalized = preg_replace('/[^A-Z0-9]/', '', strtoupper(trim((string) $value)));
+
+        return $normalized !== '' ? $normalized : null;
     }
 
     /**

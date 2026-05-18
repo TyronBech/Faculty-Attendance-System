@@ -35,6 +35,7 @@ class ManualAttendanceRequestController extends Controller
         $temporarySchedulesByDay = $faculty->temporaryFacultySchedules()
             ->get()
             ->groupBy(fn ($schedule) => $schedule->day ?: 'Monday');
+        $isTemporarySubstituteFaculty = $faculty->isTemporarySubstitute();
 
         $status = $request->query('status', '');
         $query = AttendanceJustification::query()
@@ -50,14 +51,15 @@ class ManualAttendanceRequestController extends Controller
             ->paginate(10);
 
         // Add formatted data
-        $requests->through(function ($req) use ($faculty, $temporarySchedulesByDay) {
+        $requests->through(function ($req) use ($faculty, $temporarySchedulesByDay, $isTemporarySubstituteFaculty) {
             $req->attachment_url = $req->getAttachmentUrl();
             $req->attachments_data = $req->getAttachmentsData();
             if ($req->attendanceRecord) {
-                $isTemporarySubstituteRecord = $faculty->hasTemporarySubstituteAttendanceRecord(
-                    $req->attendanceRecord,
-                    $temporarySchedulesByDay
-                );
+                $isTemporarySubstituteRecord = $isTemporarySubstituteFaculty
+                    && $faculty->hasTemporarySubstituteAttendanceRecord(
+                        $req->attendanceRecord,
+                        $temporarySchedulesByDay
+                    );
                 $baseCourseName = $req->attendanceRecord->scheduleDetail?->course_title
                     ?? $req->attendanceRecord->internalSchedule?->name
                     ?? 'Unknown Course';
@@ -88,7 +90,7 @@ class ManualAttendanceRequestController extends Controller
             ->with(['scheduleDetail', 'internalSchedule'])
             ->orderBy('attendance_date', 'desc')
             ->get()
-            ->map(function ($record) use ($faculty, $temporarySchedulesByDay) {
+            ->map(function ($record) use ($faculty, $temporarySchedulesByDay, $isTemporarySubstituteFaculty) {
                 $hasPendingRequest = AttendanceJustification::query()
                     ->where('faculty_id', $faculty->id)
                     ->where('type', 'manual_time')
@@ -97,10 +99,11 @@ class ManualAttendanceRequestController extends Controller
                     ->exists();
 
                 $baseCourseName = $record->scheduleDetail?->course_title ?? $record->internalSchedule?->name ?? 'Unknown';
-                $isTemporarySubstituteRecord = $faculty->hasTemporarySubstituteAttendanceRecord(
-                    $record,
-                    $temporarySchedulesByDay
-                );
+                $isTemporarySubstituteRecord = $isTemporarySubstituteFaculty
+                    && $faculty->hasTemporarySubstituteAttendanceRecord(
+                        $record,
+                        $temporarySchedulesByDay
+                    );
 
                 return [
                     'id' => $record->id,
@@ -242,6 +245,7 @@ class ManualAttendanceRequestController extends Controller
         $temporarySchedulesByDay = $faculty->temporaryFacultySchedules()
             ->get()
             ->groupBy(fn ($schedule) => $schedule->day ?: 'Monday');
+        $isTemporarySubstituteFaculty = $faculty->isTemporarySubstitute();
 
         $status = $request->query('status', '');
         $query = AttendanceJustification::query()
@@ -256,14 +260,15 @@ class ManualAttendanceRequestController extends Controller
             ->orderBy('created_at', 'desc')
             ->paginate(10);
 
-        $requests->through(function ($req) use ($faculty, $temporarySchedulesByDay) {
+        $requests->through(function ($req) use ($faculty, $temporarySchedulesByDay, $isTemporarySubstituteFaculty) {
             $req->attachment_url = $req->getAttachmentUrl();
             $req->attachments_data = $req->getAttachmentsData();
             if ($req->attendanceRecord) {
-                $isTemporarySubstituteRecord = $faculty->hasTemporarySubstituteAttendanceRecord(
-                    $req->attendanceRecord,
-                    $temporarySchedulesByDay
-                );
+                $isTemporarySubstituteRecord = $isTemporarySubstituteFaculty
+                    && $faculty->hasTemporarySubstituteAttendanceRecord(
+                        $req->attendanceRecord,
+                        $temporarySchedulesByDay
+                    );
                 $baseCourseName = $req->attendanceRecord->scheduleDetail?->course_title
                     ?? $req->attendanceRecord->internalSchedule?->name
                     ?? 'N/A';
