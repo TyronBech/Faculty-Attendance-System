@@ -983,7 +983,7 @@ class AdminAttendanceImportController extends Controller
         $sheet->fromArray([
             ['Column', 'Purpose / Format'],
             ['biometric_id', 'Required. Faculty biometric ID. Must match an existing faculties.biometric_id value.'],
-            ['log_datetime', 'Required. Date and time of the log. Use an Excel date/time cell. Example display: 3/1/2026 8:02.'],
+            ['log_datetime', 'Required. Date and time of the log. Use an Excel date/time cell. Example display: MM/DD/YYYY HH:MM in military time.'],
             ['log_type', 'Required. Log type from the device (e.g., IN or OUT).'],
             ['device_id', 'Optional. Identifier of the biometric device used to record the log.'],
         ], null, 'A5');
