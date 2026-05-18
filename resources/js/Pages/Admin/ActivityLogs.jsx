@@ -1,4 +1,4 @@
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+﻿import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import Pagination from '@/Components/Pagination';
 import { Head, router } from '@inertiajs/react';
 import { useMemo, useState } from 'react';
@@ -23,10 +23,6 @@ function formatDateTime(value) {
         second: '2-digit',
         hour12: true,
     });
-}
-
-function parsePropertyValue(properties, key) {
-    return properties?.[key] ?? properties?.attributes?.[key] ?? null;
 }
 
 export default function ActivityLogs({ activityLogs, filters }) {
@@ -116,7 +112,7 @@ export default function ActivityLogs({ activityLogs, filters }) {
                                 type="text"
                                 value={searchText}
                                 onChange={(event) => setSearchText(event.target.value)}
-                                placeholder="Search description, log name, or model type"
+                                placeholder="Search actions, actor, or model type"
                                 className="block w-full rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 focus:border-[#7a1315] focus:ring-[#7a1315]"
                             />
                         </div>
@@ -141,15 +137,12 @@ export default function ActivityLogs({ activityLogs, filters }) {
 
                 <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5 shadow-sm">
                     <div className="overflow-x-auto">
-                        <table className="w-full min-w-[1100px] text-sm">
+                        <table className="w-full min-w-[820px] text-sm">
                             <thead>
                                 <tr className="border-b border-gray-200 dark:border-gray-700 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                                     <th className="py-3 pr-3">Date/Time</th>
                                     <th className="py-3 px-3">Action</th>
-                                    <th className="py-3 px-3">Route</th>
-                                    <th className="py-3 px-3">Method</th>
                                     <th className="py-3 px-3">Actor</th>
-                                    <th className="py-3 px-3">Subject</th>
                                     <th className="py-3 pl-3">Log</th>
                                 </tr>
                             </thead>
@@ -162,19 +155,8 @@ export default function ActivityLogs({ activityLogs, filters }) {
                                                 <p className="font-semibold text-gray-800 dark:text-gray-100">{log.description ?? '—'}</p>
                                                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{log.event ?? '—'}</p>
                                             </td>
-                                            <td className="py-3 px-3 align-top">{parsePropertyValue(log.properties, 'route_name') ?? '—'}</td>
-                                            <td className="py-3 px-3 align-top">
-                                                <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset bg-gray-100 text-gray-700 ring-gray-400/20 dark:bg-gray-700 dark:text-gray-200">
-                                                    {parsePropertyValue(log.properties, 'method') ?? '—'}
-                                                </span>
-                                            </td>
                                             <td className="py-3 px-3 align-top">
                                                 <p className="font-medium text-gray-800 dark:text-gray-100">{log.causer_name ?? 'System'}</p>
-                                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{log.causer_type ? `${log.causer_type} #${log.causer_id}` : 'No causer'}</p>
-                                            </td>
-                                            <td className="py-3 px-3 align-top">
-                                                <p className="text-gray-700 dark:text-gray-300">{log.subject_type ?? '—'}</p>
-                                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{log.subject_id ? `ID ${log.subject_id}` : '—'}</p>
                                             </td>
                                             <td className="py-3 pl-3 align-top">
                                                 <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset bg-red-50 text-[#7a1315] ring-[#7a1315]/20 dark:bg-red-900/30 dark:text-red-300">
@@ -185,7 +167,7 @@ export default function ActivityLogs({ activityLogs, filters }) {
                                     ))
                                 ) : (
                                     <tr>
-                                        <td colSpan={7} className="py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+                                        <td colSpan={4} className="py-10 text-center text-sm text-gray-500 dark:text-gray-400">
                                             No activity logs found.
                                         </td>
                                     </tr>
