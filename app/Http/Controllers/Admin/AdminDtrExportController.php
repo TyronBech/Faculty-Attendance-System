@@ -26,6 +26,7 @@ class AdminDtrExportController extends Controller
             'faculty_id' => ['required', 'integer', 'exists:faculties,id'],
             'month' => ['required', 'integer', 'between:1,12'],
             'year' => ['required', 'integer', 'between:2000,2100'],
+            'export_type' => ['nullable', 'in:default,temporary_substitute'],
         ]);
 
         $faculty = Faculty::query()
@@ -128,6 +129,7 @@ class AdminDtrExportController extends Controller
             (int) $validated['year'],
             $token,
             $fileName,
+            $validated['export_type'] ?? 'default',
         );
 
         return response()->json([
@@ -147,6 +149,7 @@ class AdminDtrExportController extends Controller
             'faculty_ids.*' => ['required', 'integer', 'exists:faculties,id'],
             'month' => ['required', 'integer', 'between:1,12'],
             'year' => ['required', 'integer', 'between:2000,2100'],
+            'export_type' => ['nullable', 'in:default,temporary_substitute'],
         ]);
 
         $token = Str::uuid()->toString();
@@ -157,6 +160,7 @@ class AdminDtrExportController extends Controller
             (int) $validated['month'],
             (int) $validated['year'],
             $token,
+            $validated['export_type'] ?? 'default',
         );
 
         return response()->json([

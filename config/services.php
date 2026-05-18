@@ -37,13 +37,14 @@ return [
 
     'flss_backend' => [
         'key' => env('FLSS_KEY'),
+        'base_url' => env('FLSS_BASE_URL'),
         'faculty_schedules_url' => env(
             'FLSS_FACULTY_SCHEDULES_URL',
             'https://flss-backend-api-d9eecxcnhpccdpdk.southeastasia-01.azurewebsites.net/api/v1/faculty-schedules'
         ),
         'temporary_schedules_url' => env(
             'FLSS_TEMPORARY_SCHEDULES_URL',
-            'https://flss-backend-api-d9eecxcnhpccdpdk.southeastasia-01.azurewebsites.net/api/v1/faculty-schedules/temporary'
+            rtrim((string) env('FLSS_BASE_URL', 'https://flss-backend-api-d9eecxcnhpccdpdk.southeastasia-01.azurewebsites.net'), '/').'/api/v1/faculty-schedules/temporary'
         ),
         'rooms_url' => env(
             'FLSS_FACULTY_ROOMS_URL',

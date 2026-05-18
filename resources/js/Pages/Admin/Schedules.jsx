@@ -298,6 +298,7 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
     const maxAllowedMinutes = toMinutes(ALLOWED_TIME_MAX);
     const officialDetails = selectedSchedule?.details ?? selectedSchedule?.schedule_details ?? [];
     const rawInternalEntries = selectedSchedule?.internal_schedule ?? selectedSchedule?.internal_schedules ?? [];
+    const temporarySubstituteEntries = selectedSchedule?.temporary_substitute_schedule ?? [];
     const internalEntries = rawInternalEntries.length > 0
         ? rawInternalEntries
         : officialDetails.map((detail) => ({
@@ -326,6 +327,7 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
     };
 
     const findInternalLink = (entry) => {
+        if (entry?.is_official_fallback) return entry;
         if (entry?.is_official_fallback) return entry;
         if (!entry?.day || !entry.start_time || !entry.end_time) return null;
         const entryStart = toMinutes(entry.start_time);
@@ -907,6 +909,47 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
                                         )}
                                     </div>
                                 </div>
+
+                                <div>
+                                    <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Temporary Substitute Schedule</p>
+                                    <div className="space-y-2">
+                                        {temporarySubstituteEntries.length > 0 ? (
+                                            temporarySubstituteEntries.map((entry, i) => (
+                                                <ViewScheduleEntryRow
+                                                    key={entry.id ?? i}
+                                                    day={entry.day}
+                                                    startTime={entry.start_time ?? '--:--'}
+                                                    endTime={entry.end_time ?? '--:--'}
+                                                    courseCode={entry.course_code}
+                                                    subjectDesc={entry.subject_desc}
+                                                    roomCode={entry.room_code}
+                                                    tone="temporary"
+                                                    badges={[
+                                                        {
+                                                            label: 'Temporary Substitute',
+                                                            className: 'bg-sky-50 text-sky-700 ring-sky-600/20 dark:bg-sky-900/30 dark:text-sky-300',
+                                                        },
+                                                        ...(entry.units !== null && entry.units !== undefined
+                                                            ? [{
+                                                                label: `${Number(entry.units)} unit${Number(entry.units) === 1 ? '' : 's'}`,
+                                                                className: 'bg-white/80 text-gray-600 ring-gray-300/60 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-600/50',
+                                                            }]
+                                                            : []),
+                                                    ]}
+                                                    meta={[
+                                                        entry.program_code,
+                                                        (entry.year_level || entry.section_name)
+                                                            ? [entry.year_level, entry.section_name].filter(Boolean).join('-')
+                                                            : null,
+                                                        entry.synced_at ? `Synced ${entry.synced_at}` : null,
+                                                    ].filter(Boolean).join(' | ')}
+                                                />
+                                            ))
+                                        ) : (
+                                            <p className="text-sm text-gray-500 dark:text-gray-400">No temporary substitute schedule entries.</p>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
@@ -1401,7 +1444,9 @@ function ViewScheduleEntryRow({
 }) {
     const toneClasses = tone === 'internal'
         ? 'border border-amber-100/70 dark:border-amber-800/40 bg-amber-50/40 dark:bg-amber-900/10'
-        : 'border border-gray-100 dark:border-gray-700/50 bg-gray-50/50 dark:bg-gray-800/40';
+        : tone === 'temporary'
+            ? 'border border-sky-100/70 dark:border-sky-800/40 bg-sky-50/40 dark:bg-sky-900/10'
+            : 'border border-gray-100 dark:border-gray-700/50 bg-gray-50/50 dark:bg-gray-800/40';
 
     return (
         <div className={`rounded-xl px-4 py-3 ${toneClasses}`}>

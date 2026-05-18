@@ -3,7 +3,19 @@ import DtrPreviewModal from '@/Components/Admin/DtrPreviewModal';
 import { Head } from '@inertiajs/react';
 import { useMemo, useState } from 'react';
 
+const EXPORT_MODES = {
+    default: {
+        label: 'Default DTR',
+        description: 'All active faculty members.',
+    },
+    temporary: {
+        label: 'Temporary Substitution',
+        description: 'Faculty members with temporary substitution schedules only.',
+    },
+};
+
 export default function DtrExport({ facultyOptions = [], dtrExportDefaults = {}, dtrExportYears = [] }) {
+    const [exportMode, setExportMode] = useState('default');
     const [selectedFacultyIds, setSelectedFacultyIds] = useState(
         dtrExportDefaults.faculty_id ? [dtrExportDefaults.faculty_id] : []
     );
@@ -27,20 +39,31 @@ export default function DtrExport({ facultyOptions = [], dtrExportDefaults = {},
         { value: 12, label: 'December' },
     ];
 
-    const allFacultyIds = useMemo(() => facultyOptions.map((faculty) => faculty.id), [facultyOptions]);
+    const temporaryFacultyOptions = useMemo(
+        () => facultyOptions.filter((faculty) => Boolean(faculty.has_temporary_substitution)),
+        [facultyOptions],
+    );
+    const activeFacultyOptions = exportMode === 'temporary' ? temporaryFacultyOptions : facultyOptions;
+    const allFacultyIds = useMemo(() => activeFacultyOptions.map((faculty) => faculty.id), [activeFacultyOptions]);
     const filteredFacultyOptions = useMemo(() => {
         const query = search.trim().toLowerCase();
 
-        if (!query) return facultyOptions;
+        if (!query) return activeFacultyOptions;
 
-        return facultyOptions.filter((faculty) => {
+        return activeFacultyOptions.filter((faculty) => {
             const name = String(faculty.name ?? '').toLowerCase();
             const department = String(faculty.department ?? '').toLowerCase();
 
             return name.includes(query) || department.includes(query);
         });
-    }, [facultyOptions, search]);
+    }, [activeFacultyOptions, search]);
     const allSelected = selectedFacultyIds.length > 0 && selectedFacultyIds.length === allFacultyIds.length;
+
+    const switchExportMode = (mode) => {
+        setExportMode(mode);
+        setSearch('');
+        setSelectedFacultyIds([]);
+    };
 
     const toggleSelectAll = () => {
         setSelectedFacultyIds(allSelected ? [] : allFacultyIds);
@@ -72,7 +95,7 @@ export default function DtrExport({ facultyOptions = [], dtrExportDefaults = {},
                             Export Monthly Time Record
                         </h3>
                         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                            Select faculty, choose a month and year, then preview before exporting.
+                            Select a DTR type, choose faculty, month and year, then preview before exporting.
                         </p>
                     </div>
 
@@ -112,6 +135,34 @@ export default function DtrExport({ facultyOptions = [], dtrExportDefaults = {},
                     </div>
                 </div>
 
+                <div className="mt-5 border-b border-gray-200 dark:border-gray-700">
+                    <div className="flex flex-wrap gap-2">
+                        {Object.entries(EXPORT_MODES).map(([mode, config]) => {
+                            const isActive = exportMode === mode;
+
+                            return (
+                                <button
+                                    key={mode}
+                                    type="button"
+                                    onClick={() => switchExportMode(mode)}
+                                    className={`rounded-t-xl px-4 py-3 text-left transition-all ${
+                                        isActive
+                                            ? 'bg-[#7a1315] text-white shadow-sm'
+                                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-700'
+                                    }`}
+                                >
+                                    <span className="block text-sm font-bold">{config.label}</span>
+                                    <span className={`block text-xs ${isActive ? 'text-white/80' : 'text-gray-400 dark:text-gray-500'}`}>
+                                        {mode === 'temporary'
+                                            ? `${temporaryFacultyOptions.length} faculty with temporary substitution`
+                                            : config.description}
+                                    </span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+
                 <div className="mt-5 overflow-x-auto rounded-2xl border border-gray-200 dark:border-gray-700">
                     <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-700">
                         <input
@@ -141,7 +192,9 @@ export default function DtrExport({ facultyOptions = [], dtrExportDefaults = {},
                             {filteredFacultyOptions.length === 0 ? (
                                 <tr>
                                     <td colSpan={3} className="px-4 py-6 text-center text-sm text-gray-500 dark:text-gray-400">
-                                        {facultyOptions.length === 0 ? 'No faculty available.' : 'No matching faculty found.'}
+                                        {activeFacultyOptions.length === 0
+                                            ? (exportMode === 'temporary' ? 'No faculty with temporary substitution schedules.' : 'No faculty available.')
+                                            : 'No matching faculty found.'}
                                     </td>
                                 </tr>
                             ) : (
@@ -179,6 +232,7 @@ export default function DtrExport({ facultyOptions = [], dtrExportDefaults = {},
                 facultyIds={selectedFacultyIds}
                 month={selectedMonth}
                 year={selectedYear}
+                exportType={exportMode === 'temporary' ? 'temporary_substitute' : 'default'}
             />
         </AuthenticatedLayout>
     );

@@ -72,6 +72,11 @@ class Faculty extends Model
         return $this->hasMany(InternalSchedule::class);
     }
 
+    public function temporaryFacultySchedules(): HasMany
+    {
+        return $this->hasMany(TemporaryFacultySchedule::class);
+    }
+
     public function biometricLogs(): HasMany
     {
         return $this->hasMany(BiometricLog::class, 'biometric_id', 'biometric_id');

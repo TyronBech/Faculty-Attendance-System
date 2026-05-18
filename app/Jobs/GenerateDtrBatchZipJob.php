@@ -33,6 +33,7 @@ class GenerateDtrBatchZipJob implements ShouldQueue
         public int $month,
         public int $year,
         public string $token,
+        public string $exportType = 'default',
     ) {}
 
     /**
@@ -88,7 +89,7 @@ class GenerateDtrBatchZipJob implements ShouldQueue
             $printedAt = now();
             $barcode = MonthlyDtrBarcode::build($faculty, $printedAt);
 
-            Pdf::view('pdf.monthly-dtr', [
+            Pdf::view($this->pdfView(), [
                 'faculty' => $faculty,
                 'rows' => $rows,
                 'summary' => $summary,
@@ -122,5 +123,12 @@ class GenerateDtrBatchZipJob implements ShouldQueue
 
         Storage::disk('local')->move($temporaryRelativePath, $finalRelativePath);
         Storage::disk('local')->deleteDirectory($batchDirectory);
+    }
+
+    private function pdfView(): string
+    {
+        return $this->exportType === 'temporary_substitute'
+            ? 'pdf.monthly-dtr-temporary-substitute'
+            : 'pdf.monthly-dtr';
     }
 }
