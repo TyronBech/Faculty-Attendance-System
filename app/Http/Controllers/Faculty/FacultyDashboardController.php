@@ -9,6 +9,7 @@ use App\Models\Holiday;
 use App\Models\OnlineAttendanceRequest;
 use App\Models\ScheduleChangeRequest;
 use App\Models\ScheduleDetail;
+use App\Models\TemporaryFacultySchedule;
 use App\Services\AttendanceReconciliationService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -207,7 +208,7 @@ class FacultyDashboardController extends Controller
                         'program_code' => $resolvedDetail->program_code,
                         'year_level' => $resolvedDetail->year_level,
                         'section_name' => $resolvedDetail->section_name,
-                        'is_temporary' => $temporarySchedule !== null,
+                        'is_temporary' => $temporarySchedule,
                     ];
                 }
 
@@ -242,7 +243,7 @@ class FacultyDashboardController extends Controller
                                     'program_code' => $d->program_code,
                                     'year_level' => $d->year_level,
                                     'section_name' => $d->section_name,
-                                    'is_temporary' => $temporarySchedule !== null,
+                                    'is_temporary' => $temporarySchedule,
                                 ];
                                 $foundMatch = true;
                                 break; // Only add the first matching subject for this day
@@ -276,7 +277,7 @@ class FacultyDashboardController extends Controller
                                         'program_code' => $d->program_code,
                                         'year_level' => $d->year_level,
                                         'section_name' => $d->section_name,
-                                        'is_temporary' => $temporarySchedule !== null,
+                                        'is_temporary' => $temporarySchedule,
                                     ];
                                     $foundMatch = true;
                                     break; // Only add the first matching subject
@@ -294,7 +295,7 @@ class FacultyDashboardController extends Controller
                         'program_code' => null,
                         'year_level' => null,
                         'section_name' => null,
-                        'is_temporary' => $temporarySchedule !== null,
+                        'is_temporary' => $temporarySchedule,
                     ];
                 }
 
@@ -429,14 +430,14 @@ class FacultyDashboardController extends Controller
                     'program_code' => $detail->program_code ?? null,
                     'year_level' => $detail->year_level ?? null,
                     'section_name' => $detail->section_name ?? null,
-                    'is_temporary' => $temporarySchedule !== null,
+                    'is_temporary' => $temporarySchedule,
                 ]] : [[
                     'code' => '',
                     'desc' => 'Operational Duty',
                     'program_code' => null,
                     'year_level' => null,
                     'section_name' => null,
-                    'is_temporary' => $temporarySchedule !== null,
+                    'is_temporary' => $temporarySchedule,
                 ]];
 
                 $timeIn = $req->time_in ? Carbon::parse($req->time_in) : null;
