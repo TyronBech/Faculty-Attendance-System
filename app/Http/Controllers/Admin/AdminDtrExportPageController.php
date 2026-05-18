@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Faculty;
+use App\Models\TemporaryFacultySchedule;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
 
 class AdminDtrExportPageController extends Controller

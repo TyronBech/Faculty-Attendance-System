@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Http\Middleware\LogActionActivity;
 use App\Models\BiometricLog;
 use App\Models\Department;
 use App\Models\Faculty;
@@ -199,6 +200,64 @@ class AdminAttendanceImportManagementTest extends TestCase
             'log_type' => 'OUT',
             'device_id' => 'DEVICE-03',
         ]);
+    }
+
+    public function test_import_restores_soft_deleted_biometric_log_instead_of_counting_duplicate(): void
+    {
+        Storage::fake('local');
+        $this->withoutMiddleware(LogActionActivity::class);
+
+        $admin = $this->createAdminUser();
+        $faculty = $this->createFaculty('BIO-6001');
+
+        $oldBatch = ImportBatch::create([
+            'file_name' => 'old-batch.csv',
+            'file_path' => 'imports/biometric-logs/old-batch.csv',
+            'status' => 'completed',
+            'started_at' => now(),
+            'completed_at' => now(),
+        ]);
+
+        $deletedLog = BiometricLog::create([
+            'biometric_id' => $faculty->biometric_id,
+            'log_datetime' => '2026-04-02 08:00:00',
+            'log_type' => 'IN',
+            'device_id' => 'DEVICE-01',
+            'import_batch_id' => $oldBatch->id,
+            'is_processed' => true,
+        ]);
+
+        $deletedLog->delete();
+        $this->assertSoftDeleted('biometric_logs', ['id' => $deletedLog->id]);
+
+        $upload = UploadedFile::fake()->createWithContent(
+            'attendance-import-restore.csv',
+            implode(PHP_EOL, [
+                'biometric_id,log_datetime,log_type,device_id',
+                'BIO-6001,2026-04-02 08:00:00,IN,DEVICE-99',
+            ]),
+        );
+
+        $this->actingAs($admin, 'admin')
+            ->post(route('admin.attendance-imports.store'), [
+                'file' => $upload,
+            ])
+            ->assertRedirect(route('admin.attendance-imports.index'));
+
+        $restoredLog = BiometricLog::withTrashed()->findOrFail($deletedLog->id);
+        $this->assertNull($restoredLog->deleted_at);
+        $this->assertSame('DEVICE-99', $restoredLog->device_id);
+        $this->assertFalse($restoredLog->is_processed);
+
+        $newBatch = ImportBatch::query()
+            ->where('file_name', 'attendance-import-restore.csv')
+            ->latest('id')
+            ->firstOrFail();
+
+        $this->assertSame($newBatch->id, $restoredLog->import_batch_id);
+        $this->assertSame(1, (int) $newBatch->processed_records);
+        $this->assertSame(0, (int) $newBatch->duplicate_records);
+        $this->assertSame(0, (int) $newBatch->failed_records);
     }
 
     public function test_downloaded_template_uses_excel_datetime_cells_for_sample_logs(): void

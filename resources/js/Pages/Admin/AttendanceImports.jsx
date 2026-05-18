@@ -766,6 +766,7 @@ export default function AttendanceImports({ batches, filters }) {
 
             <Modal show={showEditLogModal} onClose={closeEditLogModal} maxWidth="lg">
                 <form
+                    className="flex max-h-[88dvh] flex-col"
                     onSubmit={(event) => {
                         event.preventDefault();
                         saveEditedLog();
@@ -789,21 +790,21 @@ export default function AttendanceImports({ batches, filters }) {
                         </div>
                     </div>
 
-                    <div className="px-6 py-5 space-y-4">
+                    <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
                         <div className="rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700/50 p-4">
                             <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
                                 Editing Entry
                             </p>
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
-                                <div>
+                                <div className="min-w-0">
                                     <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase mb-1">Batch</p>
-                                    <p className="text-gray-700 dark:text-gray-300">{selectedBatch?.file_name ?? '—'}</p>
+                                    <p className="break-all text-gray-700 dark:text-gray-300">{selectedBatch?.file_name ?? '—'}</p>
                                 </div>
-                                <div>
+                                <div className="min-w-0">
                                     <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase mb-1">Current Type</p>
                                     <p className="text-gray-700 dark:text-gray-300">{formatLogType(editLogForm.log_type)}</p>
                                 </div>
-                                <div>
+                                <div className="min-w-0">
                                     <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase mb-1">Sync Status</p>
                                     <p className="text-amber-700 dark:text-amber-400">Not Synced</p>
                                 </div>
