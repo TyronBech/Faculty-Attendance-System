@@ -772,7 +772,11 @@ class AdminAttendanceImportController extends Controller
             $windowStart = $operationalTimeIn->copy()->subMinutes(self::LOG_WINDOW_BUFFER_MINUTES);
             $windowEnd = $operationalTimeOut->copy()->addMinutes(self::LOG_WINDOW_BUFFER_MINUTES);
 
-            $windowLogs = $dayLogs->filter(function (BiometricLog $log) use ($windowStart, $windowEnd): bool {
+            $windowLogs = $dayLogs->filter(function (BiometricLog $log) use ($windowStart, $windowEnd, $processedLogIds): bool {
+                if (in_array($log->id, $processedLogIds, true)) {
+                    return false;
+                }
+
                 $logTime = Carbon::parse($log->log_datetime);
 
                 return $logTime->between($windowStart, $windowEnd);
@@ -782,8 +786,15 @@ class AdminAttendanceImportController extends Controller
                 return strtoupper(trim((string) $log->log_type)) === 'IN';
             });
 
-            $timeOutLog = $windowLogs->reverse()->first(function (BiometricLog $log): bool {
-                return strtoupper(trim((string) $log->log_type)) === 'OUT';
+            // Use the earliest OUT after the matched IN so earlier schedule blocks
+            // do not consume later blocks' timeout logs.
+            $timeOutLog = $windowLogs->first(function (BiometricLog $log) use ($timeInLog): bool {
+                if (strtoupper(trim((string) $log->log_type)) !== 'OUT') {
+                    return false;
+                }
+
+                return $timeInLog !== null
+                    && $log->log_datetime->greaterThan($timeInLog->log_datetime);
             });
 
             if (! $timeInLog || ! $timeOutLog) {
@@ -844,7 +855,9 @@ class AdminAttendanceImportController extends Controller
                     'night_minutes' => 0,
                     'overtime_night_minutes' => 0,
                     'total_hours_rendered' => $totalHoursRendered,
-                    'required_hours' => (float) ($internalSchedule?->required_hours ?? $detail->hours_required ?? 0),
+                    'required_hours' => $internalSchedule && (float) $internalSchedule->required_hours > 0
+                        ? (float) $internalSchedule->required_hours
+                        : (float) ($detail->hours_required ?? 0),
                     'status' => $status,
                     'remarks' => 'Synced from biometric import',
                     'is_manual_entry' => false,
@@ -862,7 +875,7 @@ class AdminAttendanceImportController extends Controller
             return ! in_array($log->id, $processedLogIds, true);
         });
 
-        if ($unusedLogs->isNotEmpty()) {
+        if ($unusedLogs->isNotEmpty() && $officialDetails->isEmpty()) {
             $unusedIn = $unusedLogs->first(function (BiometricLog $log): bool {
                 return strtoupper(trim((string) $log->log_type)) === 'IN';
             });
@@ -889,7 +902,11 @@ class AdminAttendanceImportController extends Controller
                     $operationalTimeIn = $officialTimeIn->copy();
                     $operationalTimeOut = $officialTimeOut->copy();
                     $operationalDayOfWeek = $fallbackInternal->day_of_week;
-                    $requiredHours = (float) ($fallbackInternal->required_hours ?? max(0, (int) round($operationalTimeOut->diffInMinutes($operationalTimeIn) / 60)));
+                    $requiredHours = (float) (
+                        (float) ($fallbackInternal->required_hours ?? 0) > 0
+                            ? $fallbackInternal->required_hours
+                            : max(0, round($operationalTimeOut->diffInMinutes($operationalTimeIn) / 60, 2))
+                    );
                 } else {
                     $officialTimeIn = $actualTimeIn->copy();
                     $officialTimeOut = $actualTimeOut->copy();

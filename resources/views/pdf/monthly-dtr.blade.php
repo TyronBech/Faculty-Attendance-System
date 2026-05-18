@@ -181,13 +181,16 @@
     $manualBlank = max(0, $totalDays - 7 - $filledManual);
 
     $rowsCollection = collect($rows);
+    $officialRequired = fn (array $row): float => (float) ($row['official_required_hours'] ?? $row['required_hours'] ?? 0);
+    $officialRendered = fn (array $row): float => (float) ($row['official_total_hours_rendered'] ?? $row['total_hours_rendered'] ?? 0);
+
     $absentRows = $rowsCollection->filter(fn (array $row): bool => ($row['status'] ?? '') === 'absent');
     $presentRows = $rowsCollection->filter(fn (array $row): bool => ($row['status'] ?? '') !== 'absent'
-        && (float) ($row['required_hours'] ?? 0) > 0);
+        && $officialRequired($row) > 0);
 
-    $totalHoursRendered = $presentRows->sum('total_hours_rendered');
-    $totalRequiredHours = $rowsCollection->sum('required_hours');
-    $totalHoursAbsent = $absentRows->sum('required_hours');
+    $totalHoursRendered = $presentRows->sum($officialRendered);
+    $totalRequiredHours = $rowsCollection->sum($officialRequired);
+    $totalHoursAbsent = $absentRows->sum($officialRequired);
     $daysPresent = $presentRows->count();
     $daysAbsent = $absentRows->count();
 @endphp
@@ -267,8 +270,10 @@
                         $hasTimes = ! empty($r['official_morning_in']) || ! empty($r['official_morning_out'])
                             || ! empty($r['official_afternoon_in']) || ! empty($r['official_afternoon_out'])
                             || ! empty($r['official_night_in']) || ! empty($r['official_night_out']);
-                        $tardy = (int) ($r['tardy_minutes'] ?? 0);
-                        $ut = (int) ($r['undertime_minutes'] ?? 0);
+                        $tardy = (int) ($r['official_tardy_minutes'] ?? $r['tardy_minutes'] ?? 0);
+                        $ut = (int) ($r['official_undertime_minutes'] ?? $r['undertime_minutes'] ?? 0);
+                        $renderedHours = (float) ($r['official_total_hours_rendered'] ?? $r['total_hours_rendered'] ?? 0);
+                        $requiredHours = (float) ($r['official_required_hours'] ?? $r['required_hours'] ?? 0);
                         $isManual = $r['is_manual'] ?? false;
                         $isAbsent = ($r['status'] ?? '') === 'absent';
                         $tdClass = trim(($isManual ? 'txt-blue' : '').' '.($isAbsent ? 'txt-muted' : ''));
@@ -296,8 +301,8 @@
                             <td class="{{ $tdClass }}">
                                 {{ $r['official_night_out'] ?? '' }}@if(($r['official_night_absent'] ?? false) && !empty($r['official_night_out'])) <span class="txt-red">ABS</span>@endif
                             </td>
-                            <td class="{{ $tdClass }}">{{ number_format($isAbsent ? 0 : (float) ($r['total_hours_rendered'] ?? 0), 2) }}</td>
-                            <td class="{{ $tdClass }}">{{ number_format((float) ($r['required_hours'] ?? 0), 2) }}</td>
+                            <td class="{{ $tdClass }}">{{ number_format($isAbsent ? 0 : $renderedHours, 2) }}</td>
+                            <td class="{{ $tdClass }}">{{ number_format($requiredHours, 2) }}</td>
                             <td class="txt-red">
                                 @if ($isAbsent)
                                     &nbsp;

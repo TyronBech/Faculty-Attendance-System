@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Jobs\GenerateDtrBatchZipJob;
 use App\Jobs\GenerateDtrPdfJob;
 use App\Models\Faculty;
+use App\Models\ScheduleChangeRequest;
 use App\Services\AttendanceToDtrService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -257,40 +258,59 @@ class AdminDtrExportController extends Controller
     public function buildRows(array $attendance, int $month, int $year): array
     {
         $daysInMonth = Carbon::create($year, $month, 1)->daysInMonth;
+        $officialMovementOverlays = $this->buildOfficialMovementOverlays($attendance);
         $rows = [];
 
         for ($day = 1; $day <= $daysInMonth; $day++) {
             $dayData = $attendance[$day] ?? ['status' => 'none', 'records' => [], 'holidays' => []];
             $records = $dayData['records'] ?? [];
+            $officialDisplayRecords = $this->applyOfficialMovementOverlays(
+                $records,
+                $officialMovementOverlays[$day] ?? []
+            );
             $officialDate = Carbon::create($year, $month, $day);
 
-            $sortedRecords = collect($records)
-                ->sortBy(function ($record) {
-                    $rawOfficial = $record?->raw_official_time_in ?? $record?->official_time_in;
-
-                    return $rawOfficial ? Carbon::parse($rawOfficial)->timestamp : PHP_INT_MAX;
-                })
+            $recordsCollection = collect($officialDisplayRecords);
+            $officialRecords = $recordsCollection
+                ->filter(fn ($record): bool => ! empty($record?->schedule_detail_id) || empty($record?->internal_schedule_id))
                 ->values()
                 ->all();
 
-            $slots = $this->selectDisplaySlots($sortedRecords);
+            $originalRecordsCollection = collect($records);
+            $actualInternalRecords = $originalRecordsCollection
+                ->filter(fn ($record): bool => ! empty($record?->actual_time_in) || ! empty($record?->actual_time_out) || ! empty($record?->internal_schedule_id))
+                ->values();
 
-            $slotMap = [
-                'morning' => $slots[0] ?? null,
-                'afternoon' => $slots[1] ?? null,
-                'night' => $slots[2] ?? null,
+            $internalRecords = $actualInternalRecords->isNotEmpty()
+                ? $actualInternalRecords->all()
+                : $originalRecordsCollection->values()->all();
+
+            $officialSlots = $this->selectDisplaySlots($officialRecords, 'official');
+            $internalSlots = $this->selectDisplaySlots($internalRecords, 'internal');
+
+            $officialSlotMap = [
+                'morning' => $officialSlots[0] ?? null,
+                'afternoon' => $officialSlots[1] ?? null,
+                'night' => $officialSlots[2] ?? null,
+            ];
+            $internalSlotMap = [
+                'morning' => $internalSlots[0] ?? null,
+                'afternoon' => $internalSlots[1] ?? null,
+                'night' => $internalSlots[2] ?? null,
             ];
 
             $officialTimes = [];
             $internalTimes = [];
 
-            foreach ($slotMap as $slot => $record) {
+            foreach ($officialSlotMap as $slot => $record) {
                 $officialTimes[$slot] = [
                     'in' => $this->formatTime($record?->official_time_in),
                     'out' => $this->formatTime($record?->official_time_out),
-                    'is_absent' => (bool) (($record?->status ?? '') === 'absent' && empty($record?->actual_time_in) && empty($record?->actual_time_out)),
+                    'is_absent' => $this->isAbsentSlot($record),
                 ];
+            }
 
+            foreach ($internalSlotMap as $slot => $record) {
                 $internalTimes[$slot] = [
                     'in' => $this->formatTime(
                         $record?->operational_time_in
@@ -300,10 +320,11 @@ class AdminDtrExportController extends Controller
                         $record?->operational_time_out
                             ?? $record?->official_time_out
                     ),
+                    'is_absent' => $this->isAbsentSlot($record),
                 ];
             }
 
-            $primaryRecord = $slots[0] ?? null;
+            $primaryRecord = $internalSlots[0] ?? null;
             $internalDateSource = $primaryRecord?->operational_time_in
                 ?? $primaryRecord?->operational_time_out
                 ?? $primaryRecord?->actual_time_in
@@ -314,13 +335,21 @@ class AdminDtrExportController extends Controller
                 ? $officialDate->diffInDays($internalDate->copy()->startOfDay(), false)
                 : 0;
 
-            $tardyMinutes = collect($records)
+            $officialTardyMinutes = collect($officialRecords)
                 ->sum(fn ($record) => (int) ($record?->computed_late_minutes ?? $record?->late_minutes ?? 0));
-            $undertimeMinutes = collect($records)
+            $officialUndertimeMinutes = collect($officialRecords)
                 ->sum(fn ($record) => (int) ($record?->computed_undertime_minutes ?? $record?->undertime_minutes ?? 0));
-            $totalHoursRendered = collect($records)
+            $officialTotalHoursRendered = collect($officialRecords)
                 ->sum(fn ($record) => (float) ($record?->computed_total_hours_rendered ?? 0));
-            $requiredHours = collect($records)
+            $officialRequiredHours = collect($officialRecords)
+                ->sum(fn ($record) => (float) ($record?->required_hours ?? 0));
+            $internalTardyMinutes = collect($internalRecords)
+                ->sum(fn ($record) => (int) ($record?->computed_late_minutes ?? $record?->late_minutes ?? 0));
+            $internalUndertimeMinutes = collect($internalRecords)
+                ->sum(fn ($record) => (int) ($record?->computed_undertime_minutes ?? $record?->undertime_minutes ?? 0));
+            $internalTotalHoursRendered = collect($internalRecords)
+                ->sum(fn ($record) => (float) ($record?->computed_total_hours_rendered ?? 0));
+            $internalRequiredHours = collect($internalRecords)
                 ->sum(fn ($record) => (float) ($record?->required_hours ?? 0));
             $isManual = collect($records)->contains(fn ($record) => (bool) ($record?->is_manual_entry ?? false));
 
@@ -352,19 +381,29 @@ class AdminDtrExportController extends Controller
                 // Internal tab
                 'internal_morning_in' => $internalTimes['morning']['in'],
                 'internal_morning_out' => $internalTimes['morning']['out'],
+                'internal_morning_absent' => $internalTimes['morning']['is_absent'],
                 'internal_afternoon_in' => $internalTimes['afternoon']['in'],
                 'internal_afternoon_out' => $internalTimes['afternoon']['out'],
+                'internal_afternoon_absent' => $internalTimes['afternoon']['is_absent'],
                 'internal_night_in' => $internalTimes['night']['in'],
                 'internal_night_out' => $internalTimes['night']['out'],
+                'internal_night_absent' => $internalTimes['night']['is_absent'],
 
-                'tardy_minutes' => (int) $tardyMinutes,
-                'undertime_minutes' => (int) $undertimeMinutes,
-                'total_hours_rendered' => round($totalHoursRendered, 2),
-                'required_hours' => round($requiredHours, 2),
+                'official_tardy_minutes' => (int) $officialTardyMinutes,
+                'official_undertime_minutes' => (int) $officialUndertimeMinutes,
+                'official_total_hours_rendered' => round($officialTotalHoursRendered, 2),
+                'official_required_hours' => round($officialRequiredHours, 2),
+                'internal_tardy_minutes' => (int) $internalTardyMinutes,
+                'internal_undertime_minutes' => (int) $internalUndertimeMinutes,
+                'internal_total_hours_rendered' => round($internalTotalHoursRendered, 2),
+                'internal_required_hours' => round($internalRequiredHours, 2),
+
+                'tardy_minutes' => (int) $officialTardyMinutes,
+                'undertime_minutes' => (int) $officialUndertimeMinutes,
+                'total_hours_rendered' => round($officialTotalHoursRendered, 2),
+                'required_hours' => round($officialRequiredHours, 2),
                 'status' => $dayData['status'] ?? 'none',
-                'has_absent_slot' => collect($slots)->contains(function ($record): bool {
-                    return (bool) (($record?->status ?? '') === 'absent' && empty($record?->actual_time_in) && empty($record?->actual_time_out));
-                }),
+                'has_absent_slot' => collect($officialSlots)->contains(fn ($record): bool => $this->isAbsentSlot($record)),
                 'holiday_label' => collect($dayData['holidays'] ?? [])->pluck('name')->filter()->implode(', '),
                 'is_holiday' => ! empty($dayData['holidays']),
                 'is_manual' => $isManual,
@@ -385,10 +424,136 @@ class AdminDtrExportController extends Controller
         return $time->format('g:iA');
     }
 
-    private function selectDisplaySlots(array $records): array
+    private function buildOfficialMovementOverlays(array $attendance): array
+    {
+        $overlays = [];
+
+        foreach ($attendance as $dayData) {
+            foreach (($dayData['records'] ?? []) as $record) {
+                if (! empty($record?->schedule_detail_id) || empty($record?->internal_schedule_id)) {
+                    continue;
+                }
+
+                if (empty($record?->actual_time_in) && empty($record?->actual_time_out)) {
+                    continue;
+                }
+
+                $change = $this->findMatchingApprovedChange($record);
+                $detail = $change?->scheduleDetail;
+
+                if (! $change || ! $detail) {
+                    continue;
+                }
+
+                $attendanceDate = Carbon::parse($record->attendance_date);
+                $officialDate = $this->dateForWeekdayInSameWeek($attendanceDate, (string) $detail->day);
+
+                if (! $officialDate) {
+                    continue;
+                }
+
+                $officialDay = $officialDate->day;
+                $overlays[$officialDay][(int) $detail->id] = $record;
+            }
+        }
+
+        return $overlays;
+    }
+
+    private function applyOfficialMovementOverlays(array $records, array $overlays): array
+    {
+        if (empty($overlays)) {
+            return $records;
+        }
+
+        return collect($records)
+            ->map(function ($record) use ($overlays) {
+                $detailId = (int) ($record?->schedule_detail_id ?? 0);
+
+                if ($detailId === 0 || ! $this->isAbsentSlot($record) || ! array_key_exists($detailId, $overlays)) {
+                    return $record;
+                }
+
+                $overlay = clone $overlays[$detailId];
+                $overlay->schedule_detail_id = $record->schedule_detail_id;
+                $overlay->official_time_in = $record->official_time_in;
+                $overlay->official_time_out = $record->official_time_out;
+                $overlay->required_hours = $record->required_hours;
+                $overlay->computed_total_hours_rendered = $overlays[$detailId]->computed_total_hours_rendered ?? $overlays[$detailId]->total_hours_rendered ?? 0;
+                $overlay->is_official_movement_overlay = true;
+
+                return $overlay;
+            })
+            ->values()
+            ->all();
+    }
+
+    private function findMatchingApprovedChange(mixed $record): ?ScheduleChangeRequest
+    {
+        $attendanceDate = Carbon::parse($record->attendance_date);
+        $dayOfWeek = $record?->operational_day_of_week ?: $attendanceDate->format('l');
+        $recordIn = $this->timeOnly($record?->operational_time_in ?? $record?->official_time_in ?? $record?->actual_time_in);
+        $recordOut = $this->timeOnly($record?->operational_time_out ?? $record?->official_time_out ?? $record?->actual_time_out);
+
+        if (! $recordIn || ! $recordOut) {
+            return null;
+        }
+
+        return ScheduleChangeRequest::query()
+            ->with('scheduleDetail:id,day,start_time,end_time,hours_required')
+            ->where('faculty_id', $record->faculty_id)
+            ->where('status', 'approved')
+            ->where('requested_day_of_week', $dayOfWeek)
+            ->whereDate('effective_date', '<=', $attendanceDate->toDateString())
+            ->orderBy('effective_date', 'desc')
+            ->get()
+            ->first(function (ScheduleChangeRequest $change) use ($recordIn, $recordOut): bool {
+                return $this->timeOnly($change->requested_time_in) === $recordIn
+                    && $this->timeOnly($change->requested_time_out) === $recordOut;
+            });
+    }
+
+    private function dateForWeekdayInSameWeek(Carbon $date, string $weekday): ?Carbon
+    {
+        $weekdayIndex = $this->weekdayIndex($weekday);
+
+        if ($weekdayIndex === null) {
+            return null;
+        }
+
+        return $date->copy()->startOfWeek(Carbon::MONDAY)->addDays($weekdayIndex);
+    }
+
+    private function weekdayIndex(string $weekday): ?int
+    {
+        return match (strtolower(trim($weekday))) {
+            'monday' => 0,
+            'tuesday' => 1,
+            'wednesday' => 2,
+            'thursday' => 3,
+            'friday' => 4,
+            'saturday' => 5,
+            'sunday' => 6,
+            default => null,
+        };
+    }
+
+    private function timeOnly(mixed $value): ?string
+    {
+        return empty($value) ? null : Carbon::parse($value)->format('H:i:s');
+    }
+
+    private function isAbsentSlot(mixed $record): bool
+    {
+        return (bool) (($record?->status ?? '') === 'absent'
+            && empty($record?->actual_time_in)
+            && empty($record?->actual_time_out));
+    }
+
+    private function selectDisplaySlots(array $records, string $mode = 'official'): array
     {
         if (count($records) <= 3) {
-            return $records;
+            return $this->sortDisplaySlots($records, $mode);
         }
 
         $actualRecords = collect($records)
@@ -407,12 +572,25 @@ class AdminDtrExportController extends Controller
         }
 
         return $selected
-            ->sortBy(function ($record) {
-                $rawOfficial = $record?->raw_official_time_in ?? $record?->official_time_in;
-
-                return $rawOfficial ? Carbon::parse($rawOfficial)->timestamp : PHP_INT_MAX;
-            })
+            ->sortBy(fn ($record): int => $this->slotSortTimestamp($record, $mode))
             ->values()
             ->all();
+    }
+
+    private function sortDisplaySlots(array $records, string $mode): array
+    {
+        return collect($records)
+            ->sortBy(fn ($record): int => $this->slotSortTimestamp($record, $mode))
+            ->values()
+            ->all();
+    }
+
+    private function slotSortTimestamp(mixed $record, string $mode): int
+    {
+        $value = $mode === 'internal'
+            ? ($record?->operational_time_in ?? $record?->actual_time_in ?? $record?->official_time_in)
+            : ($record?->raw_official_time_in ?? $record?->official_time_in);
+
+        return $value ? Carbon::parse($value)->timestamp : PHP_INT_MAX;
     }
 }
