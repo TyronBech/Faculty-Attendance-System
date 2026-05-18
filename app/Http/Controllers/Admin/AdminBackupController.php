@@ -54,9 +54,9 @@ class AdminBackupController extends Controller
     public function store(): RedirectResponse
     {
         try {
-            RunBackupCommandJob::dispatch();
+            RunBackupCommandJob::dispatchSync();
         } catch (Throwable $exception) {
-            Log::error('Backup job dispatch threw an exception.', [
+            Log::error('Backup command execution failed.', [
                 'message' => $exception->getMessage(),
             ]);
 
@@ -65,7 +65,7 @@ class AdminBackupController extends Controller
 
         return to_route('admin.backups.index')->with(
             'success',
-            'Backup request queued successfully. Refresh this page after a short while to see the new backup file.',
+            'Backup created successfully.',
         );
     }
 

@@ -3,12 +3,11 @@
 namespace Tests\Feature;
 
 use App\Enums\Role;
-use App\Jobs\RunBackupCommandJob;
 use App\Models\Admin;
 use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
 use Spatie\Permission\Models\Role as SpatieRole;
@@ -44,15 +43,23 @@ class AdminBackupManagementTest extends TestCase
     {
         $admin = $this->createAdminUserWithRole(Role::Admin->value);
 
-        Queue::fake();
+        Artisan::shouldReceive('call')
+            ->once()
+            ->with('backup:run', [
+                '--disable-notifications' => true,
+                '--no-interaction' => true,
+            ])
+            ->andReturn(0);
+
+        Artisan::shouldReceive('output')
+            ->never();
 
         $response = $this->actingAs($admin, 'admin')
             ->from(route('admin.backups.index'))
             ->post(route('admin.backups.store'));
 
         $response->assertRedirect(route('admin.backups.index'));
-        $response->assertSessionHas('success');
-        Queue::assertPushed(RunBackupCommandJob::class);
+        $response->assertSessionHas('success', 'Backup created successfully.');
     }
 
     public function test_admin_can_download_backup_file(): void
