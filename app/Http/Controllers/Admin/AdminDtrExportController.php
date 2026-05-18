@@ -282,14 +282,20 @@ class AdminDtrExportController extends Controller
 
             foreach ($slotMap as $slot => $record) {
                 $officialTimes[$slot] = [
-                    'in' => $this->formatTime($record?->dtr_official_time_in ?? $record?->official_time_in),
-                    'out' => $this->formatTime($record?->dtr_official_time_out ?? $record?->official_time_out),
+                    'in' => $this->formatTime($record?->official_time_in),
+                    'out' => $this->formatTime($record?->official_time_out),
                     'is_absent' => (bool) (($record?->status ?? '') === 'absent' && empty($record?->actual_time_in) && empty($record?->actual_time_out)),
                 ];
 
                 $internalTimes[$slot] = [
-                    'in' => $this->formatTime($record?->dtr_operational_time_in ?? $record?->operational_time_in),
-                    'out' => $this->formatTime($record?->dtr_operational_time_out ?? $record?->operational_time_out),
+                    'in' => $this->formatTime(
+                        $record?->operational_time_in
+                            ?? $record?->official_time_in
+                    ),
+                    'out' => $this->formatTime(
+                        $record?->operational_time_out
+                            ?? $record?->official_time_out
+                    ),
                 ];
             }
 

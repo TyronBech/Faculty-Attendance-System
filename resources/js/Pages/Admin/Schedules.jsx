@@ -296,8 +296,22 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
 
     const minAllowedMinutes = toMinutes(ALLOWED_TIME_MIN);
     const maxAllowedMinutes = toMinutes(ALLOWED_TIME_MAX);
-    const officialDetails = selectedSchedule?.details ?? [];
-    const internalEntries = selectedSchedule?.internal_schedule ?? [];
+    const officialDetails = selectedSchedule?.details ?? selectedSchedule?.schedule_details ?? [];
+    const rawInternalEntries = selectedSchedule?.internal_schedule ?? selectedSchedule?.internal_schedules ?? [];
+    const internalEntries = rawInternalEntries.length > 0
+        ? rawInternalEntries
+        : officialDetails.map((detail) => ({
+            id: `official-${detail.id ?? `${detail.day}-${detail.start_time}-${detail.end_time}`}`,
+            day: detail.day,
+            start_time: detail.start_time,
+            end_time: detail.end_time,
+            course_code: detail.course_code,
+            subject_desc: detail.subject_desc,
+            room_code: detail.room_code,
+            required_hours: detail.hours_required,
+            is_operational: true,
+            is_official_fallback: true,
+        }));
     const approvedRequests = selectedSchedule?.approved_change_requests ?? [];
 
     const approvedByDetailId = new Map(
@@ -312,6 +326,7 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
     };
 
     const findInternalLink = (entry) => {
+        if (entry?.is_official_fallback) return entry;
         if (!entry?.day || !entry.start_time || !entry.end_time) return null;
         const entryStart = toMinutes(entry.start_time);
         const entryEnd = toMinutes(entry.end_time);
