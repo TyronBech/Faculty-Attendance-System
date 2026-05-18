@@ -99,13 +99,15 @@ class AdminAttendanceImportController extends Controller
                 if ($row['biometric_id'] === '' || $row['log_datetime'] === '' || $row['log_type'] === '') {
                     $failedRecords++;
                     $errors[] = "Line {$row['line']}: biometric_id, log_datetime, and log_type are required.";
+
                     continue;
                 }
 
                 $parsedDateTime = $this->parseDateTime($row['log_datetime']);
                 if (! $parsedDateTime) {
                     $failedRecords++;
-                    $errors[] = "Line {$row['line']}: invalid log_datetime format '{$row['log_datetime']}'. " . self::LOG_DATETIME_FORMAT_GUIDANCE;
+                    $errors[] = "Line {$row['line']}: invalid log_datetime format '{$row['log_datetime']}'. ".self::LOG_DATETIME_FORMAT_GUIDANCE;
+
                     continue;
                 }
 
@@ -122,7 +124,22 @@ class AdminAttendanceImportController extends Controller
                     $processedRecords++;
                 } catch (QueryException $e) {
                     if ($this->isDuplicateKeyException($e)) {
+                        $restored = $this->restoreSoftDeletedBiometricLogFromImport(
+                            $batch,
+                            $row['biometric_id'],
+                            $parsedDateTime,
+                            $row['log_type'],
+                            $row['device_id'] !== '' ? $row['device_id'] : null,
+                        );
+
+                        if ($restored) {
+                            $processedRecords++;
+
+                            continue;
+                        }
+
                         $duplicateRecords++;
+
                         continue;
                     }
 
@@ -261,7 +278,7 @@ class AdminAttendanceImportController extends Controller
         $parsedDateTime = $this->parseDateTime($validated['log_datetime']);
         if (! $parsedDateTime) {
             throw ValidationException::withMessages([
-                'log_datetime' => 'Invalid log date/time format. ' . self::LOG_DATETIME_FORMAT_GUIDANCE,
+                'log_datetime' => 'Invalid log date/time format. '.self::LOG_DATETIME_FORMAT_GUIDANCE,
             ]);
         }
 
@@ -352,6 +369,7 @@ class AdminAttendanceImportController extends Controller
         }
 
         $syncGroups = $this->resolveSyncGroupsForBatch($batch);
+        $this->requeueProcessedLogsForGroupsWithoutAttendance($syncGroups);
         $candidateLogs = $this->loadUnprocessedLogsForSyncGroups($syncGroups);
 
         if ($candidateLogs->isEmpty()) {
@@ -378,7 +396,7 @@ class AdminAttendanceImportController extends Controller
                 $facultyId = $log->faculty?->id;
                 $date = $log->log_datetime?->toDateString();
 
-                return ($facultyId ?? '0') . '|' . ($date ?? '');
+                return ($facultyId ?? '0').'|'.($date ?? '');
             });
 
             foreach ($groupedByFacultyAndDate as $groupKey => $logsGroup) {
@@ -386,12 +404,14 @@ class AdminAttendanceImportController extends Controller
 
                 if (! $facultyId || ! $date) {
                     $skippedCount += $logsGroup->count();
+
                     continue;
                 }
 
                 $faculty = Faculty::find($facultyId);
                 if (! $faculty) {
                     $skippedCount += $logsGroup->count();
+
                     continue;
                 }
 
@@ -441,11 +461,11 @@ class AdminAttendanceImportController extends Controller
             $recordLabel = $attendanceRecordsCount === 1 ? 'record was' : 'records were';
             $message = "{$syncedCount} biometric log {$logLabel} successfully synced and {$attendanceRecordsCount} attendance {$recordLabel} updated.";
             if ($skippedCount > 0) {
-                $message .= " {$skippedCount} " . ($skippedCount === 1 ? 'log was' : 'logs were') . ' skipped (incomplete time in/out).';
+                $message .= " {$skippedCount} ".($skippedCount === 1 ? 'log was' : 'logs were').' skipped (incomplete time in/out).';
             }
         } else {
             $message = $skippedCount > 0
-                ? "No logs were synced. {$skippedCount} " . ($skippedCount === 1 ? 'log was' : 'logs were') . ' skipped because time in/out was incomplete.'
+                ? "No logs were synced. {$skippedCount} ".($skippedCount === 1 ? 'log was' : 'logs were').' skipped because time in/out was incomplete.'
                 : 'This batch is already fully synced.';
         }
 
@@ -465,6 +485,61 @@ class AdminAttendanceImportController extends Controller
             'skipped_count' => $skippedCount,
             'attendance_records_count' => $attendanceRecordsCount,
         ]);
+    }
+
+    private function requeueProcessedLogsForGroupsWithoutAttendance($syncGroups): void
+    {
+        if ($syncGroups->isEmpty()) {
+            return;
+        }
+
+        $facultyIds = $syncGroups->pluck('faculty_id')
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($facultyIds->isEmpty()) {
+            return;
+        }
+
+        $facultyBiometricMap = Faculty::query()
+            ->whereIn('id', $facultyIds)
+            ->pluck('biometric_id', 'id');
+
+        if ($facultyBiometricMap->isEmpty()) {
+            return;
+        }
+
+        foreach ($syncGroups as $group) {
+            $facultyId = (int) ($group['faculty_id'] ?? 0);
+            $date = $group['date'] ?? null;
+
+            if ($facultyId === 0 || ! is_string($date) || $date === '') {
+                continue;
+            }
+
+            if (! $facultyBiometricMap->has($facultyId)) {
+                continue;
+            }
+
+            $attendanceExists = AttendanceRecord::query()
+                ->where('faculty_id', $facultyId)
+                ->whereDate('attendance_date', $date)
+                ->exists();
+
+            if ($attendanceExists) {
+                continue;
+            }
+
+            BiometricLog::query()
+                ->where('biometric_id', $facultyBiometricMap->get($facultyId))
+                ->whereDate('log_datetime', $date)
+                ->where('is_processed', true)
+                ->update([
+                    'is_processed' => false,
+                    'updated_at' => now(),
+                ]);
+        }
     }
 
     private function resolveSyncGroupsForBatch(ImportBatch $batch)
@@ -628,6 +703,35 @@ class AdminAttendanceImportController extends Controller
         abort_unless((int) $log->import_batch_id === (int) $batch->id, 404);
     }
 
+    private function restoreSoftDeletedBiometricLogFromImport(
+        ImportBatch $batch,
+        string $biometricId,
+        string $parsedDateTime,
+        string $logType,
+        ?string $deviceId,
+    ): bool {
+        $softDeletedLog = BiometricLog::withTrashed()
+            ->where('biometric_id', $biometricId)
+            ->where('log_datetime', $parsedDateTime)
+            ->where('log_type', $logType)
+            ->whereNotNull('deleted_at')
+            ->first();
+
+        if (! $softDeletedLog) {
+            return false;
+        }
+
+        $softDeletedLog->restore();
+
+        $softDeletedLog->update([
+            'device_id' => $deviceId,
+            'import_batch_id' => $batch->id,
+            'is_processed' => false,
+        ]);
+
+        return true;
+    }
+
     private function normalizeLogType(?string $value): string
     {
         $normalized = strtolower(trim((string) $value));
@@ -645,7 +749,7 @@ class AdminAttendanceImportController extends Controller
 
     private function makeFacultyDateKey($facultyId, ?string $date): string
     {
-        return ($facultyId ?? '0') . '|' . ($date ?? '');
+        return ($facultyId ?? '0').'|'.($date ?? '');
     }
 
     private function findClosestOperationalSchedule(
@@ -734,12 +838,12 @@ class AdminAttendanceImportController extends Controller
 
             // Determine official times (apply change-request override when present).
             if ($change) {
-                $officialTimeIn = Carbon::parse($targetDate->toDateString() . ' ' . Carbon::parse($change->requested_time_in)->format('H:i:s'));
-                $officialTimeOut = Carbon::parse($targetDate->toDateString() . ' ' . Carbon::parse($change->requested_time_out)->format('H:i:s'));
+                $officialTimeIn = Carbon::parse($targetDate->toDateString().' '.Carbon::parse($change->requested_time_in)->format('H:i:s'));
+                $officialTimeOut = Carbon::parse($targetDate->toDateString().' '.Carbon::parse($change->requested_time_out)->format('H:i:s'));
             } else {
-                $officialTimeIn = Carbon::parse($targetDate->toDateString() . ' ' . Carbon::parse($detail->start_time)->format('H:i:s'));
+                $officialTimeIn = Carbon::parse($targetDate->toDateString().' '.Carbon::parse($detail->start_time)->format('H:i:s'));
                 $officialTimeOut = $detail->end_time
-                    ? Carbon::parse($targetDate->toDateString() . ' ' . Carbon::parse($detail->end_time)->format('H:i:s'))
+                    ? Carbon::parse($targetDate->toDateString().' '.Carbon::parse($detail->end_time)->format('H:i:s'))
                     : $officialTimeIn->copy()->addMinutes(max(60, (int) round(((float) ($detail->hours_required ?? 1)) * 60)));
             }
 
@@ -754,9 +858,9 @@ class AdminAttendanceImportController extends Controller
             );
 
             if ($internalSchedule) {
-                $operationalTimeIn = Carbon::parse($targetDate->toDateString() . ' ' . Carbon::parse($internalSchedule->device_time_in)->format('H:i:s'));
+                $operationalTimeIn = Carbon::parse($targetDate->toDateString().' '.Carbon::parse($internalSchedule->device_time_in)->format('H:i:s'));
                 $operationalTimeOut = $internalSchedule->device_time_out
-                    ? Carbon::parse($targetDate->toDateString() . ' ' . Carbon::parse($internalSchedule->device_time_out)->format('H:i:s'))
+                    ? Carbon::parse($targetDate->toDateString().' '.Carbon::parse($internalSchedule->device_time_out)->format('H:i:s'))
                     : $operationalTimeIn->copy()->addMinutes(max(60, (int) round(((float) ($detail->hours_required ?? 1)) * 60)));
                 $operationalDayOfWeek = $internalSchedule->day_of_week;
             } else {
@@ -882,9 +986,9 @@ class AdminAttendanceImportController extends Controller
                 );
 
                 if ($fallbackInternal) {
-                    $officialTimeIn = Carbon::parse($targetDate->toDateString() . ' ' . Carbon::parse($fallbackInternal->device_time_in)->format('H:i:s'));
+                    $officialTimeIn = Carbon::parse($targetDate->toDateString().' '.Carbon::parse($fallbackInternal->device_time_in)->format('H:i:s'));
                     $officialTimeOut = $fallbackInternal->device_time_out
-                        ? Carbon::parse($targetDate->toDateString() . ' ' . Carbon::parse($fallbackInternal->device_time_out)->format('H:i:s'))
+                        ? Carbon::parse($targetDate->toDateString().' '.Carbon::parse($fallbackInternal->device_time_out)->format('H:i:s'))
                         : $officialTimeIn->copy()->addHours(max(1, (int) ($fallbackInternal->required_hours ?? 1)));
                     $operationalTimeIn = $officialTimeIn->copy();
                     $operationalTimeOut = $officialTimeOut->copy();
@@ -972,7 +1076,7 @@ class AdminAttendanceImportController extends Controller
     {
         $fileName = 'biometric_logs_import_template.xlsx';
 
-        $spreadsheet = new Spreadsheet();
+        $spreadsheet = new Spreadsheet;
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->setTitle('Biometric Logs Template');
 
@@ -983,7 +1087,7 @@ class AdminAttendanceImportController extends Controller
         $sheet->fromArray([
             ['Column', 'Purpose / Format'],
             ['biometric_id', 'Required. Faculty biometric ID. Must match an existing faculties.biometric_id value.'],
-            ['log_datetime', 'Required. Date and time of the log. Use an Excel date/time cell. Example display: 3/1/2026 8:02.'],
+            ['log_datetime', 'Required. Date and time of the log. Use an Excel date/time cell. Example display: MM/DD/YYYY HH:MM in military time.'],
             ['log_type', 'Required. Log type from the device (e.g., IN or OUT).'],
             ['device_id', 'Optional. Identifier of the biometric device used to record the log.'],
         ], null, 'A5');
@@ -1017,7 +1121,7 @@ class AdminAttendanceImportController extends Controller
             $sheet->getColumnDimension($column)->setAutoSize(true);
         }
 
-        $tempPath = tempnam(sys_get_temp_dir(), 'attendance_template_') . '.xlsx';
+        $tempPath = tempnam(sys_get_temp_dir(), 'attendance_template_').'.xlsx';
 
         $writer = new Xlsx($spreadsheet);
         $writer->save($tempPath);
@@ -1069,11 +1173,11 @@ class AdminAttendanceImportController extends Controller
 
         // ── First pass: parse all rows and track first-seen keys ─────────────
         $parsedRows = [];
-        $seenKeys   = [];
+        $seenKeys = [];
 
         foreach ($rows as $row) {
             $biometricId = trim((string) ($row['biometric_id'] ?? ''));
-            $logType     = trim((string) ($row['log_type'] ?? ''));
+            $logType = trim((string) ($row['log_type'] ?? ''));
             $logDateTime = $row['log_datetime'] ?? '';
 
             if ($biometricId === '' || $logType === '' || $logDateTime === '') {
@@ -1089,9 +1193,9 @@ class AdminAttendanceImportController extends Controller
             $key = "{$biometricId}|{$parsedDateTime}|{$normalizedType}";
 
             $parsedRows[] = [
-                'row'            => $row,
-                'key'            => $key,
-                'biometricId'    => $biometricId,
+                'row' => $row,
+                'key' => $key,
+                'biometricId' => $biometricId,
                 'parsedDateTime' => $parsedDateTime,
                 'normalizedType' => $normalizedType,
                 'duplicateInFile' => isset($seenKeys[$key]),
@@ -1109,9 +1213,9 @@ class AdminAttendanceImportController extends Controller
         // ── Batch-load all existing logs for these biometric IDs/date range ──
         // Collect unique biometric IDs and the min/max datetime for the range query.
         $uniqueBiometricIds = collect($parsedRows)->pluck('biometricId')->unique()->values()->all();
-        $dateTimes          = collect($parsedRows)->pluck('parsedDateTime')->sort()->values();
-        $minDate            = $dateTimes->first();
-        $maxDate            = $dateTimes->last();
+        $dateTimes = collect($parsedRows)->pluck('parsedDateTime')->sort()->values();
+        $minDate = $dateTimes->first();
+        $maxDate = $dateTimes->last();
 
         // One query to fetch every log in this date range that belongs to a
         // different batch (or has no batch), keyed by composite lookup string.
@@ -1124,7 +1228,7 @@ class AdminAttendanceImportController extends Controller
             })
             ->get(['biometric_id', 'log_datetime', 'log_type'])
             ->mapWithKeys(function (BiometricLog $log): array {
-                $key = $log->biometric_id . '|' . Carbon::parse($log->log_datetime)->format('Y-m-d H:i:s') . '|' . strtoupper(trim((string) $log->log_type));
+                $key = $log->biometric_id.'|'.Carbon::parse($log->log_datetime)->format('Y-m-d H:i:s').'|'.strtoupper(trim((string) $log->log_type));
 
                 return [$key => true];
             });
@@ -1143,13 +1247,13 @@ class AdminAttendanceImportController extends Controller
             $biometricId = $entry['biometricId'];
 
             $duplicates[] = [
-                'id'            => 'dup-' . ($entry['row']['line'] ?? uniqid()) . '-' . md5($key),
-                'faculty_name'  => null,
+                'id' => 'dup-'.($entry['row']['line'] ?? uniqid()).'-'.md5($key),
+                'faculty_name' => null,
                 'faculty_exists' => $knownBiometricIds->has($biometricId),
-                'biometric_id'  => $biometricId,
-                'log_datetime'  => $entry['parsedDateTime'],
-                'log_type'      => $entry['normalizedType'],
-                'is_processed'  => false,
+                'biometric_id' => $biometricId,
+                'log_datetime' => $entry['parsedDateTime'],
+                'log_type' => $entry['normalizedType'],
+                'is_processed' => false,
             ];
         }
 
@@ -1284,6 +1388,7 @@ class AdminAttendanceImportController extends Controller
 
             if (! is_array($row)) {
                 $line++;
+
                 continue;
             }
 
@@ -1328,12 +1433,14 @@ class AdminAttendanceImportController extends Controller
 
             if (! is_array($row)) {
                 $line++;
+
                 continue;
             }
 
             $nonEmptyValues = array_filter($row, static fn ($value) => $value !== null && trim((string) $value) !== '');
             if (count($nonEmptyValues) === 0) {
                 $line++;
+
                 continue;
             }
 
@@ -1438,7 +1545,7 @@ class AdminAttendanceImportController extends Controller
         $errorInfo = $exception->errorInfo ?? null;
 
         if (is_array($errorInfo) && count($errorInfo) >= 2) {
-            $sqlState   = (string) $errorInfo[0];
+            $sqlState = (string) $errorInfo[0];
             $driverCode = (string) $errorInfo[1];
 
             // MySQL / MariaDB duplicate entry
