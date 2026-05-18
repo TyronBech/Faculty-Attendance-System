@@ -105,7 +105,9 @@ class GenerateDtrBatchZipJob implements ShouldQueue
                 ->save($outputPath);
         }
 
-        $zipPath = Storage::disk('local')->path("dtr-exports/{$this->token}.zip");
+        $finalRelativePath = "dtr-exports/{$this->token}.zip";
+        $temporaryRelativePath = "dtr-exports/{$this->token}.tmp.zip";
+        $zipPath = Storage::disk('local')->path($temporaryRelativePath);
         $zip = new ZipArchive;
 
         if ($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
@@ -118,6 +120,7 @@ class GenerateDtrBatchZipJob implements ShouldQueue
 
         $zip->close();
 
+        Storage::disk('local')->move($temporaryRelativePath, $finalRelativePath);
         Storage::disk('local')->deleteDirectory($batchDirectory);
     }
 }

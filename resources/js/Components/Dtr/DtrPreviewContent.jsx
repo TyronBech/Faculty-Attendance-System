@@ -112,6 +112,9 @@ export function DtrTimeLog({ rows, totalHours, mode = 'official', onModeChange }
                             const afternoonOut = row[`${prefix}afternoon_out`] ?? row.afternoon_out ?? '';
                             const nightIn = row[`${prefix}night_in`] ?? row.night_in ?? '';
                             const nightOut = row[`${prefix}night_out`] ?? row.night_out ?? '';
+                            const morningAbsent = Boolean(row.official_morning_absent);
+                            const afternoonAbsent = Boolean(row.official_afternoon_absent);
+                            const nightAbsent = Boolean(row.official_night_absent);
                             const hasTimes = Boolean(morningIn || morningOut || afternoonIn || afternoonOut || nightIn || nightOut);
                             const totalHours = Number(row.total_hours_rendered ?? 0).toFixed(2);
                             const requiredHours = Number(row.required_hours ?? 0).toFixed(2);
@@ -148,12 +151,24 @@ export function DtrTimeLog({ rows, totalHours, mode = 'official', onModeChange }
                                         </td>
                                     ) : (
                                         <>
-                                            <td className="px-2 py-1.5 text-center text-xs">{morningIn}</td>
-                                            <td className="px-2 py-1.5 text-center text-xs">{morningOut}</td>
-                                            <td className="px-2 py-1.5 text-center text-xs">{afternoonIn}</td>
-                                            <td className="px-2 py-1.5 text-center text-xs">{afternoonOut}</td>
-                                            <td className="px-2 py-1.5 text-center text-xs">{nightIn}</td>
-                                            <td className="px-2 py-1.5 text-center text-xs">{nightOut}</td>
+                                            <td className={`px-2 py-1.5 text-center text-xs ${morningAbsent ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300 font-semibold' : ''}`}>
+                                                {morningIn}
+                                            </td>
+                                            <td className={`px-2 py-1.5 text-center text-xs ${morningAbsent ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300 font-semibold' : ''}`}>
+                                                {morningOut}
+                                            </td>
+                                            <td className={`px-2 py-1.5 text-center text-xs ${afternoonAbsent ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300 font-semibold' : ''}`}>
+                                                {afternoonIn}
+                                            </td>
+                                            <td className={`px-2 py-1.5 text-center text-xs ${afternoonAbsent ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300 font-semibold' : ''}`}>
+                                                {afternoonOut}
+                                            </td>
+                                            <td className={`px-2 py-1.5 text-center text-xs ${nightAbsent ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300 font-semibold' : ''}`}>
+                                                {nightIn}
+                                            </td>
+                                            <td className={`px-2 py-1.5 text-center text-xs ${nightAbsent ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300 font-semibold' : ''}`}>
+                                                {nightOut}
+                                            </td>
                                         </>
                                     )}
                                     <td className="px-2 py-1.5 text-center text-xs font-semibold">

@@ -30,7 +30,7 @@ class ActionActivityLoggingTest extends TestCase
 
         $this->assertDatabaseHas('activity_log', [
             'log_name' => 'actions',
-            'description' => 'PATCH profile.update',
+            'description' => $user->name.' updated profile',
             'event' => 'action',
             'causer_type' => User::class,
             'causer_id' => $user->id,
