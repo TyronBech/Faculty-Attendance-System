@@ -18,6 +18,19 @@ Route::get('/debug-headers', function (\Illuminate\Http\Request $request) {
     ]);
 });
 
+Route::get('/debug-headers-sent', function () {
+    $file = null;
+    $line = null;
+
+    return response()->json([
+        'headers_sent' => headers_sent($file, $line),
+        'file' => $file,
+        'line' => $line,
+        'ob_level' => ob_get_level(),
+        'ob_length' => ob_get_length(),
+    ]);
+});
+
 Route::get('/', function () {
     // Redirect already-authenticated users to their dashboard
     if (Auth::guard('admin')->check()) {
