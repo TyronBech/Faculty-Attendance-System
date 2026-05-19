@@ -7,9 +7,11 @@ import InputError from '@/Components/InputError';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
 import DangerButton from '@/Components/DangerButton';
-import { Head, router, useForm } from '@inertiajs/react';
+import { Head, router, useForm, usePage } from '@inertiajs/react';
 import { useState, useCallback, useRef, useEffect } from 'react';
 import axios from 'axios';
+import { PERMISSIONS } from '@/Constants/permissions';
+import { hasPermission } from '@/Utils/permissions';
 
 /* ─────────────────────────────────────
    Constants
@@ -55,7 +57,7 @@ function RecurringBadge({ recurring }) {
 /* ─────────────────────────────────────
    Empty state
    ───────────────────────────────────── */
-function EmptyState({ onAdd }) {
+function EmptyState({ onAdd, canAdd }) {
     return (
         <div className="flex flex-col items-center justify-center py-20 text-center">
             <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-[#7a1315]/10 to-[#cc2127]/10 text-4xl shadow-inner">
@@ -65,12 +67,14 @@ function EmptyState({ onAdd }) {
             <p className="mb-6 text-sm text-gray-500 dark:text-gray-400">
                 Add a holiday to prevent faculty from being marked absent on that day.
             </p>
-            <button
-                onClick={onAdd}
-                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-br from-[#7a1315] to-[#cc2127] px-4 py-2 text-sm font-semibold text-white shadow hover:opacity-90 active:scale-95 transition-all"
-            >
-                <span>+</span> Add Holiday
-            </button>
+            {canAdd && (
+                <button
+                    onClick={onAdd}
+                    className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-br from-[#7a1315] to-[#cc2127] px-4 py-2 text-sm font-semibold text-white shadow hover:opacity-90 active:scale-95 transition-all"
+                >
+                    <span>+</span> Add Holiday
+                </button>
+            )}
         </div>
     );
 }
@@ -157,6 +161,12 @@ function HolidayForm({ form, errors, onSubmit, processing, submitLabel }) {
    Main Component
    ───────────────────────────────────── */
 export default function AdminHolidays({ holidays, filters }) {
+    const { auth } = usePage().props;
+    const permissionList = auth?.permissions ?? [];
+    const canCreateHoliday = hasPermission(permissionList, PERMISSIONS.CREATE_HOLIDAYS);
+    const canEditHoliday = hasPermission(permissionList, PERMISSIONS.EDIT_HOLIDAYS);
+    const canDeleteHoliday = hasPermission(permissionList, PERMISSIONS.DELETE_HOLIDAYS);
+
     // ── Filter state ─────────────────────────────────────────────────────
     const [search, setSearch]         = useState(filters.search || '');
     const [searchInput, setSearchInput] = useState(filters.search || '');
@@ -322,15 +332,17 @@ export default function AdminHolidays({ holidays, filters }) {
                             Manage public &amp; local holidays — faculty won't be marked absent on these days.
                         </p>
                     </div>
-                    <button
-                        onClick={openCreate}
-                        className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-br from-[#7a1315] to-[#cc2127] px-4 py-2 text-sm font-semibold text-white shadow hover:opacity-90 active:scale-95 transition-all"
-                    >
-                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                        </svg>
-                        Add Holiday
-                    </button>
+                    {canCreateHoliday && (
+                        <button
+                            onClick={openCreate}
+                            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-br from-[#7a1315] to-[#cc2127] px-4 py-2 text-sm font-semibold text-white shadow hover:opacity-90 active:scale-95 transition-all"
+                        >
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                            </svg>
+                            Add Holiday
+                        </button>
+                    )}
                 </div>
             }
         >
@@ -442,7 +454,7 @@ export default function AdminHolidays({ holidays, filters }) {
             {/* ── Table ────────────────────────────────────────────────────── */}
             <div className="rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
                 {holidays.data.length === 0 ? (
-                    <EmptyState onAdd={openCreate} />
+                    <EmptyState onAdd={openCreate} canAdd={canCreateHoliday} />
                 ) : (
                     <>
                         {/* Desktop table */}
@@ -465,19 +477,13 @@ export default function AdminHolidays({ holidays, filters }) {
                                         <tr key={holiday.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
                                             {/* Date */}
                                             <td className="px-6 py-4 whitespace-nowrap">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#7a1315]/10 to-[#cc2127]/10 text-lg font-bold text-[#7a1315] dark:text-red-400">
-                                                        {new Date(holiday.holiday_date.substring(0, 10) + 'T00:00:00').getDate()}
-                                                    </div>
-                                                    <div>
-                                                        <div className="text-sm font-bold text-gray-900 dark:text-gray-100">
-                                                            {new Date(holiday.holiday_date.substring(0, 10) + 'T00:00:00').toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}
-                                                        </div>
-                                                        <div className="text-xs text-gray-400">
-                                                            {new Date(holiday.holiday_date.substring(0, 10) + 'T00:00:00').toLocaleDateString('en-PH', { weekday: 'long' })}
-                                                        </div>
-                                                    </div>
-                                                </div>
+                                                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                    {new Date(holiday.holiday_date.substring(0, 10) + 'T00:00:00').toLocaleDateString('en-PH', {
+                                                        month: 'long',
+                                                        day: 'numeric',
+                                                        year: 'numeric',
+                                                    })}
+                                                </span>
                                             </td>
 
                                             {/* Name */}
@@ -498,18 +504,22 @@ export default function AdminHolidays({ holidays, filters }) {
                                             {/* Actions */}
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <div className="flex items-center gap-2">
-                                                    <button
-                                                        onClick={() => openEdit(holiday)}
-                                                        className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 active:scale-95 transition-all"
-                                                    >
-                                                        Edit
-                                                    </button>
-                                                    <button
-                                                        onClick={() => openDelete(holiday)}
-                                                        className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 px-3 py-1.5 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 active:scale-95 transition-all"
-                                                    >
-                                                        Delete
-                                                    </button>
+                                                    {canEditHoliday && (
+                                                        <button
+                                                            onClick={() => openEdit(holiday)}
+                                                            className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 active:scale-95 transition-all"
+                                                        >
+                                                            Edit
+                                                        </button>
+                                                    )}
+                                                    {canDeleteHoliday && (
+                                                        <button
+                                                            onClick={() => openDelete(holiday)}
+                                                            className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 px-3 py-1.5 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 active:scale-95 transition-all"
+                                                        >
+                                                            Delete
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </td>
                                         </tr>
@@ -535,18 +545,22 @@ export default function AdminHolidays({ holidays, filters }) {
                                         </div>
                                     </div>
                                     <div className="flex gap-2">
-                                        <button
-                                            onClick={() => openEdit(holiday)}
-                                            className="flex-1 rounded-lg border border-gray-300 dark:border-gray-600 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 active:scale-95 transition-all"
-                                        >
-                                            Edit
-                                        </button>
-                                        <button
-                                            onClick={() => openDelete(holiday)}
-                                            className="flex-1 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 py-1.5 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-100 active:scale-95 transition-all"
-                                        >
-                                            Delete
-                                        </button>
+                                        {canEditHoliday && (
+                                            <button
+                                                onClick={() => openEdit(holiday)}
+                                                className="flex-1 rounded-lg border border-gray-300 dark:border-gray-600 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 active:scale-95 transition-all"
+                                            >
+                                                Edit
+                                            </button>
+                                        )}
+                                        {canDeleteHoliday && (
+                                            <button
+                                                onClick={() => openDelete(holiday)}
+                                                className="flex-1 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 py-1.5 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-100 active:scale-95 transition-all"
+                                            >
+                                                Delete
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             ))}
@@ -569,7 +583,8 @@ export default function AdminHolidays({ holidays, filters }) {
             {/* ═══════════════════════════════
                   CREATE MODAL
                 ═══════════════════════════════ */}
-            <Modal show={showCreateModal} onClose={() => setShowCreateModal(false)} maxWidth="md">
+            {canCreateHoliday && (
+                <Modal show={showCreateModal} onClose={() => setShowCreateModal(false)} maxWidth="md">
                 <div className="p-6">
                     <div className="flex items-center gap-3 mb-6">
                         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#7a1315] to-[#cc2127] text-white shadow">
@@ -595,12 +610,14 @@ export default function AdminHolidays({ holidays, filters }) {
                         <SecondaryButton onClick={() => setShowCreateModal(false)}>Cancel</SecondaryButton>
                     </div>
                 </div>
-            </Modal>
+                </Modal>
+            )}
 
             {/* ═══════════════════════════════
                   EDIT MODAL
                 ═══════════════════════════════ */}
-            <Modal show={showEditModal} onClose={() => setShowEditModal(false)} maxWidth="md">
+            {canEditHoliday && (
+                <Modal show={showEditModal} onClose={() => setShowEditModal(false)} maxWidth="md">
                 <div className="p-6">
                     <div className="flex items-center gap-3 mb-6">
                         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
@@ -626,12 +643,14 @@ export default function AdminHolidays({ holidays, filters }) {
                         <SecondaryButton onClick={() => setShowEditModal(false)}>Cancel</SecondaryButton>
                     </div>
                 </div>
-            </Modal>
+                </Modal>
+            )}
 
             {/* ═══════════════════════════════
                   DELETE MODAL
                 ═══════════════════════════════ */}
-            <Modal show={showDeleteModal} onClose={() => setShowDeleteModal(false)} maxWidth="sm">
+            {canDeleteHoliday && (
+                <Modal show={showDeleteModal} onClose={() => setShowDeleteModal(false)} maxWidth="sm">
                 <div className="p-6">
                     <div className="flex items-center gap-3 mb-4">
                         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-100 dark:bg-red-900/30 text-red-500">
@@ -657,7 +676,8 @@ export default function AdminHolidays({ holidays, filters }) {
                         <DangerButton onClick={handleDelete}>Remove Holiday</DangerButton>
                     </div>
                 </div>
-            </Modal>
+                </Modal>
+            )}
         </AuthenticatedLayout>
     );
 }

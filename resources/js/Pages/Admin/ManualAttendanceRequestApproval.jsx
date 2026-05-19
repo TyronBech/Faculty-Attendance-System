@@ -7,7 +7,9 @@ import TextInput from "@/Components/TextInput";
 import SecondaryButton from "@/Components/SecondaryButton";
 import Pagination from "@/Components/Pagination";
 import AttachmentPreviewModal from "@/Components/AttachmentPreviewModal";
-import { Head, useForm } from "@inertiajs/react";
+import { PERMISSIONS } from "@/Constants/permissions";
+import { hasPermission } from "@/Utils/permissions";
+import { Head, useForm, usePage } from "@inertiajs/react";
 import { useCallback, useState } from "react";
 import toast from "react-hot-toast";
 
@@ -27,6 +29,8 @@ function RequestCard({
     onPreview,
     isExpanded,
     toggleExpand,
+    canApprove,
+    canReject,
 }) {
     const handleActionClick = (event, callback) => {
         event.stopPropagation();
@@ -122,50 +126,54 @@ function RequestCard({
                     <p className="text-xs font-bold text-gray-500 dark:text-gray-400">
                         Click to {isExpanded ? "hide" : "show"} details
                     </p>
-                    {request.status === "pending" && (
+                    {request.status === "pending" && (canApprove || canReject) && (
                         <div className="flex items-center gap-2">
-                            <button
-                                onClick={(event) =>
-                                    handleActionClick(event, onReject)
-                                }
-                                className="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-bold text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800/50 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                            >
-                                <svg
-                                    className="h-3.5 w-3.5"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    strokeWidth={2.5}
-                                    stroke="currentColor"
+                            {canReject && (
+                                <button
+                                    onClick={(event) =>
+                                        handleActionClick(event, onReject)
+                                    }
+                                    className="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-bold text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800/50 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                                 >
-                                    <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        d="M6 18 18 6M6 6l12 12"
-                                    />
-                                </svg>
-                                Reject
-                            </button>
-                            <button
-                                onClick={(event) =>
-                                    handleActionClick(event, onApprove)
-                                }
-                                className="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm transition-colors"
-                            >
-                                <svg
-                                    className="h-3.5 w-3.5"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    strokeWidth={2.5}
-                                    stroke="currentColor"
+                                    <svg
+                                        className="h-3.5 w-3.5"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        strokeWidth={2.5}
+                                        stroke="currentColor"
+                                    >
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            d="M6 18 18 6M6 6l12 12"
+                                        />
+                                    </svg>
+                                    Reject
+                                </button>
+                            )}
+                            {canApprove && (
+                                <button
+                                    onClick={(event) =>
+                                        handleActionClick(event, onApprove)
+                                    }
+                                    className="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm transition-colors"
                                 >
-                                    <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        d="m4.5 12.75 6 6 9-13.5"
-                                    />
-                                </svg>
-                                Approve
-                            </button>
+                                    <svg
+                                        className="h-3.5 w-3.5"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        strokeWidth={2.5}
+                                        stroke="currentColor"
+                                    >
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            d="m4.5 12.75 6 6 9-13.5"
+                                        />
+                                    </svg>
+                                    Approve
+                                </button>
+                            )}
                         </div>
                     )}
                 </div>
@@ -338,6 +346,21 @@ export default function ManualAttendanceRequestApproval({
     pendingCount,
     manualLogLimit,
 }) {
+    const { auth } = usePage().props;
+    const permissionList = auth?.permissions ?? [];
+    const canApproveRequests = hasPermission(
+        permissionList,
+        PERMISSIONS.APPROVE_REQUESTS,
+    );
+    const canRejectRequests = hasPermission(
+        permissionList,
+        PERMISSIONS.REJECT_REQUESTS,
+    );
+    const canEditManualRequestLimit = hasPermission(
+        permissionList,
+        PERMISSIONS.EDIT_MANUAL_REQUEST_LIMIT,
+    );
+
     const [requestsData, setRequestsData] = useState(initialRequests);
     const [paginator, setPaginator] = useState(initialPaginator);
     const [searchInput, setSearchInput] = useState(initialFilters.search || "");
@@ -437,6 +460,10 @@ export default function ManualAttendanceRequestApproval({
     };
 
     const openApprove = (request) => {
+        if (!canApproveRequests) {
+            return;
+        }
+
         setSelectedRequest(request);
         approveForm.reset();
         approveForm.setData({
@@ -447,6 +474,10 @@ export default function ManualAttendanceRequestApproval({
     };
 
     const openReject = (request) => {
+        if (!canRejectRequests) {
+            return;
+        }
+
         setSelectedRequest(request);
         rejectForm.reset();
         setShowRejectModal(true);
@@ -569,62 +600,64 @@ export default function ManualAttendanceRequestApproval({
                         {pendingCount === 1 ? "request" : "requests"}
                     </div>
 
-                    <form
-                        onSubmit={handleLimitUpdate}
-                        className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/80 px-4 py-3 shadow-sm"
-                    >
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                            <div>
-                                <InputLabel
-                                    htmlFor="manual_request_limit"
-                                    value="Manual Request Limit"
-                                />
-                                <TextInput
-                                    id="manual_request_limit"
-                                    type="text"
-                                    inputMode="numeric"
-                                    pattern="[0-9]*"
-                                    value={limitForm.data.manual_request_limit}
-                                    onChange={(event) =>
-                                        limitForm.setData(
-                                            "manual_request_limit",
-                                            event.target.value.replace(
-                                                /\D/g,
-                                                "",
-                                            ),
-                                        )
-                                    }
-                                    className="mt-2 block w-28"
-                                />
-                                <InputError
-                                    message={
-                                        limitForm.errors.manual_request_limit
-                                    }
-                                    className="mt-2"
-                                />
-                            </div>
+                    {canEditManualRequestLimit && (
+                        <form
+                            onSubmit={handleLimitUpdate}
+                            className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/80 px-4 py-3 shadow-sm"
+                        >
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                                <div>
+                                    <InputLabel
+                                        htmlFor="manual_request_limit"
+                                        value="Manual Request Limit"
+                                    />
+                                    <TextInput
+                                        id="manual_request_limit"
+                                        type="text"
+                                        inputMode="numeric"
+                                        pattern="[0-9]*"
+                                        value={limitForm.data.manual_request_limit}
+                                        onChange={(event) =>
+                                            limitForm.setData(
+                                                "manual_request_limit",
+                                                event.target.value.replace(
+                                                    /\D/g,
+                                                    "",
+                                                ),
+                                            )
+                                        }
+                                        className="mt-2 block w-28"
+                                    />
+                                    <InputError
+                                        message={
+                                            limitForm.errors.manual_request_limit
+                                        }
+                                        className="mt-2"
+                                    />
+                                </div>
 
-                            <div className="flex items-center gap-3">
-                                <p className="text-xs text-gray-500 dark:text-gray-400">
-                                    Current cap: {currentManualLogLimit} counted
-                                    requests per semester.
-                                </p>
-                                <button
-                                    type="submit"
-                                    disabled={
-                                        limitForm.processing ||
-                                        limitForm.data.manual_request_limit ===
-                                        ""
-                                    }
-                                    className="inline-flex items-center gap-1.5 rounded-xl bg-gray-900 dark:bg-gray-100 px-4 py-2.5 text-xs font-bold text-white dark:text-gray-900 hover:bg-gray-700 dark:hover:bg-gray-300 transition-colors disabled:opacity-50"
-                                >
-                                    {limitForm.processing
-                                        ? "Saving..."
-                                        : "Save Limit"}
-                                </button>
+                                <div className="flex items-center gap-3">
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                                        Current cap: {currentManualLogLimit} counted
+                                        requests per semester.
+                                    </p>
+                                    <button
+                                        type="submit"
+                                        disabled={
+                                            limitForm.processing ||
+                                            limitForm.data.manual_request_limit ===
+                                                ""
+                                        }
+                                        className="inline-flex items-center gap-1.5 rounded-xl bg-gray-900 dark:bg-gray-100 px-4 py-2.5 text-xs font-bold text-white dark:text-gray-900 hover:bg-gray-700 dark:hover:bg-gray-300 transition-colors disabled:opacity-50"
+                                    >
+                                        {limitForm.processing
+                                            ? "Saving..."
+                                            : "Save Limit"}
+                                    </button>
+                                </div>
                             </div>
-                        </div>
-                    </form>
+                        </form>
+                    )}
                 </div>
             </div>
 
@@ -737,6 +770,8 @@ export default function ManualAttendanceRequestApproval({
                             toggleExpand={() => toggleExpand(request.id)}
                             onApprove={() => openApprove(request)}
                             onReject={() => openReject(request)}
+                            canApprove={canApproveRequests}
+                            canReject={canRejectRequests}
                             onPreview={(attachments, startIndex) => {
                                 setPreviewState({ attachments, startIndex });
                                 setShowPreviewModal(true);
@@ -762,12 +797,13 @@ export default function ManualAttendanceRequestApproval({
                 />
             ) : null}
 
-            <Modal
-                show={showApproveModal}
-                onClose={() => setShowApproveModal(false)}
-                maxWidth="lg"
-            >
-                <form onSubmit={handleApprove}>
+            {canApproveRequests && (
+                <Modal
+                    show={showApproveModal}
+                    onClose={() => setShowApproveModal(false)}
+                    maxWidth="lg"
+                >
+                    <form onSubmit={handleApprove}>
                     <div className="px-6 pt-6 pb-4 border-b border-gray-100 dark:border-gray-700">
                         <div className="flex items-center gap-3">
                             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400">
@@ -916,15 +952,17 @@ export default function ManualAttendanceRequestApproval({
                                 : "Approve Request"}
                         </button>
                     </div>
-                </form>
-            </Modal>
+                    </form>
+                </Modal>
+            )}
 
-            <Modal
-                show={showRejectModal}
-                onClose={() => setShowRejectModal(false)}
-                maxWidth="lg"
-            >
-                <form onSubmit={handleReject}>
+            {canRejectRequests && (
+                <Modal
+                    show={showRejectModal}
+                    onClose={() => setShowRejectModal(false)}
+                    maxWidth="lg"
+                >
+                    <form onSubmit={handleReject}>
                     <div className="px-6 pt-6 pb-4 border-b border-gray-100 dark:border-gray-700">
                         <div className="flex items-center gap-3">
                             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400">
@@ -1028,8 +1066,9 @@ export default function ManualAttendanceRequestApproval({
                                 : "Reject Request"}
                         </button>
                     </div>
-                </form>
-            </Modal>
+                    </form>
+                </Modal>
+            )}
 
             <AttachmentPreviewModal
                 show={showPreviewModal}
