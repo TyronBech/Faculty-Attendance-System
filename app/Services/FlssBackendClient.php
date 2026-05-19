@@ -10,6 +10,9 @@ class FlssBackendClient
 {
     /**
      * Send a signed request to FLSS backend using HMAC SHA-256.
+     *
+     * Retries up to 3 times with exponential backoff to handle
+     * transient SSL/connection resets from the external API.
      */
     public function request(string $method, string $url, array $query = [], ?array $payload = null): Response
     {
@@ -20,7 +23,6 @@ class FlssBackendClient
         }
 
         $method = strtoupper($method);
-        $timestamp = (string) now()->timestamp;
         $nonce = '';
         $body = $payload ? json_encode($payload, JSON_UNESCAPED_SLASHES) : '';
 
@@ -29,32 +31,52 @@ class FlssBackendClient
         }
 
         $signedUrl = $this->buildSignedUrl($url, $query);
-        $message = $method . '|' . $signedUrl . '|' . $body . '|' . $timestamp . '|' . $nonce;
-        $signature = hash_hmac('sha256', $message, $apiKey);
+        $lastException = null;
 
-        $request = Http::withHeaders([
-            'X-HMAC-Signature' => $signature,
-            'X-HMAC-Timestamp' => $timestamp,
-            'X-HMAC-Nonce' => $nonce,
-        ])->acceptJson();
+        for ($attempt = 1; $attempt <= 3; $attempt++) {
+            try {
+                // Regenerate HMAC on each attempt (timestamp changes)
+                $timestamp = (string) now()->timestamp;
+                $message = $method.'|'.$signedUrl.'|'.$body.'|'.$timestamp.'|'.$nonce;
+                $signature = hash_hmac('sha256', $message, $apiKey);
 
-        $request = $request->withOptions([
-            'verify' => $this->resolveSslVerificationOption(),
-        ]);
+                $request = Http::withHeaders([
+                    'X-HMAC-Signature' => $signature,
+                    'X-HMAC-Timestamp' => $timestamp,
+                    'X-HMAC-Nonce' => $nonce,
+                ])
+                    ->acceptJson()
+                    ->timeout(30)
+                    ->connectTimeout(15)
+                    ->withOptions([
+                        'verify' => $this->resolveSslVerificationOption(),
+                    ]);
 
-        if ($body !== '') {
-            $request = $request->withBody($body, 'application/json');
+                if ($body !== '') {
+                    $request = $request->withBody($body, 'application/json');
+                }
+
+                $response = $request->send($method, $signedUrl);
+
+                if ($response instanceof Response) {
+                    return $response;
+                }
+
+                /** @var Response $resolved */
+                $resolved = $response->wait();
+
+                return $resolved;
+            } catch (\Throwable $e) {
+                $lastException = $e;
+
+                if ($attempt < 3) {
+                    // Exponential backoff: 2s, 4s
+                    sleep($attempt * 2);
+                }
+            }
         }
 
-        $response = $request->send($method, $signedUrl);
-
-        if ($response instanceof Response) {
-            return $response;
-        }
-
-        /** @var Response $resolved */
-        $resolved = $response->wait();
-        return $resolved;
+        throw $lastException ?? new RuntimeException("FLSS request to {$signedUrl} failed after 3 attempts.");
     }
 
     /**
@@ -106,7 +128,8 @@ class FlssBackendClient
         }
 
         $separator = str_contains($url, '?') ? '&' : '?';
-        return $url . $separator . http_build_query($query, '', '&', PHP_QUERY_RFC3986);
+
+        return $url.$separator.http_build_query($query, '', '&', PHP_QUERY_RFC3986);
     }
 
     private function resolveSslVerificationOption(): bool|string
