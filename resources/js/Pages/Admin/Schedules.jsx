@@ -1,11 +1,13 @@
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import Pagination from '@/Components/Pagination';
-import ScrollToTop from '@/Components/ScrollToTop';
-import Modal from '@/Components/Modal';
-import { Head, router } from '@inertiajs/react';
-import { useState, useEffect, useRef, useCallback } from 'react';
-import axios from 'axios';
-import toast from 'react-hot-toast';
+import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
+import Pagination from "@/Components/Pagination";
+import ScrollToTop from "@/Components/ScrollToTop";
+import Modal from "@/Components/Modal";
+import { Head, router, usePage } from "@inertiajs/react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import axios from "axios";
+import toast from "react-hot-toast";
+import { PERMISSIONS } from "@/Constants/permissions";
+import { hasPermission } from "@/Utils/permissions";
 import {
     DAYS,
     SEMESTERS,
@@ -14,36 +16,36 @@ import {
     SCHEDULE_STATUS_STYLES,
     SCHEDULE_TYPE_STYLES,
     STRINGS,
-} from '@/Constants/admin';
+} from "@/Constants/admin";
 
 const emptyDetail = {
-    day: 'Monday',
-    start_time: '08:00',
-    end_time: '09:00',
-    course_code: '',
-    subject_desc: '',
-    room_code: '',
+    day: "Monday",
+    start_time: "08:00",
+    end_time: "09:00",
+    course_code: "",
+    subject_desc: "",
+    room_code: "",
     hours_required: 1,
 };
 
-const ALLOWED_TIME_MIN = '07:00';
-const ALLOWED_TIME_MAX = '21:00';
+const ALLOWED_TIME_MIN = "07:00";
+const ALLOWED_TIME_MAX = "21:00";
 
 const toMinutes = (timeValue) => {
-    if (!timeValue || !timeValue.includes(':')) {
+    if (!timeValue || !timeValue.includes(":")) {
         return null;
     }
 
-    const [hourPart, minutePart] = timeValue.split(':').map(Number);
+    const [hourPart, minutePart] = timeValue.split(":").map(Number);
     if (Number.isNaN(hourPart) || Number.isNaN(minutePart)) {
         return null;
     }
 
-    return (hourPart * 60) + minutePart;
+    return hourPart * 60 + minutePart;
 };
 
 const formatTimeToAmPm = (timeValue) => {
-    if (!timeValue || typeof timeValue !== 'string') {
+    if (!timeValue || typeof timeValue !== "string") {
         return timeValue;
     }
 
@@ -65,10 +67,10 @@ const formatTimeToAmPm = (timeValue) => {
         return normalized;
     }
 
-    const period = hours24 >= 12 ? 'PM' : 'AM';
+    const period = hours24 >= 12 ? "PM" : "AM";
     const hours12 = hours24 % 12 === 0 ? 12 : hours24 % 12;
 
-    return `${String(hours12).padStart(2, '0')}:${minutes} ${period}`;
+    return `${String(hours12).padStart(2, "0")}:${minutes} ${period}`;
 };
 
 /* ──────────────────────────────────────────────
@@ -76,7 +78,9 @@ const formatTimeToAmPm = (timeValue) => {
    ────────────────────────────────────────────── */
 function StatusBadge({ status }) {
     return (
-        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset capitalize ${SCHEDULE_STATUS_STYLES[status] ?? SCHEDULE_STATUS_STYLES.draft}`}>
+        <span
+            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset capitalize ${SCHEDULE_STATUS_STYLES[status] ?? SCHEDULE_STATUS_STYLES.draft}`}
+        >
             {status}
         </span>
     );
@@ -87,7 +91,9 @@ function StatusBadge({ status }) {
    ────────────────────────────────────────────── */
 function TypeBadge({ type }) {
     return (
-        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset capitalize ${SCHEDULE_TYPE_STYLES[type] ?? SCHEDULE_TYPE_STYLES.flexible}`}>
+        <span
+            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset capitalize ${SCHEDULE_TYPE_STYLES[type] ?? SCHEDULE_TYPE_STYLES.flexible}`}
+        >
             {type}
         </span>
     );
@@ -97,13 +103,34 @@ function TypeBadge({ type }) {
    Semester label helper
    ────────────────────────────────────────────── */
 function semesterLabel(val) {
-    return SEMESTERS.find((s) => s.value === Number(val))?.label ?? `Sem ${val}`;
+    return (
+        SEMESTERS.find((s) => s.value === Number(val))?.label ?? `Sem ${val}`
+    );
 }
 
 /* ──────────────────────────────────────────────
    Main Schedules Management page
    ────────────────────────────────────────────── */
-export default function SchedulesIndex({ schedules, faculties, departments, filters }) {
+export default function SchedulesIndex({
+    schedules,
+    faculties,
+    departments,
+    filters,
+}) {
+    const { auth } = usePage().props;
+    const permissionList = auth?.permissions ?? [];
+    const canCreateSchedule = hasPermission(
+        permissionList,
+        PERMISSIONS.CREATE_SCHEDULES,
+    );
+    const canEditSchedule = hasPermission(
+        permissionList,
+        PERMISSIONS.EDIT_SCHEDULES,
+    );
+    const canDeleteSchedule = hasPermission(
+        permissionList,
+        PERMISSIONS.DELETE_SCHEDULES,
+    );
 
     // ── Pagination & Filters ──
     const [currentPage, setCurrentPage] = useState(schedules.current_page);
@@ -131,15 +158,15 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
 
     // ── Form ──
     const defaultForm = {
-        faculty_id: '',
-        schedule_code: '',
+        faculty_id: "",
+        schedule_code: "",
         academic_year: new Date().getFullYear(),
         semester: 1,
-        effective_from: '',
-        effective_until: '',
-        status: 'draft',
-        schedule_type: 'flexible',
-        notes: '',
+        effective_from: "",
+        effective_until: "",
+        status: "draft",
+        schedule_type: "flexible",
+        notes: "",
         details: [{ ...emptyDetail }],
     };
     const [form, setForm] = useState({ ...defaultForm });
@@ -150,7 +177,7 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
     const fetchSchedules = useCallback(
         (page = 1) => {
             router.get(
-                route('admin.schedules.index'),
+                route("admin.schedules.index"),
                 {
                     page,
                     per_page: perPage,
@@ -165,7 +192,16 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
                 { preserveState: true, preserveScroll: true, replace: true },
             );
         },
-        [perPage, search, statusFilter, typeFilter, semesterFilter, yearFilter, deptFilter, showAll],
+        [
+            perPage,
+            search,
+            statusFilter,
+            typeFilter,
+            semesterFilter,
+            yearFilter,
+            deptFilter,
+            showAll,
+        ],
     );
 
     const handleFilter = () => {
@@ -184,7 +220,7 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
         setCurrentPage(1);
         // Trigger immediately
         router.get(
-            route('admin.schedules.index'),
+            route("admin.schedules.index"),
             {
                 page: 1,
                 per_page: size,
@@ -201,21 +237,26 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
     };
 
     const resetFilters = () => {
-        setSearch('');
-        setStatusFilter('');
-        setTypeFilter('');
-        setSemesterFilter('');
-        setYearFilter('');
-        setDeptFilter('');
+        setSearch("");
+        setStatusFilter("");
+        setTypeFilter("");
+        setSemesterFilter("");
+        setYearFilter("");
+        setDeptFilter("");
         setCurrentPage(1);
         setShowAll(true);
-        router.get(route('admin.schedules.index'), { all: 1 }, { preserveState: true, preserveScroll: true, replace: true });
+        router.get(
+            route("admin.schedules.index"),
+            { all: 1 },
+            { preserveState: true, preserveScroll: true, replace: true },
+        );
     };
 
     // ── Search Suggestions (AJAX) ──
     const handleSearchInput = (val) => {
         setSearch(val);
-        if (suggestionsTimeout.current) clearTimeout(suggestionsTimeout.current);
+        if (suggestionsTimeout.current)
+            clearTimeout(suggestionsTimeout.current);
 
         if (val.length < 2) {
             setSuggestions([]);
@@ -225,7 +266,10 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
 
         suggestionsTimeout.current = setTimeout(async () => {
             try {
-                const res = await axios.get(route('admin.schedules.suggestions'), { params: { q: val } });
+                const res = await axios.get(
+                    route("admin.schedules.suggestions"),
+                    { params: { q: val } },
+                );
                 setSuggestions(res.data);
                 setShowSuggestions(res.data.length > 0);
             } catch {
@@ -240,7 +284,7 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
         setShowSuggestions(false);
         // Trigger filter
         router.get(
-            route('admin.schedules.index'),
+            route("admin.schedules.index"),
             { page: 1, per_page: perPage, search: suggestion.code },
             { preserveState: true, preserveScroll: true, replace: true },
         );
@@ -253,8 +297,8 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
                 setShowSuggestions(false);
             }
         };
-        document.addEventListener('mousedown', handler);
-        return () => document.removeEventListener('mousedown', handler);
+        document.addEventListener("mousedown", handler);
+        return () => document.removeEventListener("mousedown", handler);
     }, []);
 
     // ── CRUD handlers ──
@@ -275,10 +319,11 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
             effective_until: schedule.effective_until,
             status: schedule.status,
             schedule_type: schedule.schedule_type,
-            notes: schedule.notes ?? '',
-            details: schedule.details.length > 0
-                ? schedule.details.map((d) => ({ ...d }))
-                : [{ ...emptyDetail }],
+            notes: schedule.notes ?? "",
+            details:
+                schedule.details.length > 0
+                    ? schedule.details.map((d) => ({ ...d }))
+                    : [{ ...emptyDetail }],
         });
         setErrors({});
         setShowEditModal(true);
@@ -296,23 +341,29 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
 
     const minAllowedMinutes = toMinutes(ALLOWED_TIME_MIN);
     const maxAllowedMinutes = toMinutes(ALLOWED_TIME_MAX);
-    const officialDetails = selectedSchedule?.details ?? selectedSchedule?.schedule_details ?? [];
-    const rawInternalEntries = selectedSchedule?.internal_schedule ?? selectedSchedule?.internal_schedules ?? [];
-    const temporarySubstituteEntries = selectedSchedule?.temporary_substitute_schedule ?? [];
-    const internalEntries = rawInternalEntries.length > 0
-        ? rawInternalEntries
-        : officialDetails.map((detail) => ({
-            id: `official-${detail.id ?? `${detail.day}-${detail.start_time}-${detail.end_time}`}`,
-            day: detail.day,
-            start_time: detail.start_time,
-            end_time: detail.end_time,
-            course_code: detail.course_code,
-            subject_desc: detail.subject_desc,
-            room_code: detail.room_code,
-            required_hours: detail.hours_required,
-            is_operational: true,
-            is_official_fallback: true,
-        }));
+    const officialDetails =
+        selectedSchedule?.details ?? selectedSchedule?.schedule_details ?? [];
+    const rawInternalEntries =
+        selectedSchedule?.internal_schedule ??
+        selectedSchedule?.internal_schedules ??
+        [];
+    const temporarySubstituteEntries =
+        selectedSchedule?.temporary_substitute_schedule ?? [];
+    const internalEntries =
+        rawInternalEntries.length > 0
+            ? rawInternalEntries
+            : officialDetails.map((detail) => ({
+                  id: `official-${detail.id ?? `${detail.day}-${detail.start_time}-${detail.end_time}`}`,
+                  day: detail.day,
+                  start_time: detail.start_time,
+                  end_time: detail.end_time,
+                  course_code: detail.course_code,
+                  subject_desc: detail.subject_desc,
+                  room_code: detail.room_code,
+                  required_hours: detail.hours_required,
+                  is_operational: true,
+                  is_official_fallback: true,
+              }));
     const approvedRequests = selectedSchedule?.approved_change_requests ?? [];
 
     const approvedByDetailId = new Map(
@@ -336,7 +387,12 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
 
         return (
             approvedRequests.find((req) => {
-                if (!req?.requested_day || !req.requested_time_in || !req.requested_time_out) return false;
+                if (
+                    !req?.requested_day ||
+                    !req.requested_time_in ||
+                    !req.requested_time_out
+                )
+                    return false;
                 if (req.requested_day !== entry.day) return false;
                 const reqStart = toMinutes(req.requested_time_in);
                 const reqEnd = toMinutes(req.requested_time_out);
@@ -350,42 +406,55 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
         const localErrors = {};
 
         form.details.forEach((detail, index) => {
-            const subjectCode = (detail.course_code ?? '').trim();
-            const room = (detail.room_code ?? '').trim();
+            const subjectCode = (detail.course_code ?? "").trim();
+            const room = (detail.room_code ?? "").trim();
             const timeInMinutes = toMinutes(detail.start_time);
             const timeOutMinutes = toMinutes(detail.end_time);
 
             if (!subjectCode) {
-                localErrors[`details.${index}.course_code`] = 'Course Code is required.';
+                localErrors[`details.${index}.course_code`] =
+                    "Course Code is required.";
             }
 
             if (!room) {
-                localErrors[`details.${index}.room_code`] = 'Room Code is required.';
+                localErrors[`details.${index}.room_code`] =
+                    "Room Code is required.";
             }
 
             if (timeInMinutes === null || timeOutMinutes === null) {
                 if (timeInMinutes === null) {
-                    localErrors[`details.${index}.start_time`] = 'Start Time is required and must be a valid time.';
+                    localErrors[`details.${index}.start_time`] =
+                        "Start Time is required and must be a valid time.";
                 }
 
                 if (timeOutMinutes === null) {
-                    localErrors[`details.${index}.end_time`] = 'End Time is required and must be a valid time.';
+                    localErrors[`details.${index}.end_time`] =
+                        "End Time is required and must be a valid time.";
                 }
 
                 return;
             }
 
-            if (timeInMinutes < minAllowedMinutes || timeInMinutes > maxAllowedMinutes) {
-                localErrors[`details.${index}.start_time`] = 'Start Time must be between 07:00 AM and 09:00 PM.';
+            if (
+                timeInMinutes < minAllowedMinutes ||
+                timeInMinutes > maxAllowedMinutes
+            ) {
+                localErrors[`details.${index}.start_time`] =
+                    "Start Time must be between 07:00 AM and 09:00 PM.";
             }
 
-            if (timeOutMinutes < minAllowedMinutes || timeOutMinutes > maxAllowedMinutes) {
-                localErrors[`details.${index}.end_time`] = 'End Time must be between 07:00 AM and 09:00 PM.';
+            if (
+                timeOutMinutes < minAllowedMinutes ||
+                timeOutMinutes > maxAllowedMinutes
+            ) {
+                localErrors[`details.${index}.end_time`] =
+                    "End Time must be between 07:00 AM and 09:00 PM.";
                 return;
             }
 
             if (timeOutMinutes <= timeInMinutes) {
-                localErrors[`details.${index}.end_time`] = 'End Time must be later than Start Time.';
+                localErrors[`details.${index}.end_time`] =
+                    "End Time must be later than Start Time.";
             }
         });
 
@@ -395,17 +464,25 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
             for (let j = i + 1; j < count; j++) {
                 if (form.details[i].day !== form.details[j].day) continue;
                 const iStart = toMinutes(form.details[i].start_time);
-                const iEnd   = toMinutes(form.details[i].end_time);
+                const iEnd = toMinutes(form.details[i].end_time);
                 const jStart = toMinutes(form.details[j].start_time);
-                const jEnd   = toMinutes(form.details[j].end_time);
-                if (iStart === null || iEnd === null || jStart === null || jEnd === null) continue;
+                const jEnd = toMinutes(form.details[j].end_time);
+                if (
+                    iStart === null ||
+                    iEnd === null ||
+                    jStart === null ||
+                    jEnd === null
+                )
+                    continue;
                 if (iStart >= iEnd || jStart >= jEnd) continue;
                 if (iStart < jEnd && iEnd > jStart) {
                     if (!localErrors[`details.${i}.start_time`]) {
-                        localErrors[`details.${i}.start_time`] = `Entry #${i + 1} overlaps with entry #${j + 1} on ${form.details[i].day}.`;
+                        localErrors[`details.${i}.start_time`] =
+                            `Entry #${i + 1} overlaps with entry #${j + 1} on ${form.details[i].day}.`;
                     }
                     if (!localErrors[`details.${j}.start_time`]) {
-                        localErrors[`details.${j}.start_time`] = `Entry #${j + 1} overlaps with entry #${i + 1} on ${form.details[j].day}.`;
+                        localErrors[`details.${j}.start_time`] =
+                            `Entry #${j + 1} overlaps with entry #${i + 1} on ${form.details[j].day}.`;
                     }
                 }
             }
@@ -418,16 +495,20 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
         const localErrors = validateDetailTimeRanges();
         if (Object.keys(localErrors).length > 0) {
             setErrors(localErrors);
-            const hasConflict = Object.values(localErrors).some((msg) => msg.includes('overlaps with'));
-            toast.error(hasConflict
-                ? 'Two or more class entries conflict on the same day and time. Please resolve the overlaps.'
-                : 'Please fix invalid time ranges before creating the schedule.');
+            const hasConflict = Object.values(localErrors).some((msg) =>
+                msg.includes("overlaps with"),
+            );
+            toast.error(
+                hasConflict
+                    ? "Two or more class entries conflict on the same day and time. Please resolve the overlaps."
+                    : "Please fix invalid time ranges before creating the schedule.",
+            );
             return;
         }
 
         setProcessing(true);
         setErrors({});
-        router.post(route('admin.schedules.store'), form, {
+        router.post(route("admin.schedules.store"), form, {
             preserveScroll: true,
             onSuccess: () => {
                 setShowCreateModal(false);
@@ -436,7 +517,7 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
             onError: (errs) => {
                 setErrors(errs);
                 setProcessing(false);
-                toast.error('Please fix the errors and try again.');
+                toast.error("Please fix the errors and try again.");
             },
         });
     };
@@ -445,16 +526,20 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
         const localErrors = validateDetailTimeRanges();
         if (Object.keys(localErrors).length > 0) {
             setErrors(localErrors);
-            const hasConflict = Object.values(localErrors).some((msg) => msg.includes('overlaps with'));
-            toast.error(hasConflict
-                ? 'Two or more class entries conflict on the same day and time. Please resolve the overlaps.'
-                : 'Please fix invalid time ranges before saving changes.');
+            const hasConflict = Object.values(localErrors).some((msg) =>
+                msg.includes("overlaps with"),
+            );
+            toast.error(
+                hasConflict
+                    ? "Two or more class entries conflict on the same day and time. Please resolve the overlaps."
+                    : "Please fix invalid time ranges before saving changes.",
+            );
             return;
         }
 
         setProcessing(true);
         setErrors({});
-        router.put(route('admin.schedules.update', selectedSchedule.id), form, {
+        router.put(route("admin.schedules.update", selectedSchedule.id), form, {
             preserveScroll: true,
             onSuccess: () => {
                 setShowEditModal(false);
@@ -463,14 +548,14 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
             onError: (errs) => {
                 setErrors(errs);
                 setProcessing(false);
-                toast.error('Please fix the errors and try again.');
+                toast.error("Please fix the errors and try again.");
             },
         });
     };
 
     const handleDelete = () => {
         setProcessing(true);
-        router.delete(route('admin.schedules.destroy', selectedSchedule.id), {
+        router.delete(route("admin.schedules.destroy", selectedSchedule.id), {
             preserveScroll: true,
             onSuccess: () => {
                 setShowDeleteModal(false);
@@ -478,7 +563,7 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
             },
             onError: () => {
                 setProcessing(false);
-                toast.error('Failed to delete the schedule. Please try again.');
+                toast.error("Failed to delete the schedule. Please try again.");
             },
         });
     };
@@ -505,7 +590,10 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
 
     // ── Generate unique academic years for filter ──
     const currentYear = new Date().getFullYear();
-    const academicYears = Array.from({ length: 6 }, (_, i) => currentYear - 2 + i);
+    const academicYears = Array.from(
+        { length: 6 },
+        (_, i) => currentYear - 2 + i,
+    );
 
     return (
         <AuthenticatedLayout>
@@ -521,35 +609,70 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
                         {STRINGS.schedulesDescription}
                     </p>
                 </div>
-                <button
-                    onClick={openCreate}
-                    className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#7a1315] to-[#cc2127] px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-red-900/20 transition-all duration-300 hover:shadow-xl hover:scale-105 active:scale-95"
-                >
-                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                    </svg>
-                    Add Schedule
-                </button>
+                {canCreateSchedule && (
+                    <button
+                        onClick={openCreate}
+                        className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#7a1315] to-[#cc2127] px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-red-900/20 transition-all duration-300 hover:shadow-xl hover:scale-105 active:scale-95"
+                    >
+                        <svg
+                            className="h-4 w-4"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            strokeWidth={2.5}
+                            stroke="currentColor"
+                        >
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M12 4.5v15m7.5-7.5h-15"
+                            />
+                        </svg>
+                        Add Schedule
+                    </button>
+                )}
             </div>
 
             {/* ── Filters Bar ────────────────────────── */}
             <div className="mt-6 rounded-2xl border border-gray-200/60 dark:border-gray-700/60 bg-white dark:bg-gray-800/80 p-5 shadow-sm">
                 <div className="flex flex-wrap items-end gap-3">
                     {/* Search with suggestions */}
-                    <div className="relative flex-1 min-w-[220px]" ref={searchRef}>
-                        <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Search</label>
+                    <div
+                        className="relative flex-1 min-w-[220px]"
+                        ref={searchRef}
+                    >
+                        <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
+                            Search
+                        </label>
                         <div className="relative">
                             <input
                                 type="text"
                                 value={search}
-                                onChange={(e) => handleSearchInput(e.target.value)}
-                                onFocus={() => search.length >= 2 && suggestions.length > 0 && setShowSuggestions(true)}
-                                onKeyDown={(e) => e.key === 'Enter' && handleFilter()}
+                                onChange={(e) =>
+                                    handleSearchInput(e.target.value)
+                                }
+                                onFocus={() =>
+                                    search.length >= 2 &&
+                                    suggestions.length > 0 &&
+                                    setShowSuggestions(true)
+                                }
+                                onKeyDown={(e) =>
+                                    e.key === "Enter" && handleFilter()
+                                }
                                 placeholder="Search by schedule code, faculty name, subject, room…"
                                 className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 pl-10 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-[#7a1315]/30 focus:border-[#7a1315] outline-none transition-all"
                             />
-                            <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+                            <svg
+                                className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                strokeWidth={2}
+                                stroke="currentColor"
+                            >
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
+                                />
                             </svg>
                         </div>
 
@@ -562,8 +685,12 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
                                         onClick={() => pickSuggestion(s)}
                                         className="block w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/60 transition-colors"
                                     >
-                                        <span className="font-semibold">{s.code}</span>
-                                        <span className="text-gray-400 dark:text-gray-500 ml-2">— {s.label.split('—')[1]?.trim()}</span>
+                                        <span className="font-semibold">
+                                            {s.code}
+                                        </span>
+                                        <span className="text-gray-400 dark:text-gray-500 ml-2">
+                                            — {s.label.split("—")[1]?.trim()}
+                                        </span>
                                     </button>
                                 ))}
                             </div>
@@ -571,14 +698,26 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
                     </div>
 
                     {/* Status filter */}
-                    <FilterSelect label="Status" value={statusFilter} onChange={setStatusFilter} options={SCHEDULE_STATUSES} />
+                    <FilterSelect
+                        label="Status"
+                        value={statusFilter}
+                        onChange={setStatusFilter}
+                        options={SCHEDULE_STATUSES}
+                    />
 
                     {/* Type filter */}
-                    <FilterSelect label="Type" value={typeFilter} onChange={setTypeFilter} options={SCHEDULE_TYPES} />
+                    <FilterSelect
+                        label="Type"
+                        value={typeFilter}
+                        onChange={setTypeFilter}
+                        options={SCHEDULE_TYPES}
+                    />
 
                     {/* Semester filter */}
                     <div className="min-w-[130px]">
-                        <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Semester</label>
+                        <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
+                            Semester
+                        </label>
                         <select
                             value={semesterFilter}
                             onChange={(e) => setSemesterFilter(e.target.value)}
@@ -586,14 +725,18 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
                         >
                             <option value="">All</option>
                             {SEMESTERS.map((s) => (
-                                <option key={s.value} value={s.value}>{s.label}</option>
+                                <option key={s.value} value={s.value}>
+                                    {s.label}
+                                </option>
                             ))}
                         </select>
                     </div>
 
                     {/* Academic Year filter */}
                     <div className="min-w-[130px]">
-                        <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Year</label>
+                        <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
+                            Year
+                        </label>
                         <select
                             value={yearFilter}
                             onChange={(e) => setYearFilter(e.target.value)}
@@ -601,14 +744,18 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
                         >
                             <option value="">All</option>
                             {academicYears.map((y) => (
-                                <option key={y} value={y}>{y}</option>
+                                <option key={y} value={y}>
+                                    {y}
+                                </option>
                             ))}
                         </select>
                     </div>
 
                     {/* Department filter */}
                     <div className="min-w-[160px]">
-                        <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Department</label>
+                        <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
+                            Department
+                        </label>
                         <select
                             value={deptFilter}
                             onChange={(e) => setDeptFilter(e.target.value)}
@@ -616,7 +763,9 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
                         >
                             <option value="">All</option>
                             {departments.map((d) => (
-                                <option key={d.id} value={d.id}>{d.name}</option>
+                                <option key={d.id} value={d.id}>
+                                    {d.name}
+                                </option>
                             ))}
                         </select>
                     </div>
@@ -645,15 +794,33 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
                     <table className="w-full text-sm">
                         <thead>
                             <tr className="border-b border-gray-100 dark:border-gray-700/50 bg-gray-50/80 dark:bg-gray-800/60">
-                                <th className="px-5 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Code</th>
-                                <th className="px-5 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Faculty</th>
-                                <th className="px-5 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Department</th>
-                                <th className="px-5 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Semester</th>
-                                <th className="px-5 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Year</th>
-                                <th className="px-5 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Effective</th>
-                                <th className="px-5 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Status</th>
-                                <th className="px-5 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Type</th>
-                                <th className="px-5 py-3.5 text-center text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Actions</th>
+                                <th className="px-5 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                    Code
+                                </th>
+                                <th className="px-5 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                    Faculty
+                                </th>
+                                <th className="px-5 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                    Department
+                                </th>
+                                <th className="px-5 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                    Semester
+                                </th>
+                                <th className="px-5 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                    Year
+                                </th>
+                                <th className="px-5 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                    Effective
+                                </th>
+                                <th className="px-5 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                    Status
+                                </th>
+                                <th className="px-5 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                    Type
+                                </th>
+                                <th className="px-5 py-3.5 text-center text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                    Actions
+                                </th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100 dark:divide-gray-700/50">
@@ -665,41 +832,101 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
                                     >
                                         <td className="px-5 py-4">
                                             <button
-                                                onClick={() => openView(schedule)}
+                                                onClick={() =>
+                                                    openView(schedule)
+                                                }
                                                 className="font-bold text-gray-900 dark:text-white hover:text-[#7a1315] dark:hover:text-[#cc2127] transition-colors"
                                             >
                                                 {schedule.schedule_code}
                                             </button>
                                         </td>
-                                        <td className="px-5 py-4 text-gray-700 dark:text-gray-300 font-medium">{schedule.faculty_name}</td>
-                                        <td className="px-5 py-4 text-gray-500 dark:text-gray-400">{schedule.department}</td>
-                                        <td className="px-5 py-4 text-gray-700 dark:text-gray-300">{semesterLabel(schedule.semester)}</td>
-                                        <td className="px-5 py-4 text-gray-700 dark:text-gray-300">{schedule.academic_year}</td>
-                                        <td className="px-5 py-4 text-gray-500 dark:text-gray-400 text-xs">
-                                            {schedule.effective_from} — {schedule.effective_until}
+                                        <td className="px-5 py-4 text-gray-700 dark:text-gray-300 font-medium">
+                                            {schedule.faculty_name}
                                         </td>
-                                        <td className="px-5 py-4"><StatusBadge status={schedule.status} /></td>
-                                        <td className="px-5 py-4"><TypeBadge type={schedule.schedule_type} /></td>
+                                        <td className="px-5 py-4 text-gray-500 dark:text-gray-400">
+                                            {schedule.department}
+                                        </td>
+                                        <td className="px-5 py-4 text-gray-700 dark:text-gray-300">
+                                            {semesterLabel(schedule.semester)}
+                                        </td>
+                                        <td className="px-5 py-4 text-gray-700 dark:text-gray-300">
+                                            {schedule.academic_year}
+                                        </td>
+                                        <td className="px-5 py-4 text-gray-500 dark:text-gray-400 text-xs">
+                                            {schedule.effective_from} —{" "}
+                                            {schedule.effective_until}
+                                        </td>
+                                        <td className="px-5 py-4">
+                                            <StatusBadge
+                                                status={schedule.status}
+                                            />
+                                        </td>
+                                        <td className="px-5 py-4">
+                                            <TypeBadge
+                                                type={schedule.schedule_type}
+                                            />
+                                        </td>
                                         <td className="px-5 py-4">
                                             <div className="flex items-center justify-center gap-1">
-                                                <ActionButton icon="eye" label="View" onClick={() => openView(schedule)} />
-                                                <ActionButton icon="edit" label="Edit" onClick={() => openEdit(schedule)} />
-                                                <ActionButton icon="trash" label="Delete" onClick={() => openDelete(schedule)} danger />
+                                                <ActionButton
+                                                    icon="eye"
+                                                    label="View"
+                                                    onClick={() =>
+                                                        openView(schedule)
+                                                    }
+                                                />
+                                                {canEditSchedule && (
+                                                    <ActionButton
+                                                        icon="edit"
+                                                        label="Edit"
+                                                        onClick={() =>
+                                                            openEdit(schedule)
+                                                        }
+                                                    />
+                                                )}
+                                                {canDeleteSchedule && (
+                                                    <ActionButton
+                                                        icon="trash"
+                                                        label="Delete"
+                                                        onClick={() =>
+                                                            openDelete(schedule)
+                                                        }
+                                                        danger
+                                                    />
+                                                )}
                                             </div>
                                         </td>
                                     </tr>
                                 ))
                             ) : (
                                 <tr>
-                                    <td colSpan={9} className="px-5 py-16 text-center">
+                                    <td
+                                        colSpan={9}
+                                        className="px-5 py-16 text-center"
+                                    >
                                         <div className="flex flex-col items-center">
                                             <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 text-gray-400 mb-3">
-                                                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+                                                <svg
+                                                    className="h-6 w-6"
+                                                    fill="none"
+                                                    viewBox="0 0 24 24"
+                                                    strokeWidth={1.5}
+                                                    stroke="currentColor"
+                                                >
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5"
+                                                    />
                                                 </svg>
                                             </div>
-                                            <p className="text-sm font-semibold text-gray-600 dark:text-gray-300">No schedules found</p>
-                                            <p className="mt-1 text-xs text-gray-400">Try adjusting your filters or add a new schedule.</p>
+                                            <p className="text-sm font-semibold text-gray-600 dark:text-gray-300">
+                                                No schedules found
+                                            </p>
+                                            <p className="mt-1 text-xs text-gray-400">
+                                                Try adjusting your filters or
+                                                add a new schedule.
+                                            </p>
                                         </div>
                                     </td>
                                 </tr>
@@ -723,103 +950,137 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
             {/* ══════════════════════════════════════════
                 CREATE MODAL
                ══════════════════════════════════════════ */}
-            <Modal show={showCreateModal} onClose={() => setShowCreateModal(false)} maxWidth="3xl">
-                {/* Sticky header */}
-                <div className="flex-shrink-0 px-6 pt-6 pb-4 border-b border-gray-100 dark:border-gray-700/60">
-                    <h2 className="text-xl font-extrabold text-gray-900 dark:text-white tracking-tight">Add New Schedule</h2>
-                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Fill in the schedule details and add class entries below.</p>
-                </div>
+            {canCreateSchedule && (
+                <Modal
+                    show={showCreateModal}
+                    onClose={() => setShowCreateModal(false)}
+                    maxWidth="3xl"
+                >
+                    {/* Sticky header */}
+                    <div className="flex-shrink-0 px-6 pt-6 pb-4 border-b border-gray-100 dark:border-gray-700/60">
+                        <h2 className="text-xl font-extrabold text-gray-900 dark:text-white tracking-tight">
+                            Add New Schedule
+                        </h2>
+                        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                            Fill in the schedule details and add class entries
+                            below.
+                        </p>
+                    </div>
 
-                {/* Scrollable body */}
-                <div className="flex-1 overflow-y-auto px-6 py-5">
-                    <ScheduleForm
-                        form={form}
-                        setForm={setForm}
-                        errors={errors}
-                        setErrors={setErrors}
-                        faculties={faculties}
-                        addDetailRow={addDetailRow}
-                        removeDetailRow={removeDetailRow}
-                        updateDetail={updateDetail}
-                    />
-                </div>
+                    {/* Scrollable body */}
+                    <div className="flex-1 overflow-y-auto px-6 py-5">
+                        <ScheduleForm
+                            form={form}
+                            setForm={setForm}
+                            errors={errors}
+                            setErrors={setErrors}
+                            faculties={faculties}
+                            addDetailRow={addDetailRow}
+                            removeDetailRow={removeDetailRow}
+                            updateDetail={updateDetail}
+                        />
+                    </div>
 
-                {/* Sticky footer */}
-                <div className="flex-shrink-0 flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 dark:border-gray-700/60">
-                    <button
-                        onClick={() => setShowCreateModal(false)}
-                        className="rounded-xl px-5 py-2.5 text-sm font-bold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        onClick={handleSubmitCreate}
-                        disabled={processing}
-                        className="rounded-xl bg-gradient-to-r from-[#7a1315] to-[#cc2127] px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-red-900/20 transition-all hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        {processing ? 'Creating...' : 'Create Schedule'}
-                    </button>
-                </div>
-            </Modal>
+                    {/* Sticky footer */}
+                    <div className="flex-shrink-0 flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 dark:border-gray-700/60">
+                        <button
+                            onClick={() => setShowCreateModal(false)}
+                            className="rounded-xl px-5 py-2.5 text-sm font-bold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleSubmitCreate}
+                            disabled={processing}
+                            className="rounded-xl bg-gradient-to-r from-[#7a1315] to-[#cc2127] px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-red-900/20 transition-all hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {processing ? "Creating..." : "Create Schedule"}
+                        </button>
+                    </div>
+                </Modal>
+            )}
 
             {/* ══════════════════════════════════════════
                 EDIT MODAL
                ══════════════════════════════════════════ */}
-            <Modal show={showEditModal} onClose={() => setShowEditModal(false)} maxWidth="3xl">
-                {/* Sticky header */}
-                <div className="flex-shrink-0 px-6 pt-6 pb-4 border-b border-gray-100 dark:border-gray-700/60">
-                    <h2 className="text-xl font-extrabold text-gray-900 dark:text-white tracking-tight">Edit Schedule</h2>
-                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Update the schedule information and class entries.</p>
-                </div>
+            {canEditSchedule && (
+                <Modal
+                    show={showEditModal}
+                    onClose={() => setShowEditModal(false)}
+                    maxWidth="3xl"
+                >
+                    {/* Sticky header */}
+                    <div className="flex-shrink-0 px-6 pt-6 pb-4 border-b border-gray-100 dark:border-gray-700/60">
+                        <h2 className="text-xl font-extrabold text-gray-900 dark:text-white tracking-tight">
+                            Edit Schedule
+                        </h2>
+                        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                            Update the schedule information and class entries.
+                        </p>
+                    </div>
 
-                {/* Scrollable body */}
-                <div className="flex-1 overflow-y-auto px-6 py-5">
-                    <ScheduleForm
-                        form={form}
-                        setForm={setForm}
-                        errors={errors}
-                        setErrors={setErrors}
-                        faculties={faculties}
-                        addDetailRow={addDetailRow}
-                        removeDetailRow={removeDetailRow}
-                        updateDetail={updateDetail}
-                    />
-                </div>
+                    {/* Scrollable body */}
+                    <div className="flex-1 overflow-y-auto px-6 py-5">
+                        <ScheduleForm
+                            form={form}
+                            setForm={setForm}
+                            errors={errors}
+                            setErrors={setErrors}
+                            faculties={faculties}
+                            addDetailRow={addDetailRow}
+                            removeDetailRow={removeDetailRow}
+                            updateDetail={updateDetail}
+                        />
+                    </div>
 
-                {/* Sticky footer */}
-                <div className="flex-shrink-0 flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 dark:border-gray-700/60">
-                    <button
-                        onClick={() => setShowEditModal(false)}
-                        className="rounded-xl px-5 py-2.5 text-sm font-bold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        onClick={handleSubmitEdit}
-                        disabled={processing}
-                        className="rounded-xl bg-gradient-to-r from-[#7a1315] to-[#cc2127] px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-red-900/20 transition-all hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        {processing ? 'Saving...' : 'Save Changes'}
-                    </button>
-                </div>
-            </Modal>
+                    {/* Sticky footer */}
+                    <div className="flex-shrink-0 flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 dark:border-gray-700/60">
+                        <button
+                            onClick={() => setShowEditModal(false)}
+                            className="rounded-xl px-5 py-2.5 text-sm font-bold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleSubmitEdit}
+                            disabled={processing}
+                            className="rounded-xl bg-gradient-to-r from-[#7a1315] to-[#cc2127] px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-red-900/20 transition-all hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {processing ? "Saving..." : "Save Changes"}
+                        </button>
+                    </div>
+                </Modal>
+            )}
 
             {/* ══════════════════════════════════════════
                 VIEW MODAL
                ══════════════════════════════════════════ */}
-            <Modal show={showViewModal} onClose={() => setShowViewModal(false)} maxWidth="2xl">
+            <Modal
+                show={showViewModal}
+                onClose={() => setShowViewModal(false)}
+                maxWidth="2xl"
+            >
                 {selectedSchedule && (
                     <>
                         {/* Sticky header */}
                         <div className="flex-shrink-0 px-6 pt-6 pb-4 border-b border-gray-100 dark:border-gray-700/60">
                             <div className="flex items-start justify-between gap-3">
                                 <div>
-                                    <h2 className="text-xl font-extrabold text-gray-900 dark:text-white tracking-tight">{selectedSchedule.schedule_code}</h2>
-                                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{selectedSchedule.faculty_name} — {selectedSchedule.department}</p>
+                                    <h2 className="text-xl font-extrabold text-gray-900 dark:text-white tracking-tight">
+                                        {selectedSchedule.schedule_code}
+                                    </h2>
+                                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                                        {selectedSchedule.faculty_name} —{" "}
+                                        {selectedSchedule.department}
+                                    </p>
                                 </div>
                                 <div className="flex flex-wrap gap-2 flex-shrink-0">
-                                    <StatusBadge status={selectedSchedule.status} />
-                                    <TypeBadge type={selectedSchedule.schedule_type} />
+                                    <StatusBadge
+                                        status={selectedSchedule.status}
+                                    />
+                                    <TypeBadge
+                                        type={selectedSchedule.schedule_type}
+                                    />
                                 </div>
                             </div>
                         </div>
@@ -827,24 +1088,50 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
                         {/* Scrollable body */}
                         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
                             <div className="grid grid-cols-2 gap-4">
-                                <InfoField label="Academic Year" value={selectedSchedule.academic_year} />
-                                <InfoField label="Semester" value={semesterLabel(selectedSchedule.semester)} />
-                                <InfoField label="Effective From" value={selectedSchedule.effective_from} />
-                                <InfoField label="Effective Until" value={selectedSchedule.effective_until} />
-                                <InfoField label="Created By" value={selectedSchedule.created_by} />
-                                <InfoField label="Created At" value={selectedSchedule.created_at} />
+                                <InfoField
+                                    label="Academic Year"
+                                    value={selectedSchedule.academic_year}
+                                />
+                                <InfoField
+                                    label="Semester"
+                                    value={semesterLabel(
+                                        selectedSchedule.semester,
+                                    )}
+                                />
+                                <InfoField
+                                    label="Effective From"
+                                    value={selectedSchedule.effective_from}
+                                />
+                                <InfoField
+                                    label="Effective Until"
+                                    value={selectedSchedule.effective_until}
+                                />
+                                <InfoField
+                                    label="Created By"
+                                    value={selectedSchedule.created_by}
+                                />
+                                <InfoField
+                                    label="Created At"
+                                    value={selectedSchedule.created_at}
+                                />
                             </div>
 
                             {selectedSchedule.notes && (
                                 <div>
-                                    <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Notes</p>
-                                    <p className="text-sm text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-800/60 rounded-xl p-3">{selectedSchedule.notes}</p>
+                                    <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
+                                        Notes
+                                    </p>
+                                    <p className="text-sm text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-800/60 rounded-xl p-3">
+                                        {selectedSchedule.notes}
+                                    </p>
                                 </div>
                             )}
 
                             <div className="space-y-5">
                                 <div>
-                                    <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Official Schedule</p>
+                                    <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
+                                        Official Schedule
+                                    </p>
                                     <div className="space-y-2">
                                         {officialDetails.length > 0 ? (
                                             officialDetails.map((d, i) => (
@@ -856,97 +1143,176 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
                                                     courseCode={d.course_code}
                                                     subjectDesc={d.subject_desc}
                                                     roomCode={d.room_code}
-                                                    badges={detailUsesInternal(d) ? [{
-                                                        label: 'Uses Internal',
-                                                        className: 'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-400',
-                                                    }] : []}
+                                                    badges={
+                                                        detailUsesInternal(d)
+                                                            ? [
+                                                                  {
+                                                                      label: "Uses Internal",
+                                                                      className:
+                                                                          "bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-400",
+                                                                  },
+                                                              ]
+                                                            : []
+                                                    }
                                                 />
                                             ))
                                         ) : (
-                                            <p className="text-sm text-gray-500 dark:text-gray-400">No official schedule entries.</p>
+                                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                                                No official schedule entries.
+                                            </p>
                                         )}
                                     </div>
                                 </div>
 
                                 <div>
-                                    <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Internal Schedule</p>
+                                    <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
+                                        Internal Schedule
+                                    </p>
                                     <div className="space-y-2">
                                         {internalEntries.length > 0 ? (
                                             internalEntries.map((entry, i) => {
-                                                const linked = findInternalLink(entry);
+                                                const linked =
+                                                    findInternalLink(entry);
                                                 return (
                                                     <ViewScheduleEntryRow
                                                         key={entry.id ?? i}
                                                         day={entry.day}
-                                                        startTime={entry.start_time ?? '--:--'}
-                                                        endTime={entry.end_time ?? '--:--'}
-                                                        courseCode={linked?.course_code ?? '—'}
-                                                        subjectDesc={linked?.subject_desc ?? 'No linked official schedule'}
-                                                        roomCode={linked?.requested_room || 'TBA'}
+                                                        startTime={
+                                                            entry.start_time ??
+                                                            "--:--"
+                                                        }
+                                                        endTime={
+                                                            entry.end_time ??
+                                                            "--:--"
+                                                        }
+                                                        courseCode={
+                                                            linked?.course_code ??
+                                                            "—"
+                                                        }
+                                                        subjectDesc={
+                                                            linked?.subject_desc ??
+                                                            "No linked official schedule"
+                                                        }
+                                                        roomCode={
+                                                            linked?.requested_room ||
+                                                            "TBA"
+                                                        }
                                                         tone="internal"
                                                         badges={[
                                                             {
-                                                                label: entry.is_operational ? 'Operational' : 'Non-Operational',
-                                                                className: entry.is_operational
-                                                                    ? 'bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-900/30 dark:text-emerald-400'
-                                                                    : 'bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-900/30 dark:text-red-400',
+                                                                label: entry.is_operational
+                                                                    ? "Operational"
+                                                                    : "Non-Operational",
+                                                                className:
+                                                                    entry.is_operational
+                                                                        ? "bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-900/30 dark:text-emerald-400"
+                                                                        : "bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-900/30 dark:text-red-400",
                                                             },
-                                                            ...(entry.required_hours !== null && entry.required_hours !== undefined
-                                                                ? [{
-                                                                    label: `${Number(entry.required_hours)} hr${Number(entry.required_hours) === 1 ? '' : 's'}`,
-                                                                    className: 'bg-white/80 text-gray-600 ring-gray-300/60 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-600/50',
-                                                                }]
+                                                            ...(entry.required_hours !==
+                                                                null &&
+                                                            entry.required_hours !==
+                                                                undefined
+                                                                ? [
+                                                                      {
+                                                                          label: `${Number(entry.required_hours)} hr${Number(entry.required_hours) === 1 ? "" : "s"}`,
+                                                                          className:
+                                                                              "bg-white/80 text-gray-600 ring-gray-300/60 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-600/50",
+                                                                      },
+                                                                  ]
                                                                 : []),
                                                         ]}
-                                                        meta={linked
-                                                            ? `Original: ${linked.original_day?.substring(0, 3) ?? '—'} ${formatTimeToAmPm(linked.original_start_time ?? '--:--')}–${formatTimeToAmPm(linked.original_end_time ?? '--:--')}`
-                                                            : 'No linked official schedule'}
+                                                        meta={
+                                                            linked
+                                                                ? `Original: ${linked.original_day?.substring(0, 3) ?? "—"} ${formatTimeToAmPm(linked.original_start_time ?? "--:--")}–${formatTimeToAmPm(linked.original_end_time ?? "--:--")}`
+                                                                : "No linked official schedule"
+                                                        }
                                                     />
                                                 );
                                             })
                                         ) : (
-                                            <p className="text-sm text-gray-500 dark:text-gray-400">No internal schedule entries.</p>
+                                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                                                No internal schedule entries.
+                                            </p>
                                         )}
                                     </div>
                                 </div>
 
                                 <div>
-                                    <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Temporary Substitute Schedule</p>
+                                    <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
+                                        Temporary Substitute Schedule
+                                    </p>
                                     <div className="space-y-2">
-                                        {temporarySubstituteEntries.length > 0 ? (
-                                            temporarySubstituteEntries.map((entry, i) => (
-                                                <ViewScheduleEntryRow
-                                                    key={entry.id ?? i}
-                                                    day={entry.day}
-                                                    startTime={entry.start_time ?? '--:--'}
-                                                    endTime={entry.end_time ?? '--:--'}
-                                                    courseCode={entry.course_code}
-                                                    subjectDesc={entry.subject_desc}
-                                                    roomCode={entry.room_code}
-                                                    tone="temporary"
-                                                    badges={[
-                                                        {
-                                                            label: 'Temporary Substitute',
-                                                            className: 'bg-sky-50 text-sky-700 ring-sky-600/20 dark:bg-sky-900/30 dark:text-sky-300',
-                                                        },
-                                                        ...(entry.units !== null && entry.units !== undefined
-                                                            ? [{
-                                                                label: `${Number(entry.units)} unit${Number(entry.units) === 1 ? '' : 's'}`,
-                                                                className: 'bg-white/80 text-gray-600 ring-gray-300/60 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-600/50',
-                                                            }]
-                                                            : []),
-                                                    ]}
-                                                    meta={[
-                                                        entry.program_code,
-                                                        (entry.year_level || entry.section_name)
-                                                            ? [entry.year_level, entry.section_name].filter(Boolean).join('-')
-                                                            : null,
-                                                        entry.synced_at ? `Synced ${entry.synced_at}` : null,
-                                                    ].filter(Boolean).join(' | ')}
-                                                />
-                                            ))
+                                        {temporarySubstituteEntries.length >
+                                        0 ? (
+                                            temporarySubstituteEntries.map(
+                                                (entry, i) => (
+                                                    <ViewScheduleEntryRow
+                                                        key={entry.id ?? i}
+                                                        day={entry.day}
+                                                        startTime={
+                                                            entry.start_time ??
+                                                            "--:--"
+                                                        }
+                                                        endTime={
+                                                            entry.end_time ??
+                                                            "--:--"
+                                                        }
+                                                        courseCode={
+                                                            entry.course_code
+                                                        }
+                                                        subjectDesc={
+                                                            entry.subject_desc
+                                                        }
+                                                        roomCode={
+                                                            entry.room_code
+                                                        }
+                                                        tone="temporary"
+                                                        badges={[
+                                                            {
+                                                                label: "Temporary Substitute",
+                                                                className:
+                                                                    "bg-sky-50 text-sky-700 ring-sky-600/20 dark:bg-sky-900/30 dark:text-sky-300",
+                                                            },
+                                                            ...(entry.units !==
+                                                                null &&
+                                                            entry.units !==
+                                                                undefined
+                                                                ? [
+                                                                      {
+                                                                          label: `${Number(entry.units)} unit${Number(entry.units) === 1 ? "" : "s"}`,
+                                                                          className:
+                                                                              "bg-white/80 text-gray-600 ring-gray-300/60 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-600/50",
+                                                                      },
+                                                                  ]
+                                                                : []),
+                                                        ]}
+                                                        meta={[
+                                                            entry.program_code,
+                                                            entry.year_level ||
+                                                            entry.section_name
+                                                                ? [
+                                                                      entry.year_level,
+                                                                      entry.section_name,
+                                                                  ]
+                                                                      .filter(
+                                                                          Boolean,
+                                                                      )
+                                                                      .join("-")
+                                                                : null,
+                                                            entry.synced_at
+                                                                ? `Synced ${entry.synced_at}`
+                                                                : null,
+                                                        ]
+                                                            .filter(Boolean)
+                                                            .join(" | ")}
+                                                    />
+                                                ),
+                                            )
                                         ) : (
-                                            <p className="text-sm text-gray-500 dark:text-gray-400">No temporary substitute schedule entries.</p>
+                                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                                                No temporary substitute schedule
+                                                entries.
+                                            </p>
                                         )}
                                     </div>
                                 </div>
@@ -969,43 +1335,69 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
             {/* ══════════════════════════════════════════
                 DELETE CONFIRMATION MODAL
                ══════════════════════════════════════════ */}
-            <Modal show={showDeleteModal} onClose={() => setShowDeleteModal(false)} maxWidth="md">
-                <div className="p-6">
-                    <div className="flex items-center gap-3 mb-4">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30">
-                            <svg className="h-5 w-5 text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
-                            </svg>
+            {canDeleteSchedule && (
+                <Modal
+                    show={showDeleteModal}
+                    onClose={() => setShowDeleteModal(false)}
+                    maxWidth="md"
+                >
+                    <div className="p-6">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30">
+                                <svg
+                                    className="h-5 w-5 text-red-600 dark:text-red-400"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    strokeWidth={2}
+                                    stroke="currentColor"
+                                >
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"
+                                    />
+                                </svg>
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-extrabold text-gray-900 dark:text-white">
+                                    Delete Schedule
+                                </h3>
+                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                    This action cannot be undone.
+                                </p>
+                            </div>
                         </div>
-                        <div>
-                            <h3 className="text-lg font-extrabold text-gray-900 dark:text-white">Delete Schedule</h3>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">This action cannot be undone.</p>
+
+                        {selectedSchedule && (
+                            <p className="text-sm text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-800/60 rounded-xl p-3 mb-5">
+                                Are you sure you want to delete{" "}
+                                <strong>
+                                    {selectedSchedule.schedule_code}
+                                </strong>{" "}
+                                assigned to{" "}
+                                <strong>{selectedSchedule.faculty_name}</strong>
+                                ?
+                            </p>
+                        )}
+
+                        <div className="flex items-center justify-end gap-3">
+                            <button
+                                onClick={() => setShowDeleteModal(false)}
+                                className="rounded-xl px-5 py-2.5 text-sm font-bold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleDelete}
+                                disabled={processing}
+                                className="rounded-xl bg-red-600 px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-red-900/20 transition-all hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {processing ? "Deleting..." : "Delete Schedule"}
+                            </button>
                         </div>
                     </div>
-
-                    {selectedSchedule && (
-                        <p className="text-sm text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-800/60 rounded-xl p-3 mb-5">
-                            Are you sure you want to delete <strong>{selectedSchedule.schedule_code}</strong> assigned to <strong>{selectedSchedule.faculty_name}</strong>?
-                        </p>
-                    )}
-
-                    <div className="flex items-center justify-end gap-3">
-                        <button
-                            onClick={() => setShowDeleteModal(false)}
-                            className="rounded-xl px-5 py-2.5 text-sm font-bold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all"
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            onClick={handleDelete}
-                            disabled={processing}
-                            className="rounded-xl bg-red-600 px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-red-900/20 transition-all hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            {processing ? 'Deleting...' : 'Delete Schedule'}
-                        </button>
-                    </div>
-                </div>
-            </Modal>
+                </Modal>
+            )}
 
             <ScrollToTop />
         </AuthenticatedLayout>
@@ -1015,7 +1407,16 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
 /* ──────────────────────────────────────────────
    Schedule Form component (shared between Create/Edit)
    ────────────────────────────────────────────── */
-function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRow, removeDetailRow, updateDetail }) {
+function ScheduleForm({
+    form,
+    setForm,
+    errors,
+    setErrors,
+    faculties,
+    addDetailRow,
+    removeDetailRow,
+    updateDetail,
+}) {
     const minAllowedMinutes = toMinutes(ALLOWED_TIME_MIN);
     const maxAllowedMinutes = toMinutes(ALLOWED_TIME_MAX);
 
@@ -1029,14 +1430,22 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
             for (let j = i + 1; j < count; j++) {
                 if (details[i].day !== details[j].day) continue;
                 const iStart = toMinutes(details[i].start_time);
-                const iEnd   = toMinutes(details[i].end_time);
+                const iEnd = toMinutes(details[i].end_time);
                 const jStart = toMinutes(details[j].start_time);
-                const jEnd   = toMinutes(details[j].end_time);
-                if (iStart === null || iEnd === null || jStart === null || jEnd === null) continue;
+                const jEnd = toMinutes(details[j].end_time);
+                if (
+                    iStart === null ||
+                    iEnd === null ||
+                    jStart === null ||
+                    jEnd === null
+                )
+                    continue;
                 if (iStart >= iEnd || jStart >= jEnd) continue;
                 if (iStart < jEnd && iEnd > jStart) {
-                    conflicts[`details.${i}.start_time`] = `Entry #${i + 1} overlaps with entry #${j + 1} on ${details[i].day}.`;
-                    conflicts[`details.${j}.start_time`] = `Entry #${j + 1} overlaps with entry #${i + 1} on ${details[j].day}.`;
+                    conflicts[`details.${i}.start_time`] =
+                        `Entry #${i + 1} overlaps with entry #${j + 1} on ${details[i].day}.`;
+                    conflicts[`details.${j}.start_time`] =
+                        `Entry #${j + 1} overlaps with entry #${i + 1} on ${details[j].day}.`;
                 }
             }
         }
@@ -1045,7 +1454,9 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
             const next = { ...prev };
             // Clear stale conflict errors (only those previously set by this logic)
             details.forEach((_, i) => {
-                if (next[`details.${i}.start_time`]?.includes('overlaps with')) {
+                if (
+                    next[`details.${i}.start_time`]?.includes("overlaps with")
+                ) {
                     delete next[`details.${i}.start_time`];
                 }
             });
@@ -1065,17 +1476,32 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
             delete nextErrors[timeInErrorKey];
             delete nextErrors[timeOutErrorKey];
 
-            if (timeInMinutes !== null && (timeInMinutes < minAllowedMinutes || timeInMinutes > maxAllowedMinutes)) {
-                nextErrors[timeInErrorKey] = 'Start Time must be between 07:00 AM and 09:00 PM.';
+            if (
+                timeInMinutes !== null &&
+                (timeInMinutes < minAllowedMinutes ||
+                    timeInMinutes > maxAllowedMinutes)
+            ) {
+                nextErrors[timeInErrorKey] =
+                    "Start Time must be between 07:00 AM and 09:00 PM.";
             }
 
-            if (timeOutMinutes !== null && (timeOutMinutes < minAllowedMinutes || timeOutMinutes > maxAllowedMinutes)) {
-                nextErrors[timeOutErrorKey] = 'End Time must be between 07:00 AM and 09:00 PM.';
+            if (
+                timeOutMinutes !== null &&
+                (timeOutMinutes < minAllowedMinutes ||
+                    timeOutMinutes > maxAllowedMinutes)
+            ) {
+                nextErrors[timeOutErrorKey] =
+                    "End Time must be between 07:00 AM and 09:00 PM.";
                 return nextErrors;
             }
 
-            if (timeInMinutes !== null && timeOutMinutes !== null && timeOutMinutes <= timeInMinutes) {
-                nextErrors[timeOutErrorKey] = 'End Time must be later than Start Time.';
+            if (
+                timeInMinutes !== null &&
+                timeOutMinutes !== null &&
+                timeOutMinutes <= timeInMinutes
+            ) {
+                nextErrors[timeOutErrorKey] =
+                    "End Time must be later than Start Time.";
             }
 
             return nextErrors;
@@ -1083,18 +1509,25 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
     };
 
     const toTimeString = (minutesValue) => {
-        const clampedMinutes = Math.min(Math.round(minutesValue), maxAllowedMinutes);
+        const clampedMinutes = Math.min(
+            Math.round(minutesValue),
+            maxAllowedMinutes,
+        );
         const hours = Math.floor(clampedMinutes / 60);
         const minutes = clampedMinutes % 60;
 
-        return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+        return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
     };
 
     const computeHoursFromRange = (timeInValue, timeOutValue) => {
         const timeInMinutes = toMinutes(timeInValue);
         const timeOutMinutes = toMinutes(timeOutValue);
 
-        if (timeInMinutes === null || timeOutMinutes === null || timeOutMinutes <= timeInMinutes) {
+        if (
+            timeInMinutes === null ||
+            timeOutMinutes === null ||
+            timeOutMinutes <= timeInMinutes
+        ) {
             return null;
         }
 
@@ -1116,24 +1549,27 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
         }
 
         const clampedHours = Math.max(1, Math.min(12, normalizedHours));
-        return toTimeString(timeInMinutes + (clampedHours * 60));
+        return toTimeString(timeInMinutes + clampedHours * 60);
     };
 
     const handleTimeOutChange = (index, timeOutValue) => {
-        updateDetail(index, 'end_time', timeOutValue);
+        updateDetail(index, "end_time", timeOutValue);
 
         const currentTimeIn = form.details[index]?.start_time;
-        const computedHours = computeHoursFromRange(currentTimeIn, timeOutValue);
+        const computedHours = computeHoursFromRange(
+            currentTimeIn,
+            timeOutValue,
+        );
 
         applyRowTimeValidation(index, currentTimeIn, timeOutValue);
 
         if (computedHours !== null) {
-            updateDetail(index, 'hours_required', computedHours);
+            updateDetail(index, "hours_required", computedHours);
         }
     };
 
     const handleTimeInChange = (index, timeInValue) => {
-        updateDetail(index, 'start_time', timeInValue);
+        updateDetail(index, "start_time", timeInValue);
 
         const currentTimeOut = form.details[index]?.end_time;
 
@@ -1146,13 +1582,16 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
             ? Math.max(1, Math.min(12, Math.round(parsedHours * 100) / 100))
             : 1;
 
-        updateDetail(index, 'hours_required', clampedHours);
+        updateDetail(index, "hours_required", clampedHours);
 
         const currentTimeIn = form.details[index]?.start_time;
-        const computedTimeOut = computeTimeOutFromHours(currentTimeIn, clampedHours);
+        const computedTimeOut = computeTimeOutFromHours(
+            currentTimeIn,
+            clampedHours,
+        );
 
         if (computedTimeOut !== null) {
-            updateDetail(index, 'end_time', computedTimeOut);
+            updateDetail(index, "end_time", computedTimeOut);
 
             applyRowTimeValidation(index, currentTimeIn, computedTimeOut);
         }
@@ -1162,7 +1601,9 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
         <div className="mt-5 space-y-6">
             {errors.general && (
                 <div className="mb-4 rounded-xl border border-red-200 dark:border-red-800/50 bg-red-50 dark:bg-red-900/20 px-4 py-3">
-                    <p className="text-sm font-semibold text-red-700 dark:text-red-400">{errors.general}</p>
+                    <p className="text-sm font-semibold text-red-700 dark:text-red-400">
+                        {errors.general}
+                    </p>
                 </div>
             )}
 
@@ -1171,12 +1612,19 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
                 <FormField label="Faculty" error={errors.faculty_id}>
                     <select
                         value={form.faculty_id}
-                        onChange={(e) => setForm((f) => ({ ...f, faculty_id: e.target.value }))}
+                        onChange={(e) =>
+                            setForm((f) => ({
+                                ...f,
+                                faculty_id: e.target.value,
+                            }))
+                        }
                         className="form-input"
                     >
                         <option value="">Select faculty...</option>
                         {faculties.map((f) => (
-                            <option key={f.id} value={f.id}>{f.name} ({f.department})</option>
+                            <option key={f.id} value={f.id}>
+                                {f.name} ({f.department})
+                            </option>
                         ))}
                     </select>
                 </FormField>
@@ -1185,7 +1633,12 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
                     <input
                         type="text"
                         value={form.schedule_code}
-                        onChange={(e) => setForm((f) => ({ ...f, schedule_code: e.target.value }))}
+                        onChange={(e) =>
+                            setForm((f) => ({
+                                ...f,
+                                schedule_code: e.target.value,
+                            }))
+                        }
                         placeholder="e.g. SCH-FAC001-2S-2026"
                         className="form-input"
                     />
@@ -1195,7 +1648,12 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
                     <input
                         type="number"
                         value={form.academic_year}
-                        onChange={(e) => setForm((f) => ({ ...f, academic_year: e.target.value }))}
+                        onChange={(e) =>
+                            setForm((f) => ({
+                                ...f,
+                                academic_year: e.target.value,
+                            }))
+                        }
                         min="2020"
                         max="2100"
                         className="form-input"
@@ -1205,11 +1663,18 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
                 <FormField label="Semester" error={errors.semester}>
                     <select
                         value={form.semester}
-                        onChange={(e) => setForm((f) => ({ ...f, semester: Number(e.target.value) }))}
+                        onChange={(e) =>
+                            setForm((f) => ({
+                                ...f,
+                                semester: Number(e.target.value),
+                            }))
+                        }
                         className="form-input"
                     >
                         {SEMESTERS.map((s) => (
-                            <option key={s.value} value={s.value}>{s.label}</option>
+                            <option key={s.value} value={s.value}>
+                                {s.label}
+                            </option>
                         ))}
                     </select>
                 </FormField>
@@ -1218,16 +1683,29 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
                     <input
                         type="date"
                         value={form.effective_from}
-                        onChange={(e) => setForm((f) => ({ ...f, effective_from: e.target.value }))}
+                        onChange={(e) =>
+                            setForm((f) => ({
+                                ...f,
+                                effective_from: e.target.value,
+                            }))
+                        }
                         className="form-input"
                     />
                 </FormField>
 
-                <FormField label="Effective Until" error={errors.effective_until}>
+                <FormField
+                    label="Effective Until"
+                    error={errors.effective_until}
+                >
                     <input
                         type="date"
                         value={form.effective_until}
-                        onChange={(e) => setForm((f) => ({ ...f, effective_until: e.target.value }))}
+                        onChange={(e) =>
+                            setForm((f) => ({
+                                ...f,
+                                effective_until: e.target.value,
+                            }))
+                        }
                         className="form-input"
                     />
                 </FormField>
@@ -1235,11 +1713,15 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
                 <FormField label="Status" error={errors.status}>
                     <select
                         value={form.status}
-                        onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
+                        onChange={(e) =>
+                            setForm((f) => ({ ...f, status: e.target.value }))
+                        }
                         className="form-input"
                     >
                         {SCHEDULE_STATUSES.map((s) => (
-                            <option key={s} value={s} className="capitalize">{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+                            <option key={s} value={s} className="capitalize">
+                                {s.charAt(0).toUpperCase() + s.slice(1)}
+                            </option>
                         ))}
                     </select>
                 </FormField>
@@ -1247,11 +1729,18 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
                 <FormField label="Schedule Type" error={errors.schedule_type}>
                     <select
                         value={form.schedule_type}
-                        onChange={(e) => setForm((f) => ({ ...f, schedule_type: e.target.value }))}
+                        onChange={(e) =>
+                            setForm((f) => ({
+                                ...f,
+                                schedule_type: e.target.value,
+                            }))
+                        }
                         className="form-input"
                     >
                         {SCHEDULE_TYPES.map((t) => (
-                            <option key={t} value={t} className="capitalize">{t.charAt(0).toUpperCase() + t.slice(1)}</option>
+                            <option key={t} value={t} className="capitalize">
+                                {t.charAt(0).toUpperCase() + t.slice(1)}
+                            </option>
                         ))}
                     </select>
                 </FormField>
@@ -1261,7 +1750,9 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
             <FormField label="Notes" error={errors.notes}>
                 <textarea
                     value={form.notes}
-                    onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+                    onChange={(e) =>
+                        setForm((f) => ({ ...f, notes: e.target.value }))
+                    }
                     rows={2}
                     placeholder="Optional notes..."
                     className="form-input resize-none"
@@ -1271,36 +1762,65 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
             {/* Schedule Details */}
             <div>
                 <div className="flex items-center justify-between mb-3">
-                    <p className="text-sm font-bold text-gray-900 dark:text-white">Class Entries</p>
+                    <p className="text-sm font-bold text-gray-900 dark:text-white">
+                        Class Entries
+                    </p>
                     <button
                         type="button"
                         onClick={addDetailRow}
                         className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-bold text-[#7a1315] dark:text-[#cc2127] bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 transition-all"
                     >
-                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                        <svg
+                            className="h-3.5 w-3.5"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            strokeWidth={2.5}
+                            stroke="currentColor"
+                        >
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M12 4.5v15m7.5-7.5h-15"
+                            />
                         </svg>
                         Add Entry
                     </button>
                 </div>
 
                 {errors.details && (
-                    <p className="mb-2 text-xs text-red-600 dark:text-red-400">{errors.details}</p>
+                    <p className="mb-2 text-xs text-red-600 dark:text-red-400">
+                        {errors.details}
+                    </p>
                 )}
 
                 <div className="space-y-3 pr-1">
                     {form.details.map((detail, index) => (
-                        <div key={index} className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/40 p-4">
+                        <div
+                            key={index}
+                            className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/40 p-4"
+                        >
                             <div className="flex items-start justify-between mb-3">
-                                <span className="text-xs font-bold text-gray-400 dark:text-gray-500">Entry #{index + 1}</span>
+                                <span className="text-xs font-bold text-gray-400 dark:text-gray-500">
+                                    Entry #{index + 1}
+                                </span>
                                 {form.details.length > 1 && (
                                     <button
                                         type="button"
                                         onClick={() => removeDetailRow(index)}
                                         className="text-red-400 hover:text-red-600 transition-colors"
                                     >
-                                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                                        <svg
+                                            className="h-4 w-4"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            strokeWidth={2}
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"
+                                            />
                                         </svg>
                                     </button>
                                 )}
@@ -1308,94 +1828,195 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
 
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                                 <div>
-                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">Day</label>
+                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">
+                                        Day
+                                    </label>
                                     <select
                                         value={detail.day}
-                                        onChange={(e) => updateDetail(index, 'day', e.target.value)}
+                                        onChange={(e) =>
+                                            updateDetail(
+                                                index,
+                                                "day",
+                                                e.target.value,
+                                            )
+                                        }
                                         className="form-input-sm"
                                     >
                                         {DAYS.map((d) => (
-                                            <option key={d} value={d}>{d}</option>
+                                            <option key={d} value={d}>
+                                                {d}
+                                            </option>
                                         ))}
                                     </select>
-                                    {errors[`details.${index}.day`] && <p className="text-xs text-red-500 mt-0.5">{errors[`details.${index}.day`]}</p>}
+                                    {errors[`details.${index}.day`] && (
+                                        <p className="text-xs text-red-500 mt-0.5">
+                                            {errors[`details.${index}.day`]}
+                                        </p>
+                                    )}
                                 </div>
 
                                 <div>
-                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">Start Time</label>
+                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">
+                                        Start Time
+                                    </label>
                                     <input
                                         type="time"
                                         value={detail.start_time}
-                                        onChange={(e) => handleTimeInChange(index, e.target.value)}
+                                        onChange={(e) =>
+                                            handleTimeInChange(
+                                                index,
+                                                e.target.value,
+                                            )
+                                        }
                                         min={ALLOWED_TIME_MIN}
                                         max={ALLOWED_TIME_MAX}
                                         className="form-input-sm"
                                     />
-                                    {errors[`details.${index}.start_time`] && <p className="text-xs text-red-500 mt-0.5">{errors[`details.${index}.start_time`]}</p>}
+                                    {errors[`details.${index}.start_time`] && (
+                                        <p className="text-xs text-red-500 mt-0.5">
+                                            {
+                                                errors[
+                                                    `details.${index}.start_time`
+                                                ]
+                                            }
+                                        </p>
+                                    )}
                                 </div>
 
                                 <div>
-                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">End Time</label>
+                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">
+                                        End Time
+                                    </label>
                                     <input
                                         type="time"
                                         value={detail.end_time}
-                                        onChange={(e) => handleTimeOutChange(index, e.target.value)}
+                                        onChange={(e) =>
+                                            handleTimeOutChange(
+                                                index,
+                                                e.target.value,
+                                            )
+                                        }
                                         min={ALLOWED_TIME_MIN}
                                         max={ALLOWED_TIME_MAX}
                                         className="form-input-sm"
                                     />
-                                    {errors[`details.${index}.end_time`] && <p className="text-xs text-red-500 mt-0.5">{errors[`details.${index}.end_time`]}</p>}
+                                    {errors[`details.${index}.end_time`] && (
+                                        <p className="text-xs text-red-500 mt-0.5">
+                                            {
+                                                errors[
+                                                    `details.${index}.end_time`
+                                                ]
+                                            }
+                                        </p>
+                                    )}
                                 </div>
 
                                 <div>
-                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">Hours</label>
+                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">
+                                        Hours
+                                    </label>
                                     <input
                                         type="number"
                                         value={detail.hours_required}
-                                        onChange={(e) => handleHoursChange(index, e.target.value)}
+                                        onChange={(e) =>
+                                            handleHoursChange(
+                                                index,
+                                                e.target.value,
+                                            )
+                                        }
                                         min="1"
                                         max="12"
                                         step="0.5"
                                         className="form-input-sm"
                                     />
-                                    {errors[`details.${index}.hours_required`] && <p className="text-xs text-red-500 mt-0.5">{errors[`details.${index}.hours_required`]}</p>}
+                                    {errors[
+                                        `details.${index}.hours_required`
+                                    ] && (
+                                        <p className="text-xs text-red-500 mt-0.5">
+                                            {
+                                                errors[
+                                                    `details.${index}.hours_required`
+                                                ]
+                                            }
+                                        </p>
+                                    )}
                                 </div>
 
                                 <div>
-                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">Course Code *</label>
+                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">
+                                        Course Code *
+                                    </label>
                                     <input
                                         type="text"
                                         value={detail.course_code}
-                                        onChange={(e) => updateDetail(index, 'course_code', e.target.value)}
+                                        onChange={(e) =>
+                                            updateDetail(
+                                                index,
+                                                "course_code",
+                                                e.target.value,
+                                            )
+                                        }
                                         placeholder="CS101"
                                         required
                                         className="form-input-sm"
                                     />
-                                    {errors[`details.${index}.course_code`] && <p className="text-xs text-red-500 mt-0.5">{errors[`details.${index}.course_code`]}</p>}
+                                    {errors[`details.${index}.course_code`] && (
+                                        <p className="text-xs text-red-500 mt-0.5">
+                                            {
+                                                errors[
+                                                    `details.${index}.course_code`
+                                                ]
+                                            }
+                                        </p>
+                                    )}
                                 </div>
 
                                 <div className="sm:col-span-2">
-                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">Description</label>
+                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">
+                                        Description
+                                    </label>
                                     <input
                                         type="text"
                                         value={detail.subject_desc}
-                                        onChange={(e) => updateDetail(index, 'subject_desc', e.target.value)}
+                                        onChange={(e) =>
+                                            updateDetail(
+                                                index,
+                                                "subject_desc",
+                                                e.target.value,
+                                            )
+                                        }
                                         placeholder="Introduction to Computer Science"
                                         className="form-input-sm"
                                     />
                                 </div>
 
                                 <div>
-                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">Room Code *</label>
+                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">
+                                        Room Code *
+                                    </label>
                                     <input
                                         type="text"
                                         value={detail.room_code}
-                                        onChange={(e) => updateDetail(index, 'room_code', e.target.value)}
+                                        onChange={(e) =>
+                                            updateDetail(
+                                                index,
+                                                "room_code",
+                                                e.target.value,
+                                            )
+                                        }
                                         placeholder="R201"
                                         required
                                         className="form-input-sm"
                                     />
-                                    {errors[`details.${index}.room_code`] && <p className="text-xs text-red-500 mt-0.5">{errors[`details.${index}.room_code`]}</p>}
+                                    {errors[`details.${index}.room_code`] && (
+                                        <p className="text-xs text-red-500 mt-0.5">
+                                            {
+                                                errors[
+                                                    `details.${index}.room_code`
+                                                ]
+                                            }
+                                        </p>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -1412,9 +2033,15 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
 function FormField({ label, error, children }) {
     return (
         <div>
-            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">{label}</label>
+            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
+                {label}
+            </label>
             {children}
-            {error && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{error}</p>}
+            {error && (
+                <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                    {error}
+                </p>
+            )}
         </div>
     );
 }
@@ -1425,8 +2052,12 @@ function FormField({ label, error, children }) {
 function InfoField({ label, value }) {
     return (
         <div>
-            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">{label}</p>
-            <p className="mt-0.5 text-sm font-medium text-gray-900 dark:text-white">{value ?? '—'}</p>
+            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">
+                {label}
+            </p>
+            <p className="mt-0.5 text-sm font-medium text-gray-900 dark:text-white">
+                {value ?? "—"}
+            </p>
         </div>
     );
 }
@@ -1440,31 +2071,33 @@ function ViewScheduleEntryRow({
     roomCode,
     badges = [],
     meta = null,
-    tone = 'official',
+    tone = "official",
 }) {
-    const toneClasses = tone === 'internal'
-        ? 'border border-amber-100/70 dark:border-amber-800/40 bg-amber-50/40 dark:bg-amber-900/10'
-        : tone === 'temporary'
-            ? 'border border-sky-100/70 dark:border-sky-800/40 bg-sky-50/40 dark:bg-sky-900/10'
-            : 'border border-gray-100 dark:border-gray-700/50 bg-gray-50/50 dark:bg-gray-800/40';
+    const toneClasses =
+        tone === "internal"
+            ? "border border-amber-100/70 dark:border-amber-800/40 bg-amber-50/40 dark:bg-amber-900/10"
+            : tone === "temporary"
+              ? "border border-sky-100/70 dark:border-sky-800/40 bg-sky-50/40 dark:bg-sky-900/10"
+              : "border border-gray-100 dark:border-gray-700/50 bg-gray-50/50 dark:bg-gray-800/40";
 
     return (
         <div className={`rounded-xl px-4 py-3 ${toneClasses}`}>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                 <span className="font-bold text-sm text-gray-900 dark:text-white min-w-[80px]">
-                    {day?.substring(0, 3) ?? '—'}
+                    {day?.substring(0, 3) ?? "—"}
                 </span>
                 <span className="text-sm text-gray-700 dark:text-gray-300">
-                    {formatTimeToAmPm(startTime ?? '--:--')} – {formatTimeToAmPm(endTime ?? '--:--')}
+                    {formatTimeToAmPm(startTime ?? "--:--")} –{" "}
+                    {formatTimeToAmPm(endTime ?? "--:--")}
                 </span>
                 <span className="text-sm font-semibold text-gray-900 dark:text-white">
-                    {courseCode || '—'}
+                    {courseCode || "—"}
                 </span>
                 <span className="text-sm text-gray-500 dark:text-gray-400 flex-1 truncate">
-                    {subjectDesc || '—'}
+                    {subjectDesc || "—"}
                 </span>
                 <span className="text-xs text-gray-400 dark:text-gray-500">
-                    {roomCode || 'TBA'}
+                    {roomCode || "TBA"}
                 </span>
                 {badges.map((badge, index) => (
                     <span
@@ -1490,7 +2123,9 @@ function ViewScheduleEntryRow({
 function FilterSelect({ label, value, onChange, options }) {
     return (
         <div className="min-w-[120px]">
-            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">{label}</label>
+            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
+                {label}
+            </label>
             <select
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
@@ -1498,7 +2133,9 @@ function FilterSelect({ label, value, onChange, options }) {
             >
                 <option value="">All</option>
                 {options.map((o) => (
-                    <option key={o} value={o} className="capitalize">{o.charAt(0).toUpperCase() + o.slice(1)}</option>
+                    <option key={o} value={o} className="capitalize">
+                        {o.charAt(0).toUpperCase() + o.slice(1)}
+                    </option>
                 ))}
             </select>
         </div>
@@ -1511,19 +2148,53 @@ function FilterSelect({ label, value, onChange, options }) {
 function ActionButton({ icon, label, onClick, danger = false }) {
     const iconSvg = {
         eye: (
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+            <svg
+                className="h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={1.5}
+                stroke="currentColor"
+            >
+                <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z"
+                />
+                <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
+                />
             </svg>
         ),
         edit: (
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+            <svg
+                className="h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={1.5}
+                stroke="currentColor"
+            >
+                <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10"
+                />
             </svg>
         ),
         trash: (
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+            <svg
+                className="h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={1.5}
+                stroke="currentColor"
+            >
+                <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"
+                />
             </svg>
         ),
     };
@@ -1534,8 +2205,8 @@ function ActionButton({ icon, label, onClick, danger = false }) {
             title={label}
             className={`rounded-lg p-2 transition-all duration-200 ${
                 danger
-                    ? 'text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 dark:hover:text-red-400'
-                    : 'text-gray-400 hover:text-gray-900 hover:bg-gray-100 dark:hover:bg-gray-700 dark:hover:text-white'
+                    ? "text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 dark:hover:text-red-400"
+                    : "text-gray-400 hover:text-gray-900 hover:bg-gray-100 dark:hover:bg-gray-700 dark:hover:text-white"
             }`}
         >
             {iconSvg[icon]}
