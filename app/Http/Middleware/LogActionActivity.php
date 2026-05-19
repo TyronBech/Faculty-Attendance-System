@@ -4,7 +4,9 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response;
+use Throwable;
 
 class LogActionActivity
 {
@@ -71,7 +73,27 @@ class LogActionActivity
 
     public function handle(Request $request, Closure $next): Response
     {
-        $response = $next($request);
+        $this->debug('entering', $request);
+
+        try {
+            $response = $next($request);
+        } catch (Throwable $exception) {
+            $this->debug('exception', $request, [
+                'exception' => $exception::class,
+                'message' => $exception->getMessage(),
+            ]);
+
+            throw $exception;
+        }
+
+        $this->debug('after next', $request, [
+            'response_class' => $response::class,
+            'status' => $response->getStatusCode(),
+            'content_type' => $response->headers->get('Content-Type'),
+            'x_inertia' => $response->headers->get('X-Inertia'),
+            'x_inertia_location' => $response->headers->get('X-Inertia-Location'),
+            'vary' => $response->headers->get('Vary'),
+        ]);
 
         if (! in_array($request->method(), self::MUTATING_METHODS, true)) {
             return $response;
@@ -108,6 +130,26 @@ class LogActionActivity
             ->log($description);
 
         return $response;
+    }
+
+    /**
+     * @param  array<string, mixed>  $context
+     */
+    private function debug(string $event, Request $request, array $context = []): void
+    {
+        if (! config('app.debug') && ! filter_var(env('INERTIA_DEBUG'), FILTER_VALIDATE_BOOLEAN)) {
+            return;
+        }
+
+        Log::info('[Action activity debug] '.$event, [
+            'method' => $request->method(),
+            'path' => $request->path(),
+            'route' => $request->route()?->getName(),
+            'request_x_inertia' => $request->header('X-Inertia'),
+            'request_x_inertia_version' => $request->header('X-Inertia-Version'),
+            'request_x_requested_with' => $request->header('X-Requested-With'),
+            'request_accept' => $request->header('Accept'),
+        ] + $context);
     }
 
     private function buildDescription(mixed $actor, string $actionLabel): string

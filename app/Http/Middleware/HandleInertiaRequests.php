@@ -3,11 +3,15 @@
 namespace App\Http\Middleware;
 
 use App\Models\User;
+use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Inertia\Middleware;
 use Spatie\Permission\Models\Permission;
+use Symfony\Component\HttpFoundation\Response;
+use Throwable;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -17,6 +21,33 @@ class HandleInertiaRequests extends Middleware
      * @var string
      */
     protected $rootView = 'app';
+
+    public function handle(Request $request, Closure $next): Response
+    {
+        $this->debug('entering', $request);
+
+        try {
+            $response = parent::handle($request, $next);
+        } catch (Throwable $exception) {
+            $this->debug('exception', $request, [
+                'exception' => $exception::class,
+                'message' => $exception->getMessage(),
+            ]);
+
+            throw $exception;
+        }
+
+        $this->debug('leaving', $request, [
+            'response_class' => $response::class,
+            'status' => $response->getStatusCode(),
+            'content_type' => $response->headers->get('Content-Type'),
+            'x_inertia' => $response->headers->get('X-Inertia'),
+            'x_inertia_location' => $response->headers->get('X-Inertia-Location'),
+            'vary' => $response->headers->get('Vary'),
+        ]);
+
+        return $response;
+    }
 
     /**
      * Determine the current asset version.
@@ -33,6 +64,8 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
+        $this->debug('share starting', $request);
+
         // Resolve the authenticated user from either the admin or web guard (if any)
         $guard = null;
         $authenticatedUser = null;
@@ -69,7 +102,7 @@ class HandleInertiaRequests extends Middleware
             ?? $user?->faculty?->full_name
             ?? $user?->username;
 
-        return [
+        $shared = [
             ...parent::share($request),
             'auth' => [
                 'user' => $user,
@@ -88,5 +121,33 @@ class HandleInertiaRequests extends Middleware
             ],
             'csrf_token' => csrf_token(),
         ];
+
+        $this->debug('share completed', $request, [
+            'guard' => $guard,
+            'user_id' => $user?->id,
+            'permissions_count' => count($permissions),
+        ]);
+
+        return $shared;
+    }
+
+    /**
+     * @param  array<string, mixed>  $context
+     */
+    private function debug(string $event, Request $request, array $context = []): void
+    {
+        if (! config('app.debug') && ! filter_var(env('INERTIA_DEBUG'), FILTER_VALIDATE_BOOLEAN)) {
+            return;
+        }
+
+        Log::info('[Inertia debug] '.$event, [
+            'method' => $request->method(),
+            'path' => $request->path(),
+            'route' => $request->route()?->getName(),
+            'request_x_inertia' => $request->header('X-Inertia'),
+            'request_x_inertia_version' => $request->header('X-Inertia-Version'),
+            'request_x_requested_with' => $request->header('X-Requested-With'),
+            'request_accept' => $request->header('Accept'),
+        ] + $context);
     }
 }
