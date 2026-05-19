@@ -8,7 +8,6 @@ use App\Models\Room;
 use App\Models\Schedule;
 use App\Models\ScheduleDetail;
 use App\Models\User;
-use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -92,8 +91,8 @@ class FlssApiSyncService
     /**
      * Verify FLSS API is reachable by performing lightweight requests.
      *
-     * Tries each endpoint with a strict timeout (5 s). If any endpoint
-     * throws a ConnectionException, we consider the API down.
+     * Retries each endpoint up to 3 times with a 1-second delay to handle
+     * transient SSL resets (cURL error 35) that the external API exhibits.
      */
     public function isApiReachable(): bool
     {
@@ -103,21 +102,30 @@ class FlssApiSyncService
         ];
 
         foreach ($endpoints as $name => $callable) {
-            try {
-                /** @var Response $response */
-                $response = $callable();
+            $isReachable = false;
 
-                if (! $response->successful()) {
-                    Log::warning("[FlssApiSync] Health check failed for {$name}: HTTP {$response->status()}");
+            for ($attempt = 1; $attempt <= 3; $attempt++) {
+                try {
+                    /** @var Response $response */
+                    $response = $callable();
 
-                    return false;
+                    if ($response->successful()) {
+                        $isReachable = true;
+                        break;
+                    }
+
+                    Log::warning("[FlssApiSync] Health check for {$name}: HTTP {$response->status()} (attempt {$attempt}/3)");
+                } catch (\Throwable $e) {
+                    Log::warning("[FlssApiSync] Health check for {$name} failed (attempt {$attempt}/3): {$e->getMessage()}");
                 }
-            } catch (ConnectionException $e) {
-                Log::warning("[FlssApiSync] Cannot reach {$name} endpoint: {$e->getMessage()}");
 
-                return false;
-            } catch (RuntimeException $e) {
-                Log::warning("[FlssApiSync] Config error for {$name}: {$e->getMessage()}");
+                if ($attempt < 3) {
+                    sleep(1);
+                }
+            }
+
+            if (! $isReachable) {
+                Log::error("[FlssApiSync] Endpoint {$name} unreachable after 3 attempts.");
 
                 return false;
             }
@@ -132,36 +140,52 @@ class FlssApiSyncService
      * The FLSS API returns a top-level `status` field that indicates
      * whether the schedule data has been officially published for the
      * semester. We must only sync published data.
+     *
+     * Retries up to 3 times to handle transient connection failures.
      */
     public function isScheduleDataPublished(): bool
     {
-        try {
-            $response = $this->client->getFacultySchedules(['per_page' => 1]);
+        for ($attempt = 1; $attempt <= 3; $attempt++) {
+            try {
+                $response = $this->client->getFacultySchedules(['per_page' => 1]);
 
-            if (! $response->successful()) {
-                return false;
+                if (! $response->successful()) {
+                    Log::warning("[FlssApiSync] Publish status check: HTTP {$response->status()} (attempt {$attempt}/3)");
+
+                    if ($attempt < 3) {
+                        sleep(1);
+                    }
+
+                    continue;
+                }
+
+                $payload = $response->json();
+
+                if (! is_array($payload)) {
+                    return false;
+                }
+
+                $status = strtolower(trim((string) ($payload['status'] ?? '')));
+
+                if ($status !== 'published') {
+                    Log::warning("[FlssApiSync] Schedule data status is \"{$status}\" — expected \"published\".");
+
+                    return false;
+                }
+
+                return true;
+            } catch (\Throwable $e) {
+                Log::warning("[FlssApiSync] Publish status check failed (attempt {$attempt}/3): ".$e->getMessage());
+
+                if ($attempt < 3) {
+                    sleep(1);
+                }
             }
-
-            $payload = $response->json();
-
-            if (! is_array($payload)) {
-                return false;
-            }
-
-            $status = strtolower(trim((string) ($payload['status'] ?? '')));
-
-            if ($status !== 'published') {
-                Log::warning("[FlssApiSync] Schedule data status is \"{$status}\" — expected \"published\".");
-
-                return false;
-            }
-
-            return true;
-        } catch (\Throwable $e) {
-            Log::warning('[FlssApiSync] Could not verify schedule publish status: '.$e->getMessage());
-
-            return false;
         }
+
+        Log::error('[FlssApiSync] Could not verify schedule publish status after 3 attempts.');
+
+        return false;
     }
 
     /* ------------------------------------------------------------------ */
@@ -173,7 +197,7 @@ class FlssApiSyncService
      */
     private function fetchRooms(): array
     {
-        $response = $this->client->getRooms(['per_page' => 500]);
+        $response = $this->client->getRooms(['per_page' => 50]);
 
         return $this->parseResponse($response, 'rooms', 'rooms');
     }
@@ -183,7 +207,7 @@ class FlssApiSyncService
      */
     private function fetchFacultySchedules(): array
     {
-        $response = $this->client->getFacultySchedules(['per_page' => 500]);
+        $response = $this->client->getFacultySchedules(['per_page' => 50]);
 
         return $this->parseResponse($response, 'parttime_faculty_schedules', 'faculty schedules');
     }
@@ -194,7 +218,7 @@ class FlssApiSyncService
     private function fetchTemporarySchedules(): array
     {
         try {
-            $response = $this->client->getTemporaryFacultySchedules(['per_page' => 500]);
+            $response = $this->client->getTemporaryFacultySchedules(['per_page' => 50]);
 
             return $this->parseResponse($response, 'temporary_faculty_schedules', 'temporary schedules');
         } catch (\Throwable $e) {
@@ -426,7 +450,7 @@ class FlssApiSyncService
 
         // Use the existing sync service for proper persistence
         try {
-            $tempSummary = $this->temporarySyncService->syncFromApi(['per_page' => 500]);
+            $tempSummary = $this->temporarySyncService->syncFromApi(['per_page' => 50]);
             $this->summary['temporary_synced'] = $tempSummary['processed'];
         } catch (\Throwable $e) {
             Log::warning('[FlssApiSync] Temporary schedule sync failed (non-fatal): '.$e->getMessage());
