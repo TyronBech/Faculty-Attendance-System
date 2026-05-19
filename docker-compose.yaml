@@ -33,7 +33,7 @@ services:
       context: .
       dockerfile: Dockerfile.nginx
     restart: unless-stopped
-    expose:
+    ports:
       - "8089:80"
     volumes:
       - laravel_storage:/var/www/html/storage:ro
