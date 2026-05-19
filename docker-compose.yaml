@@ -45,7 +45,7 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
-    command: php artisan queue:work redis --sleep=3 --tries=3 --timeout=90
+    command: php artisan queue:work database --sleep=3 --tries=3 --timeout=90
     environment:
       APP_ENV: ${APP_ENV}
       APP_KEY: ${APP_KEY}
