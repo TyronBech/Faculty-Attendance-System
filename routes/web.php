@@ -7,6 +7,17 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
+Route::get('/debug-headers', function (\Illuminate\Http\Request $request) {
+    return response()->json([
+        'x_inertia' => $request->header('X-Inertia'),
+        'server_x_inertia' => $_SERVER['HTTP_X_INERTIA'] ?? null,
+        'x_requested_with' => $request->header('X-Requested-With'),
+        'server_x_requested_with' => $_SERVER['HTTP_X_REQUESTED_WITH'] ?? null,
+        'accept' => $request->header('Accept'),
+        'server_accept' => $_SERVER['HTTP_ACCEPT'] ?? null,
+    ]);
+});
+
 Route::get('/', function () {
     // Redirect already-authenticated users to their dashboard
     if (Auth::guard('admin')->check()) {
