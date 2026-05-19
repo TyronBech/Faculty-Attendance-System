@@ -388,7 +388,7 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
                                 <option value="">— Choose a schedule —</option>
                                 {scheduleDetails.map((d) => (
                                     <option key={d.id} value={d.id}>
-                                        [{d.schedule_code}] {d.day_of_week} · {formatTime12(d.time_in)}–{formatTime12(d.time_out)} · {d.subject_code} - {d.subject_desc} · {[d.program_code, (d.year_level || d.section_name) ? [d.year_level, d.section_name].filter(Boolean).join('-') : null].filter(Boolean).join(' ')} ({d.room}) {d.is_changed ? ' (Internal)' : ''}
+                                        [{d.schedule_code}] {d.day_of_week} · {formatTime12(d.time_in)}–{formatTime12(d.time_out)} · {d.subject_code} - {d.subject_desc} · {[d.program_code, (d.year_level || d.section_name) ? [d.year_level, d.section_name].filter(Boolean).join('-') : null].filter(Boolean).join(' ')} ({d.room}) {d.is_temporary ? ' (Temporary Substitute)' : d.is_changed ? ' (Internal)' : ''}
                                     </option>
                                 ))}
                             </select>
@@ -399,7 +399,7 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
                         {selectedDetail && (
                             <div className="rounded-xl bg-gray-50 dark:bg-gray-700/30 p-4 border border-gray-100 dark:border-gray-700/50">
                                 <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
-                                    {selectedDetail.is_changed ? 'Current Operational Schedule' : 'Official Schedule'}
+                                    {selectedDetail.is_temporary ? 'Temporary Substitute Schedule' : selectedDetail.is_changed ? 'Current Operational Schedule' : 'Official Schedule'}
                                 </p>
                                 <div className="grid grid-cols-2 gap-2 text-sm text-gray-700 dark:text-gray-300">
                                     <p><span className="font-semibold">Day:</span> {selectedDetail.day_of_week}</p>

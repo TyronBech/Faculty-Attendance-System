@@ -243,7 +243,7 @@ const ScheduleSlot = ({ item, title, variant, isActive, onClick, referenceDay = 
 
             {showTemporaryBadge && (
                 <span className={`mt-3 inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.2em] ${TEMPORARY_BADGE_STYLES.card}`}>
-                    Temporary
+                    Temporary Substitute
                 </span>
             )}
 
@@ -661,7 +661,7 @@ export default function Schedule({ weeklySchedule, internalSchedule, facultyName
                                 </span>
                                 {selectedScheduleIsTemporary && (
                                     <span className={`rounded-lg px-2 py-1 text-[10px] font-black uppercase tracking-widest ring-1 ring-inset ${TEMPORARY_BADGE_STYLES.modal}`}>
-                                        Temporary
+                                        Temporary Substitute
                                     </span>
                                 )}
                                 {selectedSchedule.isChanged && (
@@ -738,7 +738,7 @@ export default function Schedule({ weeklySchedule, internalSchedule, facultyName
                                                 <div className="flex items-start justify-between">
                                                     <span className="text-xs font-bold text-gray-500 dark:text-gray-400">Schedule Status</span>
                                                     <span className="text-xs font-black uppercase tracking-wider text-amber-600 dark:text-amber-400">
-                                                        Temporary schedule in effect
+                                                        Temporary substitute schedule in effect
                                                     </span>
                                                 </div>
                                             )}

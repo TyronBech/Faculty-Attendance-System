@@ -14,20 +14,21 @@ class AdminDtrExportPageController extends Controller
     public function index()
     {
         $activeFaculty = Faculty::getActiveFacultyList();
-        $temporaryFacultyIds = Schema::hasTable('temporary_faculty_schedules')
-            ? TemporaryFacultySchedule::query()
-                ->whereNotNull('faculty_id')
-                ->distinct()
-                ->pluck('faculty_id')
-                ->map(fn ($id): int => (int) $id)
-                ->all()
-            : [];
+        $substituteFacultyIds = Faculty::query()
+            ->where('is_active', true)
+            ->where(function ($query): void {
+                $query->whereRaw('LOWER(employment_type) = ?', ['substitute'])
+                    ->orWhereRaw('LOWER(faculty_type) = ?', ['substitute']);
+            })
+            ->pluck('id')
+            ->map(fn ($id): int => (int) $id)
+            ->all();
         $now = Carbon::now();
 
         return Inertia::render('Admin/DtrExport', [
             'facultyOptions' => collect($activeFaculty)
                 ->map(fn (array $faculty): array => $faculty + [
-                    'has_temporary_substitution' => in_array((int) $faculty['id'], $temporaryFacultyIds, true),
+                    'has_temporary_substitution' => in_array((int) $faculty['id'], $substituteFacultyIds, true),
                 ])
                 ->values()
                 ->all(),

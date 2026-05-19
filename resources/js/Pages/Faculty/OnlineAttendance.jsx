@@ -148,6 +148,12 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
     const handleCreate = (e) => {
         if (e) e.preventDefault();
 
+        if (!createForm.data.schedule_detail_id) {
+            createForm.setError('schedule_detail_id', 'Please select an official class, temporary substitute, or internal duty.');
+            toast.error('Please select a schedule before submitting.');
+            return;
+        }
+
         // If duplicate detected and not yet confirmed via modal
         if (attendanceCheck.checked && (attendanceCheck.hasAttendance || attendanceCheck.hasPendingRequest) && !showDuplicateModal) {
             setShowDuplicateModal(true);
@@ -415,19 +421,19 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
 
                     {/* Body */}
                     <div className="px-6 py-5 space-y-5 max-h-[60dvh] overflow-y-auto">
-                        {/* Schedule selector (optional) */}
+                        {/* Schedule selector */}
                         <div>
-                            <InputLabel value="Official Class or Internal Duty (Optional)" htmlFor="schedule_detail_id" />
+                            <InputLabel value="Official Class, Temporary Substitute, or Internal Duty *" htmlFor="schedule_detail_id" />
                             <select
                                 id="schedule_detail_id"
                                 value={createForm.data.schedule_detail_id}
                                 onChange={(e) => { createForm.setData('schedule_detail_id', e.target.value); createForm.clearErrors('schedule_detail_id'); }}
                                 className="mt-1 block w-full rounded-xl border-gray-300 shadow-sm focus:border-[#7a1315] focus:ring-[#7a1315] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 text-sm"
                             >
-                                <option value="">— No specific schedule —</option>
+                                <option value="" disabled>— Select a schedule —</option>
                                 {scheduleDetails.map((d) => (
                                     <option key={d.composite_id} value={d.composite_id}>
-                                         [{d.schedule_code}] {d.day_of_week} · {formatTime12(d.time_in)}–{formatTime12(d.time_out)} · {d.subject_code} {d.subject_desc ? `- ${d.subject_desc}` : ''} · {[d.program_code, (d.year_level || d.section_name) ? [d.year_level, d.section_name].filter(Boolean).join('-') : null].filter(Boolean).join(' ')} ({d.room}) {d.is_changed ? ' (Internal)' : ''}
+                                         [{d.schedule_code}] {d.day_of_week} · {formatTime12(d.time_in)}–{formatTime12(d.time_out)} · {d.subject_code} {d.subject_desc ? `- ${d.subject_desc}` : ''} · {[d.program_code, (d.year_level || d.section_name) ? [d.year_level, d.section_name].filter(Boolean).join('-') : null].filter(Boolean).join(' ')} ({d.room}) {d.is_temporary ? ' (Temporary Substitute)' : d.is_changed ? ' (Internal)' : ''}
                                     </option>
                                 ))}
                             </select>
