@@ -8,6 +8,7 @@ import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
 import DangerButton from '@/Components/DangerButton';
 import MultiFileUploader from '@/Components/MultiFileUploader';
+import AttachmentPreviewModal from '@/Components/AttachmentPreviewModal';
 import { Head, Link, useForm, router } from '@inertiajs/react';
 import { useState, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
@@ -57,10 +58,11 @@ const CLASS_TYPE_STYLES = {
 export default function OnlineAttendance({ requests: initialRequests, scheduleDetails, filters }) {
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showCancelModal, setShowCancelModal] = useState(false);
-    const [showScreenshotModal, setShowScreenshotModal] = useState(false);
-    const [screenshotUrl, setScreenshotUrl] = useState('');
-    const [screenshotLabel, setScreenshotLabel] = useState('');
     const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+
+    // ── Attachment preview state (shared AttachmentPreviewModal) ──
+    const [previewState, setPreviewState] = useState({ attachments: [], startIndex: 0 });
+    const [showPreviewModal, setShowPreviewModal] = useState(false);
     const [selectedRequest, setSelectedRequest] = useState(null);
     const [filterStatus, setFilterStatus] = useState(filters.status || '');
 
@@ -164,12 +166,6 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
     };
 
     const submitAttendance = (forceArg = false) => {
-        // Register the transformation separately to avoid chaining errors
-        createForm.transform((data) => ({
-            ...data,
-            force: forceArg ? '1' : '0'
-        }));
-
         // Create FormData to handle files properly including supporting documents
         const formData = new FormData();
         
@@ -282,10 +278,9 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
         fetchRequests(filterStatus, page);
     };
 
-    const openScreenshot = (url, label) => {
-        setScreenshotUrl(url);
-        setScreenshotLabel(label);
-        setShowScreenshotModal(true);
+    const openPreview = (attachments, startIndex = 0) => {
+        setPreviewState({ attachments, startIndex });
+        setShowPreviewModal(true);
     };
 
     return (
@@ -357,7 +352,7 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
                             key={req.id}
                             req={req}
                             onCancel={() => { setSelectedRequest(req); setShowCancelModal(true); }}
-                            onOpenScreenshot={openScreenshot}
+                            onPreviewDocument={openPreview}
                         />
                     ))}
 
@@ -676,28 +671,14 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
             </Modal>
 
             {/* ═══════════════════════════════════════════════════
-                 SCREENSHOT VIEWER MODAL
+                 ATTACHMENT / SCREENSHOT PREVIEW MODAL
                 ═══════════════════════════════════════════════════ */}
-            <Modal show={showScreenshotModal} onClose={() => setShowScreenshotModal(false)} maxWidth="3xl">
-                <div className="p-4">
-                    <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-sm font-bold text-gray-900 dark:text-white">{screenshotLabel}</h3>
-                        <button
-                            onClick={() => setShowScreenshotModal(false)}
-                            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-                        >
-                            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-                            </svg>
-                        </button>
-                    </div>
-                    <img
-                        src={screenshotUrl}
-                        alt={screenshotLabel}
-                        className="w-full rounded-xl object-contain max-h-[70vh]"
-                    />
-                </div>
-            </Modal>
+            <AttachmentPreviewModal
+                show={showPreviewModal}
+                onClose={() => setShowPreviewModal(false)}
+                attachments={previewState.attachments}
+                startIndex={previewState.startIndex}
+            />
 
             <ScrollToTop />
         </AuthenticatedLayout>
