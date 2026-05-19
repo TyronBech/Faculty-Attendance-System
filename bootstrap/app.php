@@ -19,8 +19,8 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->web(append: [
-            LogActionActivity::class,
             HandleInertiaRequests::class,
+            LogActionActivity::class,
             AddLinkHeadersForPreloadedAssets::class,
         ]);
 
