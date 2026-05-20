@@ -39,6 +39,7 @@ return new class extends Migration
                 'screenshot_in_detected_at',
                 'screenshot_out_detected_at',
                 'screenshot_in_detection_source',
+                'screenshot_out_detection_source',
             ]);
         });
     }
