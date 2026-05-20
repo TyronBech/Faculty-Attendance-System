@@ -103,6 +103,35 @@ class OnlineAttendanceTimestampDetectionTest extends TestCase
         $this->assertDatabaseCount('online_attendance', 0);
     }
 
+    public function test_online_attendance_prefers_filename_timestamp_over_client_file_timestamp_when_both_are_available(): void
+    {
+        $this->configurePublicDisk('filename-precedence-case');
+
+        $faculty = $this->createFaculty('BIO-ONLINE-1005');
+        $scheduleDetail = $this->createScheduleDetail($faculty, 'Friday');
+
+        $response = $this->actingAs($faculty->user)
+            ->from(route('faculty.online-attendance.index'))
+            ->post(route('faculty.online-attendance.store'), [
+                'schedule_detail_id' => (string) $scheduleDetail->id,
+                'class_type' => 'synchronous',
+                'attendance_date' => '2026-05-19',
+                'time_in' => '05:21',
+                'time_out' => '07:45',
+                'screenshot_in' => UploadedFile::fake()->image('Screenshot 2026-05-19 052109.png'),
+                'screenshot_in_last_modified_at' => Carbon::create(2026, 5, 20, 8, 30, 0)->valueOf(),
+                'remarks' => 'Testing filename precedence over client timestamp.',
+            ]);
+
+        $response->assertSessionHasNoErrors();
+        $response->assertSessionHas('success');
+
+        $request = OnlineAttendanceRequest::query()->sole();
+
+        $this->assertSame('filename', $request->screenshot_in_detection_source);
+        $this->assertSame('2026-05-19 05:21:09', $request->screenshot_in_detected_at?->format('Y-m-d H:i:s'));
+    }
+
     public function test_online_attendance_allows_time_in_when_it_matches_detected_screenshot_minute(): void
     {
         $this->configurePublicDisk('time-minute-match-case');

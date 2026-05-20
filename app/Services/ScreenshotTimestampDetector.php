@@ -31,12 +31,12 @@ class ScreenshotTimestampDetector
             return $this->buildDetectionResult($metadataTimestamp, 'metadata', $clientModifiedAt, $originalName);
         }
 
-        if ($clientModifiedAt) {
-            return $this->buildDetectionResult($clientModifiedAt, 'client_file_modified_at', $clientModifiedAt, $originalName);
-        }
-
         if ($filenameTimestamp) {
             return $this->buildDetectionResult($filenameTimestamp, 'filename', $clientModifiedAt, $originalName);
+        }
+
+        if ($clientModifiedAt) {
+            return $this->buildDetectionResult($clientModifiedAt, 'client_file_modified_at', $clientModifiedAt, $originalName);
         }
 
         if ($manualTimestamp) {
@@ -106,6 +106,7 @@ class ScreenshotTimestampDetector
 
         $patterns = [
             '/(?P<date>\d{4}-\d{2}-\d{2})[\s_\-]*(?:at[\s_\-]*)?(?P<time>\d{2}[:.\-]\d{2}(?:[:.\-]\d{2})?)/i',
+            '/(?P<date>\d{4}-\d{2}-\d{2})[\s_\-]*(?:at[\s_\-]*)?(?P<time>\d{6})/i',
             '/(?P<date>\d{8})[\s_\-]+(?P<time>\d{6})/i',
             '/(?P<date>\d{4}\d{2}\d{2})[\s_\-]*(?P<time>\d{2}\d{2}\d{2})/i',
         ];
