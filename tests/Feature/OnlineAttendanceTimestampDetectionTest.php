@@ -20,30 +20,36 @@ class OnlineAttendanceTimestampDetectionTest extends TestCase
 
     public function test_online_attendance_uses_filename_when_no_image_metadata_or_client_timestamp_is_available(): void
     {
-        $this->configurePublicDisk('filename-case');
+        Carbon::setTestNow(Carbon::parse('2026-05-20 12:00:00'));
 
-        $faculty = $this->createFaculty('BIO-ONLINE-1001');
-        $scheduleDetail = $this->createScheduleDetail($faculty, 'Monday');
+        try {
+            $this->configurePublicDisk('filename-case');
 
-        $response = $this->actingAs($faculty->user)
-            ->from(route('faculty.online-attendance.index'))
-            ->post(route('faculty.online-attendance.store'), [
-                'schedule_detail_id' => (string) $scheduleDetail->id,
-                'class_type' => 'synchronous',
-                'attendance_date' => '2026-05-18',
-                'time_in' => '09:15',
-                'time_out' => '11:45',
-                'screenshot_in' => UploadedFile::fake()->image('Screenshot_2026-05-18_09-14-33.png'),
-                'remarks' => 'Testing filename timestamp detection.',
-            ]);
+            $faculty = $this->createFaculty('BIO-ONLINE-1001');
+            $scheduleDetail = $this->createScheduleDetail($faculty, 'Monday');
 
-        $response->assertSessionHasNoErrors();
-        $response->assertSessionHas('success');
+            $response = $this->actingAs($faculty->user)
+                ->from(route('faculty.online-attendance.index'))
+                ->post(route('faculty.online-attendance.store'), [
+                    'schedule_detail_id' => (string) $scheduleDetail->id,
+                    'class_type' => 'synchronous',
+                    'attendance_date' => '2026-05-18',
+                    'time_in' => '09:15',
+                    'time_out' => '11:45',
+                    'screenshot_in' => UploadedFile::fake()->image('Screenshot_2026-05-18_09-14-33.png'),
+                    'remarks' => 'Testing filename timestamp detection.',
+                ]);
 
-        $request = OnlineAttendanceRequest::query()->sole();
+            $response->assertSessionHasNoErrors();
+            $response->assertSessionHas('success');
 
-        $this->assertSame('Screenshot_2026-05-18_09-14-33.png', $request->screenshot_in_original_name);
-        $this->assertSame('2026-05-18 09:14:33', $request->screenshot_in_detected_at?->format('Y-m-d H:i:s'));
+            $request = OnlineAttendanceRequest::query()->sole();
+
+            $this->assertSame('Screenshot_2026-05-18_09-14-33.png', $request->screenshot_in_original_name);
+            $this->assertSame('2026-05-18 09:14:33', $request->screenshot_in_detected_at?->format('Y-m-d H:i:s'));
+        } finally {
+            Carbon::setTestNow();
+        }
     }
 
     public function test_online_attendance_falls_back_to_manual_time_when_detection_is_not_available(): void
