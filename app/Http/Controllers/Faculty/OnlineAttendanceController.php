@@ -186,48 +186,73 @@ class OnlineAttendanceController extends Controller
             $screenshotInFullPath = $storagePath.'/'.$screenshotInFileName;
 
             // Store the Time In screenshot using put() with file contents
-            $screenshotInContents = file_get_contents($screenshotInFile->getPathname());
-            if ($screenshotInContents === false) {
-                throw new \RuntimeException('Failed to read the Time In screenshot.');
-            }
+            $storedScreenshotPaths = [];
 
-            if (! $disk->put($screenshotInFullPath, $screenshotInContents)) {
-                throw new \RuntimeException('Failed to write the Time In screenshot to storage.');
-            }
-            $screenshotInPath = $screenshotInFullPath;
-
-            $screenshotOutPath = null;
-            if ($screenshotOutFile) {
-                $screenshotOutFileName = Str::random(32).'.'.$screenshotOutFile->extension();
-                $screenshotOutFullPath = $storagePath.'/'.$screenshotOutFileName;
-
-                $screenshotOutContents = file_get_contents($screenshotOutFile->getPathname());
-                if ($screenshotOutContents === false) {
-                    throw new \RuntimeException('Failed to read the Time Out screenshot.');
+            try {
+                $screenshotInContents = file_get_contents($screenshotInFile->getPathname());
+                if ($screenshotInContents === false) {
+                    throw new \RuntimeException('Failed to read the Time In screenshot.');
                 }
 
-                if (! $disk->put($screenshotOutFullPath, $screenshotOutContents)) {
-                    throw new \RuntimeException('Failed to write the Time Out screenshot to storage.');
+                if (! $disk->put($screenshotInFullPath, $screenshotInContents)) {
+                    throw new \RuntimeException('Failed to write the Time In screenshot to storage.');
                 }
-                $screenshotOutPath = $screenshotOutFullPath;
-            }
+                $screenshotInPath = $screenshotInFullPath;
+                $storedScreenshotPaths[] = $screenshotInPath;
 
-            if (! is_string($screenshotInPath) || $screenshotInPath === '') {
-                throw new \RuntimeException('Failed to store the Time In screenshot.');
-            }
+                $screenshotOutPath = null;
+                if ($screenshotOutFile) {
+                    $screenshotOutFileName = Str::random(32).'.'.$screenshotOutFile->extension();
+                    $screenshotOutFullPath = $storagePath.'/'.$screenshotOutFileName;
 
-            if ($screenshotOutFile && (! is_string($screenshotOutPath) || $screenshotOutPath === '')) {
-                throw new \RuntimeException('Failed to store the Time Out screenshot.');
-            }
+                    $screenshotOutContents = file_get_contents($screenshotOutFile->getPathname());
+                    if ($screenshotOutContents === false) {
+                        throw new \RuntimeException('Failed to read the Time Out screenshot.');
+                    }
 
-            $result = $faculty->createOnlineAttendanceRequest(
-                $validated,
-                $screenshotInPath,
-                $screenshotOutPath,
-                $screenshotInDetection,
-                $screenshotOutDetection,
-                $force,
-            );
+                    if (! $disk->put($screenshotOutFullPath, $screenshotOutContents)) {
+                        throw new \RuntimeException('Failed to write the Time Out screenshot to storage.');
+                    }
+                    $screenshotOutPath = $screenshotOutFullPath;
+                    $storedScreenshotPaths[] = $screenshotOutPath;
+                }
+
+                if (! is_string($screenshotInPath) || $screenshotInPath === '') {
+                    throw new \RuntimeException('Failed to store the Time In screenshot.');
+                }
+
+                if ($screenshotOutFile && (! is_string($screenshotOutPath) || $screenshotOutPath === '')) {
+                    throw new \RuntimeException('Failed to store the Time Out screenshot.');
+                }
+
+                $result = $faculty->createOnlineAttendanceRequest(
+                    $validated,
+                    $screenshotInPath,
+                    $screenshotOutPath,
+                    $screenshotInDetection,
+                    $screenshotOutDetection,
+                    $force,
+                );
+
+                $storedScreenshotPaths = [];
+            } catch (\Throwable $e) {
+                foreach ($storedScreenshotPaths as $storedScreenshotPath) {
+                    if (! is_string($storedScreenshotPath) || $storedScreenshotPath === '') {
+                        continue;
+                    }
+
+                    try {
+                        $disk->delete($storedScreenshotPath);
+                    } catch (\Throwable $cleanupException) {
+                        Log::warning('Failed to rollback stored screenshot after attendance request error.', [
+                            'path' => $storedScreenshotPath,
+                            'error' => $cleanupException->getMessage(),
+                        ]);
+                    }
+                }
+
+                throw $e;
+            }
 
             if (! $result['success']) {
                 // Clean up uploaded files on failure
