@@ -154,6 +154,21 @@ class OnlineAttendanceController extends Controller
             return back()->withErrors($timeInValidationError)->withInput();
         }
 
+        $timeOutValidationError = null;
+        if ($screenshotOutFile) {
+            $timeOutValidationError = $this->validateDetectedScreenshotTime(
+                attendanceDate: $validated['attendance_date'],
+                submittedTime: $validated['time_out'],
+                detection: $screenshotOutDetection,
+                field: 'time_out',
+                label: 'Time Out',
+            );
+
+            if ($timeOutValidationError) {
+                return back()->withErrors($timeOutValidationError)->withInput();
+            }
+        }
+
         try {
             // Construct storage path explicitly with proper Laravel path formatting
             $facultyId = (string) $faculty->id;
@@ -220,61 +235,61 @@ class OnlineAttendanceController extends Controller
 
                 return back()->withErrors([$result['error_field'] => $result['error_message']]);
             }
+
+            // Get the created or updated request from the result
+            $onlineRequest = $result['request'] ?? null;
+
+            // Handle multiple file attachments
+            if ($request->has('attachments') && is_array($request->attachments) && $onlineRequest) {
+                $facultyDir = 'attachments/faculty_'.$facultyId.'/online_attendance';
+                $disk = Storage::disk('public');
+
+                foreach ($request->attachments as $attachment) {
+                    try {
+                        if (! isset($attachment['file'])) {
+                            continue;
+                        }
+
+                        $file = $attachment['file'];
+                        $label = $attachment['label'] ?? $file->getClientOriginalName();
+                        $attachmentPath = $facultyDir.'/request_'.$onlineRequest->id;
+                        $attachmentFileName = Str::random(32).'.'.$file->extension();
+                        $attachmentFullPath = $attachmentPath.'/'.$attachmentFileName;
+
+                        // Store attachment using put() with file contents
+                        $fileContents = file_get_contents($file->getPathname());
+                        if ($fileContents === false) {
+                            Log::error('Failed to read attachment file: '.$file->getClientOriginalName());
+
+                            continue;
+                        }
+
+                        if (! $disk->put($attachmentFullPath, $fileContents)) {
+                            Log::error('Failed to write attachment file to storage: '.$file->getClientOriginalName());
+
+                            continue;
+                        }
+                        $path = $attachmentFullPath;
+
+                        if ($path) {
+                            RequestAttachment::create([
+                                'attachmentable_id' => $onlineRequest->id,
+                                'attachmentable_type' => OnlineAttendanceRequest::class,
+                                'file_path' => $path,
+                                'custom_label' => $label,
+                                'mime_type' => $file->getMimeType(),
+                                'file_size' => $file->getSize(),
+                            ]);
+                        }
+                    } catch (\Exception $e) {
+                        Log::error('Failed to save online attendance attachment: '.$e->getMessage());
+                    }
+                }
+            }
         } catch (\Exception $e) {
             Log::error('Failed to create online attendance request: '.$e->getMessage());
 
             return back()->withErrors(['error' => 'An unexpected error occurred. Please try again.']);
-        }
-
-        // Get the newly created request
-        $onlineRequest = $faculty->onlineAttendanceRequests()->latest()->first();
-
-        // Handle multiple file attachments
-        if ($request->has('attachments') && is_array($request->attachments) && $onlineRequest) {
-            $facultyDir = 'attachments/faculty_'.$facultyId.'/online_attendance';
-            $disk = Storage::disk('public');
-
-            foreach ($request->attachments as $attachment) {
-                try {
-                    if (! isset($attachment['file'])) {
-                        continue;
-                    }
-
-                    $file = $attachment['file'];
-                    $label = $attachment['label'] ?? $file->getClientOriginalName();
-                    $attachmentPath = $facultyDir.'/request_'.$onlineRequest->id;
-                    $attachmentFileName = Str::random(32).'.'.$file->extension();
-                    $attachmentFullPath = $attachmentPath.'/'.$attachmentFileName;
-
-                    // Store attachment using put() with file contents
-                    $fileContents = file_get_contents($file->getPathname());
-                    if ($fileContents === false) {
-                        Log::error('Failed to read attachment file: '.$file->getClientOriginalName());
-
-                        continue;
-                    }
-
-                    if (! $disk->put($attachmentFullPath, $fileContents)) {
-                        Log::error('Failed to write attachment file to storage: '.$file->getClientOriginalName());
-
-                        continue;
-                    }
-                    $path = $attachmentFullPath;
-
-                    if ($path) {
-                        RequestAttachment::create([
-                            'attachmentable_id' => $onlineRequest->id,
-                            'attachmentable_type' => OnlineAttendanceRequest::class,
-                            'file_path' => $path,
-                            'custom_label' => $label,
-                            'mime_type' => $file->getMimeType(),
-                            'file_size' => $file->getSize(),
-                        ]);
-                    }
-                } catch (\Exception $e) {
-                    Log::error('Failed to save online attendance attachment: '.$e->getMessage());
-                }
-            }
         }
 
         return back()->with('success', 'Online attendance request submitted successfully.');

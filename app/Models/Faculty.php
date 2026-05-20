@@ -632,9 +632,11 @@ class Faculty extends Model
      *
      * @param  array  $data  Validated form data.
      * @param  string  $screenshotInPath  Storage path for time-in screenshot.
-     * @param  string  $screenshotOutPath  Storage path for time-out screenshot.
+     * @param  ?string  $screenshotOutPath  Storage path for time-out screenshot.
+     * @param  array<string, mixed>  $screenshotInDetection  Detection results for time-in screenshot (original_name, client_modified_at, detected_at, source).
+     * @param  array<string, mixed>  $screenshotOutDetection  Detection results for time-out screenshot (original_name, client_modified_at, detected_at, source).
      * @param  bool  $force  Whether to bypass duplicate checks.
-     * @return array{success: bool, error_field?: string, error_message?: string}
+     * @return array{success: bool, request?: OnlineAttendanceRequest, error_field?: string, error_message?: string}
      */
     public function createOnlineAttendanceRequest(
         array $data,
@@ -710,11 +712,11 @@ class Faculty extends Model
                 'remarks' => $data['remarks'] ?? null,
             ], $this->buildScreenshotEvidenceAttributes('in', $screenshotInDetection), $this->buildScreenshotEvidenceAttributes('out', $screenshotOutDetection)));
 
-            return ['success' => true];
+            return ['success' => true, 'request' => $existingPending];
         }
 
         // 3. Otherwise, create a new request
-        $this->onlineAttendanceRequests()->create(array_merge([
+        $newRequest = $this->onlineAttendanceRequests()->create(array_merge([
             'schedule_detail_id' => $data['schedule_detail_id'] ?: null,
             'internal_schedule_id' => $data['internal_schedule_id'] ?? null,
             'class_type' => $data['class_type'],
@@ -727,7 +729,7 @@ class Faculty extends Model
             'status' => 'pending',
         ], $this->buildScreenshotEvidenceAttributes('in', $screenshotInDetection), $this->buildScreenshotEvidenceAttributes('out', $screenshotOutDetection)));
 
-        return ['success' => true];
+        return ['success' => true, 'request' => $newRequest];
     }
 
     /**
@@ -740,7 +742,6 @@ class Faculty extends Model
             "screenshot_{$direction}_original_name" => $detection['original_name'] ?? null,
             "screenshot_{$direction}_client_modified_at" => $detection['client_modified_at'] ?? null,
             "screenshot_{$direction}_detected_at" => $detection['detected_at'] ?? null,
-            "screenshot_{$direction}_detection_source" => $detection['source'] ?? null,
         ];
     }
 
