@@ -740,6 +740,7 @@ class Faculty extends Model
             "screenshot_{$direction}_original_name" => $detection['original_name'] ?? null,
             "screenshot_{$direction}_client_modified_at" => $detection['client_modified_at'] ?? null,
             "screenshot_{$direction}_detected_at" => $detection['detected_at'] ?? null,
+            "screenshot_{$direction}_detection_source" => $detection['source'] ?? null,
         ];
     }
 
