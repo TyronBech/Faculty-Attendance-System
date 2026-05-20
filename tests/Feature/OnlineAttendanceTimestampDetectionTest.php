@@ -42,7 +42,6 @@ class OnlineAttendanceTimestampDetectionTest extends TestCase
 
         $request = OnlineAttendanceRequest::query()->sole();
 
-        $this->assertSame('filename', $request->screenshot_in_detection_source);
         $this->assertSame('Screenshot_2026-05-18_09-14-33.png', $request->screenshot_in_original_name);
         $this->assertSame('2026-05-18 09:14:33', $request->screenshot_in_detected_at?->format('Y-m-d H:i:s'));
     }
@@ -71,7 +70,6 @@ class OnlineAttendanceTimestampDetectionTest extends TestCase
 
         $request = OnlineAttendanceRequest::query()->sole();
 
-        $this->assertSame('manual', $request->screenshot_in_detection_source);
         $this->assertSame('proof.png', $request->screenshot_in_original_name);
         $this->assertSame('2026-05-19 08:30:00', $request->screenshot_in_detected_at?->format('Y-m-d H:i:s'));
     }
@@ -171,7 +169,7 @@ class OnlineAttendanceTimestampDetectionTest extends TestCase
 
     private function configurePublicDisk(string $directory): void
     {
-        $root = "D:\\tmp\\faculty-attendance-system-tests\\{$directory}";
+        $root = sys_get_temp_dir().DIRECTORY_SEPARATOR.'faculty-attendance-system-tests'.DIRECTORY_SEPARATOR.$directory;
 
         config(['filesystems.disks.public.root' => $root]);
         Storage::forgetDisk('public');

@@ -21,8 +21,9 @@ return new class extends Migration
             $table->timestamp('screenshot_in_detected_at')->nullable()->after('screenshot_in_client_modified_at');
             $table->timestamp('screenshot_out_detected_at')->nullable()->after('screenshot_out_client_modified_at');
 
-            // Detection source identifying where the check-in screenshot verification originated (e.g., biometric, manual review)
+            // Detection source identifying where the check-in/out screenshot verification originated (e.g., metadata, client_file_modified_at, filename)
             $table->string('screenshot_in_detection_source', 50)->nullable()->after('screenshot_in_detected_at');
+            $table->string('screenshot_out_detection_source', 50)->nullable()->after('screenshot_out_detected_at');
         });
     }
 

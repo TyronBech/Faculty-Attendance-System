@@ -163,16 +163,6 @@ class OnlineAttendanceController extends Controller
 
             $storagePath = 'online-attendance/'.$facultyId;
 
-            // Debug logging
-            Log::info('OnlineAttendance store attempt', [
-                'faculty_id' => $facultyId,
-                'storage_path' => $storagePath,
-                'file_exists' => file_exists($screenshotInFile->getPathname()),
-                'file_valid' => $screenshotInFile->isValid(),
-                'file_name' => $screenshotInFile->getClientOriginalName(),
-                'file_size' => $screenshotInFile->getSize(),
-            ]);
-
             // Get the storage disk
             $disk = Storage::disk('public');
 
@@ -186,7 +176,9 @@ class OnlineAttendanceController extends Controller
                 throw new \RuntimeException('Failed to read the Time In screenshot.');
             }
 
-            $disk->put($screenshotInFullPath, $screenshotInContents);
+            if (! $disk->put($screenshotInFullPath, $screenshotInContents)) {
+                throw new \RuntimeException('Failed to write the Time In screenshot to storage.');
+            }
             $screenshotInPath = $screenshotInFullPath;
 
             $screenshotOutPath = null;
@@ -199,7 +191,9 @@ class OnlineAttendanceController extends Controller
                     throw new \RuntimeException('Failed to read the Time Out screenshot.');
                 }
 
-                $disk->put($screenshotOutFullPath, $screenshotOutContents);
+                if (! $disk->put($screenshotOutFullPath, $screenshotOutContents)) {
+                    throw new \RuntimeException('Failed to write the Time Out screenshot to storage.');
+                }
                 $screenshotOutPath = $screenshotOutFullPath;
             }
 
@@ -260,7 +254,11 @@ class OnlineAttendanceController extends Controller
                         continue;
                     }
 
-                    $disk->put($attachmentFullPath, $fileContents);
+                    if (! $disk->put($attachmentFullPath, $fileContents)) {
+                        Log::error('Failed to write attachment file to storage: '.$file->getClientOriginalName());
+
+                        continue;
+                    }
                     $path = $attachmentFullPath;
 
                     if ($path) {
@@ -302,10 +300,9 @@ class OnlineAttendanceController extends Controller
 
         $submittedDateTime = Carbon::createFromFormat('Y-m-d H:i', "{$attendanceDate} {$submittedTime}", config('app.timezone'));
         $detectedAtRoundedToMinute = $detectedAt->copy()->second(0);
-        $submittedTimeOnly = $submittedDateTime->format('H:i');
-        $detectedTimeOnly = $detectedAtRoundedToMinute->format('H:i');
 
-        if ($submittedTimeOnly < $detectedTimeOnly) {
+        // Compare full datetimes to ensure we check across date boundaries correctly
+        if ($submittedDateTime->lt($detectedAtRoundedToMinute)) {
             return [
                 $field => "{$label} cannot be earlier than the detected screenshot time of {$detectedAtRoundedToMinute->format('M d, Y h:i A')}.",
             ];

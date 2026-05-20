@@ -175,12 +175,19 @@ const floorDateToMinute = (date) => {
     return rounded;
 };
 
-const isEarlierThanDetectedMinute = (submittedTime, detectedTime) => {
-    if (!submittedTime || !detectedTime) {
+const isEarlierThanDetectedMinute = (submittedTimeString, attendanceDate, detectedTimeString, detectedDate) => {
+    if (!submittedTimeString || !attendanceDate || !detectedTimeString || !detectedDate) {
         return false;
     }
 
-    return submittedTime < detectedTime;
+    const submittedDateTime = floorDateToMinute(buildComparableDateTime(attendanceDate, submittedTimeString));
+    const detectedDateTime = floorDateToMinute(buildComparableDateTime(detectedDate, detectedTimeString));
+
+    if (!submittedDateTime || !detectedDateTime) {
+        return false;
+    }
+
+    return submittedDateTime < detectedDateTime;
 };
 
 export default function OnlineAttendance({ requests: initialRequests, scheduleDetails, filters }) {
@@ -316,7 +323,7 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
             screenshotDetection?.timeIn,
         ));
 
-        if (detectedDateTime && isEarlierThanDetectedMinute(createForm.data.time_in, screenshotDetection?.timeIn)) {
+        if (detectedDateTime && isEarlierThanDetectedMinute(createForm.data.time_in, createForm.data.attendance_date, screenshotDetection?.timeIn, screenshotDetection?.attendanceDate || createForm.data.attendance_date)) {
             const message = `Time In cannot be earlier than the detected screenshot time of ${formatDateTime(detectedDateTime.toISOString())}.`;
             createForm.setError('time_in', message);
             toast.error(message);

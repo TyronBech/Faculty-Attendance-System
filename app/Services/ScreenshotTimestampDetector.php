@@ -122,14 +122,22 @@ class ScreenshotTimestampDetector
                 continue;
             }
 
-            return Carbon::createFromFormat('Y-m-d H:i:s', "{$date} {$time}", config('app.timezone'));
+            try {
+                return Carbon::createFromFormat('Y-m-d H:i:s', "{$date} {$time}", config('app.timezone'));
+            } catch (\Throwable) {
+                continue;
+            }
         }
 
         if ($attendanceDate && preg_match('/(?P<time>\d{2}[:.\-]\d{2}(?:[:.\-]\d{2})?)/', $filename, $matches)) {
             $time = $this->normalizeTimeSegment($matches['time'] ?? null);
 
             if ($time) {
-                return Carbon::createFromFormat('Y-m-d H:i:s', "{$attendanceDate} {$time}", config('app.timezone'));
+                try {
+                    return Carbon::createFromFormat('Y-m-d H:i:s', "{$attendanceDate} {$time}", config('app.timezone'));
+                } catch (\Throwable) {
+                    return null;
+                }
             }
         }
 
@@ -182,6 +190,10 @@ class ScreenshotTimestampDetector
             return null;
         }
 
-        return Carbon::createFromFormat('Y-m-d H:i', "{$attendanceDate} {$manualTime}", config('app.timezone'));
+        try {
+            return Carbon::createFromFormat('Y-m-d H:i', "{$attendanceDate} {$manualTime}", config('app.timezone'));
+        } catch (\Throwable) {
+            return null;
+        }
     }
 }
