@@ -5,9 +5,13 @@ namespace App\Http\Controllers\Faculty;
 use App\Http\Controllers\Controller;
 use App\Models\OnlineAttendanceRequest;
 use App\Models\RequestAttachment;
+use App\Services\ScreenshotTimestampDetector;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 
 class OnlineAttendanceController extends Controller
@@ -61,11 +65,11 @@ class OnlineAttendanceController extends Controller
     /**
      * Store a new online attendance request.
      */
-    public function store(Request $request)
+    public function store(Request $request, ScreenshotTimestampDetector $screenshotTimestampDetector)
     {
         $faculty = $request->user()->faculty;
 
-        if (! $faculty) {
+        if (! $faculty || ! $faculty->id) {
             return back()->withErrors(['error' => 'Faculty profile not found.']);
         }
 
@@ -100,22 +104,121 @@ class OnlineAttendanceController extends Controller
             'screenshot_out' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
             'remarks' => 'nullable|string|max:1000',
             'force' => 'nullable|boolean',
+            'screenshot_in_last_modified_at' => 'nullable|integer|min:1',
+            'screenshot_out_last_modified_at' => 'nullable|integer|min:1',
             'attachments' => 'nullable|array',
             'attachments.*.file' => 'required|file|max:5120',
             'attachments.*.label' => 'nullable|string|max:255',
         ]);
 
+        $screenshotInFile = $request->file('screenshot_in');
+        $screenshotOutFile = $request->file('screenshot_out');
+
+        if (! $screenshotInFile instanceof UploadedFile || ! $screenshotInFile->isValid()) {
+            return back()->withErrors([
+                'screenshot_in' => 'The Time In screenshot upload is invalid. Please upload the file again.',
+            ])->withInput();
+        }
+
+        if ($screenshotOutFile && ! $screenshotOutFile->isValid()) {
+            return back()->withErrors([
+                'screenshot_out' => 'The Time Out screenshot upload is invalid. Please upload the file again.',
+            ])->withInput();
+        }
+
         $force = (bool) ($validated['force'] ?? false);
+        $screenshotInDetection = $screenshotTimestampDetector->detect(
+            $screenshotInFile,
+            $validated['attendance_date'],
+            $validated['time_in'],
+            $validated['screenshot_in_last_modified_at'] ?? null,
+        );
+        $screenshotOutDetection = $screenshotOutFile
+            ? $screenshotTimestampDetector->detect(
+                $screenshotOutFile,
+                $validated['attendance_date'],
+                $validated['time_out'] ?? null,
+                $validated['screenshot_out_last_modified_at'] ?? null,
+            )
+            : [];
+
+        $timeInValidationError = $this->validateDetectedScreenshotTime(
+            attendanceDate: $validated['attendance_date'],
+            submittedTime: $validated['time_in'],
+            detection: $screenshotInDetection,
+            field: 'time_in',
+            label: 'Time In',
+        );
+
+        if ($timeInValidationError) {
+            return back()->withErrors($timeInValidationError)->withInput();
+        }
 
         try {
-            // Store screenshots
-            $screenshotInPath = $request->file('screenshot_in')
-                ->store("online-attendance/{$faculty->id}", 'public');
-            $screenshotOutPath = $request->file('screenshot_out')
-                ? $request->file('screenshot_out')->store("online-attendance/{$faculty->id}", 'public')
-                : null;
+            // Construct storage path explicitly with proper Laravel path formatting
+            $facultyId = (string) $faculty->id;
+            if (! $facultyId || $facultyId === '' || $facultyId === '0') {
+                throw new \RuntimeException('Faculty ID is invalid or empty.');
+            }
 
-            $result = $faculty->createOnlineAttendanceRequest($validated, $screenshotInPath, $screenshotOutPath, $force);
+            $storagePath = 'online-attendance/'.$facultyId;
+
+            // Debug logging
+            Log::info('OnlineAttendance store attempt', [
+                'faculty_id' => $facultyId,
+                'storage_path' => $storagePath,
+                'file_exists' => file_exists($screenshotInFile->getPathname()),
+                'file_valid' => $screenshotInFile->isValid(),
+                'file_name' => $screenshotInFile->getClientOriginalName(),
+                'file_size' => $screenshotInFile->getSize(),
+            ]);
+
+            // Get the storage disk
+            $disk = Storage::disk('public');
+
+            // Generate random filenames
+            $screenshotInFileName = Str::random(32).'.'.$screenshotInFile->extension();
+            $screenshotInFullPath = $storagePath.'/'.$screenshotInFileName;
+
+            // Store the Time In screenshot using put() with file contents
+            $screenshotInContents = file_get_contents($screenshotInFile->getPathname());
+            if ($screenshotInContents === false) {
+                throw new \RuntimeException('Failed to read the Time In screenshot.');
+            }
+
+            $disk->put($screenshotInFullPath, $screenshotInContents);
+            $screenshotInPath = $screenshotInFullPath;
+
+            $screenshotOutPath = null;
+            if ($screenshotOutFile) {
+                $screenshotOutFileName = Str::random(32).'.'.$screenshotOutFile->extension();
+                $screenshotOutFullPath = $storagePath.'/'.$screenshotOutFileName;
+
+                $screenshotOutContents = file_get_contents($screenshotOutFile->getPathname());
+                if ($screenshotOutContents === false) {
+                    throw new \RuntimeException('Failed to read the Time Out screenshot.');
+                }
+
+                $disk->put($screenshotOutFullPath, $screenshotOutContents);
+                $screenshotOutPath = $screenshotOutFullPath;
+            }
+
+            if (! is_string($screenshotInPath) || $screenshotInPath === '') {
+                throw new \RuntimeException('Failed to store the Time In screenshot.');
+            }
+
+            if ($screenshotOutFile && (! is_string($screenshotOutPath) || $screenshotOutPath === '')) {
+                throw new \RuntimeException('Failed to store the Time Out screenshot.');
+            }
+
+            $result = $faculty->createOnlineAttendanceRequest(
+                $validated,
+                $screenshotInPath,
+                $screenshotOutPath,
+                $screenshotInDetection,
+                $screenshotOutDetection,
+                $force,
+            );
 
             if (! $result['success']) {
                 // Clean up uploaded files on failure
@@ -134,7 +237,8 @@ class OnlineAttendanceController extends Controller
 
         // Handle multiple file attachments
         if ($request->has('attachments') && is_array($request->attachments) && $onlineRequest) {
-            $facultyDir = "attachments/faculty_{$faculty->id}/online_attendance";
+            $facultyDir = 'attachments/faculty_'.$facultyId.'/online_attendance';
+            $disk = Storage::disk('public');
 
             foreach ($request->attachments as $attachment) {
                 try {
@@ -144,7 +248,20 @@ class OnlineAttendanceController extends Controller
 
                     $file = $attachment['file'];
                     $label = $attachment['label'] ?? $file->getClientOriginalName();
-                    $path = $file->store("{$facultyDir}/request_{$onlineRequest->id}", 'public');
+                    $attachmentPath = $facultyDir.'/request_'.$onlineRequest->id;
+                    $attachmentFileName = Str::random(32).'.'.$file->extension();
+                    $attachmentFullPath = $attachmentPath.'/'.$attachmentFileName;
+
+                    // Store attachment using put() with file contents
+                    $fileContents = file_get_contents($file->getPathname());
+                    if ($fileContents === false) {
+                        Log::error('Failed to read attachment file: '.$file->getClientOriginalName());
+
+                        continue;
+                    }
+
+                    $disk->put($attachmentFullPath, $fileContents);
+                    $path = $attachmentFullPath;
 
                     if ($path) {
                         RequestAttachment::create([
@@ -163,6 +280,38 @@ class OnlineAttendanceController extends Controller
         }
 
         return back()->with('success', 'Online attendance request submitted successfully.');
+    }
+
+    /**
+     * @param  array<string, mixed>  $detection
+     * @return array<string, string>|null
+     */
+    private function validateDetectedScreenshotTime(
+        string $attendanceDate,
+        string $submittedTime,
+        array $detection,
+        string $field,
+        string $label,
+    ): ?array {
+        $detectionSource = $detection['source'] ?? null;
+        $detectedAt = $detection['detected_at'] ?? null;
+
+        if (! in_array($detectionSource, ['metadata', 'client_file_modified_at', 'filename'], true) || ! $detectedAt instanceof Carbon) {
+            return null;
+        }
+
+        $submittedDateTime = Carbon::createFromFormat('Y-m-d H:i', "{$attendanceDate} {$submittedTime}", config('app.timezone'));
+        $detectedAtRoundedToMinute = $detectedAt->copy()->second(0);
+        $submittedTimeOnly = $submittedDateTime->format('H:i');
+        $detectedTimeOnly = $detectedAtRoundedToMinute->format('H:i');
+
+        if ($submittedTimeOnly < $detectedTimeOnly) {
+            return [
+                $field => "{$label} cannot be earlier than the detected screenshot time of {$detectedAtRoundedToMinute->format('M d, Y h:i A')}.",
+            ];
+        }
+
+        return null;
     }
 
     /**

@@ -26,7 +26,15 @@ class OnlineAttendanceRequest extends Model
         'time_in',
         'time_out',
         'screenshot_in',
+        'screenshot_in_original_name',
+        'screenshot_in_client_modified_at',
+        'screenshot_in_detected_at',
+        'screenshot_in_detection_source',
         'screenshot_out',
+        'screenshot_out_original_name',
+        'screenshot_out_client_modified_at',
+        'screenshot_out_detected_at',
+        'screenshot_out_detection_source',
         'remarks',
         'status',
         'reviewed_by',
@@ -38,6 +46,10 @@ class OnlineAttendanceRequest extends Model
     {
         return [
             'attendance_date' => 'date',
+            'screenshot_in_client_modified_at' => 'datetime',
+            'screenshot_out_client_modified_at' => 'datetime',
+            'screenshot_in_detected_at' => 'datetime',
+            'screenshot_out_detected_at' => 'datetime',
             'reviewed_at' => 'datetime',
         ];
     }
@@ -128,6 +140,8 @@ class OnlineAttendanceRequest extends Model
                 'time_out' => $req->time_out ? Carbon::parse($req->time_out)->format('h:i A') : 'N/A',
                 'screenshot_in' => $req->screenshot_in ? Storage::url($req->screenshot_in) : null,
                 'screenshot_out' => $req->screenshot_out ? Storage::url($req->screenshot_out) : null,
+                'screenshot_in_evidence' => $req->getScreenshotEvidence('in'),
+                'screenshot_out_evidence' => $req->getScreenshotEvidence('out'),
                 'remarks' => $req->remarks,
                 'status' => $req->status,
                 'subject_code' => $detail?->course_code ?? '',
@@ -177,7 +191,15 @@ class OnlineAttendanceRequest extends Model
             'time_in',
             'time_out',
             'screenshot_in',
+            'screenshot_in_original_name',
+            'screenshot_in_client_modified_at',
+            'screenshot_in_detected_at',
+            'screenshot_in_detection_source',
             'screenshot_out',
+            'screenshot_out_original_name',
+            'screenshot_out_client_modified_at',
+            'screenshot_out_detected_at',
+            'screenshot_out_detection_source',
             'remarks',
             'status',
             'reviewed_by',
@@ -245,6 +267,8 @@ class OnlineAttendanceRequest extends Model
                 'time_out' => $req->time_out ? Carbon::parse($req->time_out)->format('h:i A') : 'N/A',
                 'screenshot_in' => $req->screenshot_in ? Storage::url($req->screenshot_in) : null,
                 'screenshot_out' => $req->screenshot_out ? Storage::url($req->screenshot_out) : null,
+                'screenshot_in_evidence' => $req->getScreenshotEvidence('in'),
+                'screenshot_out_evidence' => $req->getScreenshotEvidence('out'),
                 'remarks' => $req->remarks,
                 'status' => $req->status,
                 'subject_code' => $detail->course_code ?? '',
@@ -325,5 +349,36 @@ class OnlineAttendanceRequest extends Model
         }
 
         return $data;
+    }
+
+    /**
+     * @return array{detected_at: string|null, detected_at_display: string|null, source: string|null, source_label: string, original_name: string|null, client_modified_at: string|null}
+     */
+    public function getScreenshotEvidence(string $direction): array
+    {
+        $detectedAt = $this->{"screenshot_{$direction}_detected_at"};
+        $clientModifiedAt = $this->{"screenshot_{$direction}_client_modified_at"};
+        $source = $this->{"screenshot_{$direction}_detection_source"};
+
+        return [
+            'detected_at' => $detectedAt?->toIso8601String(),
+            'detected_at_display' => $detectedAt?->format('M d, Y h:i A'),
+            'source' => $source,
+            'source_label' => $this->formatScreenshotEvidenceSource($source),
+            'original_name' => $this->{"screenshot_{$direction}_original_name"},
+            'client_modified_at' => $clientModifiedAt?->toIso8601String(),
+        ];
+    }
+
+    private function formatScreenshotEvidenceSource(?string $source): string
+    {
+        return match ($source) {
+            'metadata' => 'Image metadata',
+            'client_file_modified_at' => 'Original file timestamp',
+            'filename' => 'Filename pattern',
+            'manual' => 'Manual faculty entry',
+            'unavailable' => 'Not detected',
+            default => 'Not detected',
+        };
     }
 }

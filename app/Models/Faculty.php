@@ -636,8 +636,14 @@ class Faculty extends Model
      * @param  bool  $force  Whether to bypass duplicate checks.
      * @return array{success: bool, error_field?: string, error_message?: string}
      */
-    public function createOnlineAttendanceRequest(array $data, string $screenshotInPath, ?string $screenshotOutPath = null, bool $force = false): array
-    {
+    public function createOnlineAttendanceRequest(
+        array $data,
+        string $screenshotInPath,
+        ?string $screenshotOutPath = null,
+        array $screenshotInDetection = [],
+        array $screenshotOutDetection = [],
+        bool $force = false,
+    ): array {
         // 1. Seek existing pending request for this date
         $existingPending = $this->onlineAttendanceRequests()
             ->where('attendance_date', $data['attendance_date'])
@@ -693,7 +699,7 @@ class Faculty extends Model
                 Storage::disk('public')->delete($existingPending->screenshot_out);
             }
 
-            $existingPending->update([
+            $existingPending->update(array_merge([
                 'schedule_detail_id' => $data['schedule_detail_id'] ?: null,
                 'internal_schedule_id' => $data['internal_schedule_id'] ?? null,
                 'class_type' => $data['class_type'],
@@ -702,13 +708,13 @@ class Faculty extends Model
                 'screenshot_in' => $screenshotInPath,
                 'screenshot_out' => $screenshotOutPath,
                 'remarks' => $data['remarks'] ?? null,
-            ]);
+            ], $this->buildScreenshotEvidenceAttributes('in', $screenshotInDetection), $this->buildScreenshotEvidenceAttributes('out', $screenshotOutDetection)));
 
             return ['success' => true];
         }
 
         // 3. Otherwise, create a new request
-        $this->onlineAttendanceRequests()->create([
+        $this->onlineAttendanceRequests()->create(array_merge([
             'schedule_detail_id' => $data['schedule_detail_id'] ?: null,
             'internal_schedule_id' => $data['internal_schedule_id'] ?? null,
             'class_type' => $data['class_type'],
@@ -719,9 +725,23 @@ class Faculty extends Model
             'screenshot_out' => $screenshotOutPath,
             'remarks' => $data['remarks'] ?? null,
             'status' => 'pending',
-        ]);
+        ], $this->buildScreenshotEvidenceAttributes('in', $screenshotInDetection), $this->buildScreenshotEvidenceAttributes('out', $screenshotOutDetection)));
 
         return ['success' => true];
+    }
+
+    /**
+     * @param  array<string, mixed>  $detection
+     * @return array<string, mixed>
+     */
+    private function buildScreenshotEvidenceAttributes(string $direction, array $detection): array
+    {
+        return [
+            "screenshot_{$direction}_original_name" => $detection['original_name'] ?? null,
+            "screenshot_{$direction}_client_modified_at" => $detection['client_modified_at'] ?? null,
+            "screenshot_{$direction}_detected_at" => $detection['detected_at'] ?? null,
+            "screenshot_{$direction}_detection_source" => $detection['source'] ?? null,
+        ];
     }
 
     /**
