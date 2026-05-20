@@ -306,12 +306,12 @@ class OnlineAttendanceController extends Controller
                                 'file_size' => $file->getSize(),
                             ]);
                         }
-                    } catch (\Exception $e) {
+                    } catch (\Throwable $e) {
                         Log::error('Failed to save online attendance attachment: '.$e->getMessage());
                     }
                 }
             }
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             Log::error('Failed to create online attendance request: '.$e->getMessage());
 
             return back()->withErrors(['error' => 'An unexpected error occurred. Please try again.']);
