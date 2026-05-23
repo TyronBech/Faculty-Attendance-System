@@ -59,6 +59,12 @@ Artisan::command('flss:sync-temporary-schedules {--per-page=500} {--url=}', func
     ->daily()
     ->at('1:00');
 
+Schedule::command('flss:sync')
+    ->dailyAt('01:00')
+    ->withoutOverlapping()
+    ->runInBackground()
+    ->appendOutputTo(storage_path('logs/flss-sync.log'));
+
 Schedule::command('backup:clean --disable-notifications')
     ->daily()
     ->at('01:00');

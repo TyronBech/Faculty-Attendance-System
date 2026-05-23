@@ -6,7 +6,9 @@ import Modal from "@/Components/Modal";
 import PrimaryButton from "@/Components/PrimaryButton";
 import ScrollToTop from "@/Components/ScrollToTop";
 import SecondaryButton from "@/Components/SecondaryButton";
-import { Head, router, useForm } from "@inertiajs/react";
+import { PERMISSIONS } from "@/Constants/permissions";
+import { hasPermission } from "@/Utils/permissions";
+import { Head, router, useForm, usePage } from "@inertiajs/react";
 import { useMemo, useState } from "react";
 
 const SOURCE_BADGE = {
@@ -67,6 +69,13 @@ export default function ManualAttendance({
     targetDay,
     candidates = [],
 }) {
+    const { auth } = usePage().props;
+    const permissionList = auth?.permissions ?? [];
+    const canCreateAttendance = hasPermission(
+        permissionList,
+        PERMISSIONS.CREATE_ATTENDANCE,
+    );
+
     const form = useForm({
         attendance_date: targetDate,
         faculty_ids: [],
@@ -468,38 +477,42 @@ export default function ManualAttendance({
                                 className="mt-1"
                             />
                         </div>
-                        <PrimaryButton
-                            type="button"
-                            onClick={openConfirmModal}
-                            disabled={
-                                selectedCount === 0 || candidates.length === 0
-                            }
-                        >
-                            Confirm Manual Attendance ({selectedCount})
-                        </PrimaryButton>
+                        {canCreateAttendance && (
+                            <PrimaryButton
+                                type="button"
+                                onClick={openConfirmModal}
+                                disabled={
+                                    selectedCount === 0 ||
+                                    candidates.length === 0
+                                }
+                            >
+                                Confirm Manual Attendance ({selectedCount})
+                            </PrimaryButton>
+                        )}
                     </div>
                 </div>
             </section>
 
-            <Modal
-                show={showConfirmModal}
-                maxWidth="2xl"
-                onClose={closeConfirmModal}
-            >
-                <form
-                    onSubmit={submitManualAttendance}
-                    className="flex h-full flex-col"
+            {canCreateAttendance && (
+                <Modal
+                    show={showConfirmModal}
+                    maxWidth="2xl"
+                    onClose={closeConfirmModal}
                 >
-                    <div className="border-b border-gray-200 dark:border-gray-700 px-6 py-5 bg-gradient-to-r from-[#7a1315]/10 to-transparent dark:from-red-900/20 dark:to-transparent">
-                        <h4 className="text-lg font-bold text-gray-900 dark:text-white">
-                            Confirm Manual Attendance Submission
-                        </h4>
-                        <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                            You are about to create manual attendance for{" "}
-                            {selectedCount} faculty member(s) on{" "}
-                            {form.data.attendance_date} ({targetDay}).
-                        </p>
-                    </div>
+                    <form
+                        onSubmit={submitManualAttendance}
+                        className="flex h-full flex-col"
+                    >
+                        <div className="border-b border-gray-200 dark:border-gray-700 px-6 py-5 bg-gradient-to-r from-[#7a1315]/10 to-transparent dark:from-red-900/20 dark:to-transparent">
+                            <h4 className="text-lg font-bold text-gray-900 dark:text-white">
+                                Confirm Manual Attendance Submission
+                            </h4>
+                            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                                You are about to create manual attendance for{" "}
+                                {selectedCount} faculty member(s) on{" "}
+                                {form.data.attendance_date} ({targetDay}).
+                            </p>
+                        </div>
 
                     <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -552,27 +565,28 @@ export default function ManualAttendance({
                         </div>
                     </div>
 
-                    <div className="border-t border-gray-200 dark:border-gray-700 px-6 py-4 flex justify-end gap-3">
-                        <SecondaryButton
-                            type="button"
-                            onClick={closeConfirmModal}
-                        >
-                            Cancel
-                        </SecondaryButton>
-                        <PrimaryButton
-                            type="submit"
-                            disabled={
-                                form.processing ||
-                                form.data.remarks.trim().length === 0
-                            }
-                        >
-                            {form.processing
-                                ? "Saving..."
-                                : "Submit Manual Attendance"}
-                        </PrimaryButton>
-                    </div>
-                </form>
-            </Modal>
+                        <div className="border-t border-gray-200 dark:border-gray-700 px-6 py-4 flex justify-end gap-3">
+                            <SecondaryButton
+                                type="button"
+                                onClick={closeConfirmModal}
+                            >
+                                Cancel
+                            </SecondaryButton>
+                            <PrimaryButton
+                                type="submit"
+                                disabled={
+                                    form.processing ||
+                                    form.data.remarks.trim().length === 0
+                                }
+                            >
+                                {form.processing
+                                    ? "Saving..."
+                                    : "Submit Manual Attendance"}
+                            </PrimaryButton>
+                        </div>
+                    </form>
+                </Modal>
+            )}
         </AuthenticatedLayout>
     );
 }

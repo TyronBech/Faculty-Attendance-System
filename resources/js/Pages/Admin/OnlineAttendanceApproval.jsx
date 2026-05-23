@@ -6,7 +6,9 @@ import InputError from '@/Components/InputError';
 import SecondaryButton from '@/Components/SecondaryButton';
 import DangerButton from '@/Components/DangerButton';
 import Pagination from '@/Components/Pagination';
-import { Head, useForm } from '@inertiajs/react';
+import { PERMISSIONS } from '@/Constants/permissions';
+import { hasPermission } from '@/Utils/permissions';
+import { Head, useForm, usePage } from '@inertiajs/react';
 import { useState, useCallback } from 'react';
 import AttachmentPreviewModal from '@/Components/AttachmentPreviewModal';
 
@@ -51,7 +53,16 @@ const formatDateTime = (dateString) => {
     }
 };
 
-function ApprovalCard({ request, onApprove, onReject, isExpanded, toggleExpand, onPreview }) {
+function ApprovalCard({
+    request,
+    onApprove,
+    onReject,
+    isExpanded,
+    toggleExpand,
+    onPreview,
+    canApprove,
+    canReject,
+}) {
     const handleActionClick = (event, callback) => {
         event.stopPropagation();
         callback();
@@ -148,26 +159,30 @@ function ApprovalCard({ request, onApprove, onReject, isExpanded, toggleExpand, 
                     <p className="text-xs font-bold text-gray-500 dark:text-gray-400">
                         Click to {isExpanded ? 'hide' : 'show'} details
                     </p>
-                    {request.status === 'pending' && (
+                    {request.status === 'pending' && (canApprove || canReject) && (
                         <div className="flex items-center gap-2">
-                            <button
-                                onClick={(event) => handleActionClick(event, onReject)}
-                                className="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-bold text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800/50 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                            >
-                                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-                                </svg>
-                                Reject
-                            </button>
-                            <button
-                                onClick={(event) => handleActionClick(event, onApprove)}
-                                className="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm transition-colors"
-                            >
-                                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                                </svg>
-                                Approve
-                            </button>
+                            {canReject && (
+                                <button
+                                    onClick={(event) => handleActionClick(event, onReject)}
+                                    className="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-bold text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800/50 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                                >
+                                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                                    </svg>
+                                    Reject
+                                </button>
+                            )}
+                            {canApprove && (
+                                <button
+                                    onClick={(event) => handleActionClick(event, onApprove)}
+                                    className="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm transition-colors"
+                                >
+                                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                                    </svg>
+                                    Approve
+                                </button>
+                            )}
                         </div>
                     )}
                 </div>
@@ -293,6 +308,11 @@ function EmptyState({ filterStatus, searchQuery }) {
 }
 
 export default function OnlineAttendanceApproval({ requests: initialRequests, filters, pendingCount }) {
+    const { auth } = usePage().props;
+    const permissionList = auth?.permissions ?? [];
+    const canApproveRequests = hasPermission(permissionList, PERMISSIONS.APPROVE_REQUESTS);
+    const canRejectRequests = hasPermission(permissionList, PERMISSIONS.REJECT_REQUESTS);
+
     const [requestsData, setRequestsData] = useState(initialRequests);
     const [filterStatus, setFilterStatus] = useState(filters.status || '');
     const [searchInput, setSearchInput] = useState(filters.search || '');
@@ -383,6 +403,10 @@ export default function OnlineAttendanceApproval({ requests: initialRequests, fi
     };
 
     const openApprove = (req) => {
+        if (!canApproveRequests) {
+            return;
+        }
+
         setSelectedRequest(req);
         approveForm.reset();
         setShowApproveModal(true);
@@ -402,6 +426,10 @@ export default function OnlineAttendanceApproval({ requests: initialRequests, fi
     };
 
     const openReject = (req) => {
+        if (!canRejectRequests) {
+            return;
+        }
+
         setSelectedRequest(req);
         rejectForm.reset();
         setShowRejectModal(true);
@@ -525,6 +553,8 @@ export default function OnlineAttendanceApproval({ requests: initialRequests, fi
                             toggleExpand={() => toggleExpand(req.id)}
                             onApprove={() => openApprove(req)}
                             onReject={() => openReject(req)}
+                            canApprove={canApproveRequests}
+                            canReject={canRejectRequests}
                             onPreview={(attachments, startIndex) => {
                                 setPreviewState({ attachments, startIndex });
                                 setShowPreviewModal(true);
@@ -549,8 +579,9 @@ export default function OnlineAttendanceApproval({ requests: initialRequests, fi
             {/* ════════════════════════════════════════════════════════════
                  APPROVE MODAL
                 ════════════════════════════════════════════════════════════ */}
-            <Modal show={showApproveModal} onClose={() => setShowApproveModal(false)} maxWidth="lg">
-                <form onSubmit={handleApprove}>
+            {canApproveRequests && (
+                <Modal show={showApproveModal} onClose={() => setShowApproveModal(false)} maxWidth="lg">
+                    <form onSubmit={handleApprove}>
                     {/* Header */}
                     <div className="px-6 pt-6 pb-4 border-b border-gray-100 dark:border-gray-700">
                         <div className="flex items-center gap-3">
@@ -631,14 +662,16 @@ export default function OnlineAttendanceApproval({ requests: initialRequests, fi
                             )}
                         </button>
                     </div>
-                </form>
-            </Modal>
+                    </form>
+                </Modal>
+            )}
 
             {/* ════════════════════════════════════════════════════════════
                  REJECT MODAL
                 ════════════════════════════════════════════════════════════ */}
-            <Modal show={showRejectModal} onClose={() => setShowRejectModal(false)} maxWidth="lg">
-                <form onSubmit={handleReject}>
+            {canRejectRequests && (
+                <Modal show={showRejectModal} onClose={() => setShowRejectModal(false)} maxWidth="lg">
+                    <form onSubmit={handleReject}>
                     {/* Header */}
                     <div className="px-6 pt-6 pb-4 border-b border-gray-100 dark:border-gray-700">
                         <div className="flex items-center gap-3">
@@ -702,8 +735,9 @@ export default function OnlineAttendanceApproval({ requests: initialRequests, fi
                             {rejectForm.processing ? 'Rejecting…' : 'Reject Request'}
                         </DangerButton>
                     </div>
-                </form>
-            </Modal>
+                    </form>
+                </Modal>
+            )}
 
             <AttachmentPreviewModal
                 show={showPreviewModal}

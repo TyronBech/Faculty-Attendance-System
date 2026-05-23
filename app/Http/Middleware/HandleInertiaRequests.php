@@ -4,8 +4,10 @@ namespace App\Http\Middleware;
 
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Middleware;
+use Spatie\Permission\Models\Permission;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -32,11 +34,35 @@ class HandleInertiaRequests extends Middleware
     public function share(Request $request): array
     {
         // Resolve the authenticated user from either the admin or web guard (if any)
-        $authenticatedUser = Auth::guard('admin')->user() ?? Auth::guard('web')->user();
+        $guard = null;
+        $authenticatedUser = null;
+
+        if (Auth::guard('admin')->check()) {
+            $guard = 'admin';
+            $authenticatedUser = Auth::guard('admin')->user();
+        } elseif (Auth::guard('web')->check()) {
+            $guard = 'web';
+            $authenticatedUser = Auth::guard('web')->user();
+        }
 
         $user = null;
+        $permissions = [];
+
         if ($authenticatedUser) {
             $user = User::with(['faculty', 'admin'])->find($authenticatedUser->id);
+
+            if ($user && $guard) {
+                /** @var Collection<int, Permission> $userPermissions */
+                $userPermissions = $user->getPermissionsViaRoles()
+                    ->merge($user->permissions)
+                    ->filter(fn ($permission) => $permission->guard_name === $guard);
+
+                $permissions = $userPermissions
+                    ->pluck('name')
+                    ->unique()
+                    ->values()
+                    ->all();
+            }
         }
 
         $displayName = $user?->admin?->full_name
@@ -51,6 +77,8 @@ class HandleInertiaRequests extends Middleware
                 'admin' => $user ? $user->admin : null,
                 'display_name' => $displayName,
                 'roles' => $user ? $user->getRoleNames()->toArray() : [],
+                'permissions' => $permissions,
+                'guard' => $guard,
             ],
             'flash' => [
                 'success' => session('success'),
