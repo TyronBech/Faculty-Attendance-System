@@ -6,7 +6,7 @@ const MONTHS = [
     'July', 'August', 'September', 'October', 'November', 'December'
 ];
 
-export default function CustomDatePicker({ value, onChange, placeholder = 'mm/dd/yyyy', id }) {
+export default function CustomDatePicker({ value, onChange, placeholder = 'mm/dd/yyyy', id, disabled = false }) {
     const [isOpen, setIsOpen] = useState(false);
     const [currentMonth, setCurrentMonth] = useState(new Date());
     const dropdownRef = useRef(null);
@@ -105,16 +105,21 @@ export default function CustomDatePicker({ value, onChange, placeholder = 'mm/dd
     return (
         <div className="relative" ref={dropdownRef}>
             <div 
-                className="relative cursor-pointer"
-                onClick={() => setIsOpen(!isOpen)}
+                className={`relative ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+                onClick={() => {
+                    if (!disabled) {
+                        setIsOpen(!isOpen);
+                    }
+                }}
             >
                 <input
                     id={id}
                     type="text"
                     readOnly
+                    disabled={disabled}
                     value={displayValue}
                     placeholder={placeholder}
-                    className="w-full rounded-xl border-gray-300 shadow-sm focus:border-[#7a1315] focus:ring-[#7a1315] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:focus:border-red-500 dark:focus:ring-red-500 dark:[color-scheme:dark] transition-all duration-300 cursor-pointer"
+                    className={`w-full rounded-xl border-gray-300 shadow-sm focus:border-[#7a1315] focus:ring-[#7a1315] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:focus:border-red-500 dark:focus:ring-red-500 dark:[color-scheme:dark] transition-all duration-300 ${disabled ? 'cursor-not-allowed bg-gray-100 dark:bg-gray-800' : 'cursor-pointer'}`}
                 />
                 <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
                     <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -123,7 +128,7 @@ export default function CustomDatePicker({ value, onChange, placeholder = 'mm/dd
                 </div>
             </div>
 
-            {isOpen && (
+            {isOpen && !disabled && (
                 <div className="absolute z-50 mt-2 p-4 rounded-xl border border-gray-700 bg-[#1e232d] shadow-xl w-[280px]">
                     {/* Header */}
                     <div className="flex items-center justify-between mb-4">
