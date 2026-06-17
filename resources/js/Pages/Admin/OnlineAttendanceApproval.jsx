@@ -23,6 +23,18 @@ const CLASS_TYPE_BADGE = {
     asynchronous: 'bg-purple-50 text-purple-700 ring-purple-600/20 dark:bg-purple-900/20 dark:text-purple-400',
 };
 
+const formatEvidenceSummary = (evidence) => {
+    if (!evidence?.source) {
+        return 'Not detected';
+    }
+
+    if (!evidence.detected_at_display) {
+        return evidence.source_label;
+    }
+
+    return `${evidence.source_label} - ${evidence.detected_at_display}`;
+};
+
 const formatDateTime = (dateString) => {
     if (!dateString) return '';
     try {
@@ -186,6 +198,16 @@ function ApprovalCard({
                                     <p><span className="font-semibold">Date:</span> {request.attendance_date}</p>
                                     <p><span className="font-semibold">Time In:</span> {request.time_in}</p>
                                     <p><span className="font-semibold">Time Out:</span> {request.time_out}</p>
+                                    <p><span className="font-semibold">Time In proof:</span> {formatEvidenceSummary(request.screenshot_in_evidence)}</p>
+                                    {request.screenshot_in_evidence?.original_name && (
+                                        <p><span className="font-semibold">Time In file:</span> {request.screenshot_in_evidence.original_name}</p>
+                                    )}
+                                    {request.screenshot_out && (
+                                        <p><span className="font-semibold">Time Out proof:</span> {formatEvidenceSummary(request.screenshot_out_evidence)}</p>
+                                    )}
+                                    {request.screenshot_out_evidence?.original_name && (
+                                        <p><span className="font-semibold">Time Out file:</span> {request.screenshot_out_evidence.original_name}</p>
+                                    )}
                                 </div>
                             </div>
                         </div>

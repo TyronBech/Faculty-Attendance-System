@@ -55,6 +55,142 @@ const CLASS_TYPE_STYLES = {
     asynchronous: 'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-400/10 dark:text-amber-400 dark:ring-amber-400/30',
 };
 
+const formatEvidenceSummary = (evidence) => {
+    if (!evidence?.source) {
+        return 'Not detected';
+    }
+
+    if (!evidence.detected_at_display) {
+        return evidence.source_label;
+    }
+
+    return `${evidence.source_label} - ${evidence.detected_at_display}`;
+};
+
+const formatTimeForInput = (date) => {
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+
+    return `${hours}:${minutes}`;
+};
+
+const detectTimeFromFilename = (filename, attendanceDate) => {
+    const baseName = filename.replace(/\.[^.]+$/, '');
+    const dateTimeMatch = baseName.match(/(\d{4}-\d{2}-\d{2}|\d{8})[\s_-]*(\d{2})[:.-]?(\d{2})(?:[:.-]?(\d{2}))?/i);
+
+    if (dateTimeMatch) {
+        const rawDate = dateTimeMatch[1];
+        const normalizedDate = rawDate.includes('-')
+            ? rawDate
+            : `${rawDate.slice(0, 4)}-${rawDate.slice(4, 6)}-${rawDate.slice(6, 8)}`;
+
+        if (!attendanceDate || normalizedDate === attendanceDate) {
+            return `${dateTimeMatch[2]}:${dateTimeMatch[3]}`;
+        }
+    }
+
+    const timeOnlyMatch = baseName.match(/(?:^|[\s_-])(\d{2})[:.-](\d{2})(?:[:.-](\d{2}))?(?:$|[\s_-])/);
+
+    if (timeOnlyMatch && attendanceDate) {
+        return `${timeOnlyMatch[1]}:${timeOnlyMatch[2]}`;
+    }
+
+    return null;
+};
+
+const formatDateForInput = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+
+    return `${year}-${month}-${day}`;
+};
+
+const detectDateFromFilename = (filename) => {
+    const baseName = filename.replace(/\.[^.]+$/, '');
+    const match = baseName.match(/(\d{4}-\d{2}-\d{2}|\d{8})/i);
+
+    if (!match) {
+        return null;
+    }
+
+    const rawDate = match[1];
+
+    return rawDate.includes('-')
+        ? rawDate
+        : `${rawDate.slice(0, 4)}-${rawDate.slice(4, 6)}-${rawDate.slice(6, 8)}`;
+};
+
+const detectScreenshotDateTime = (file, fallbackAttendanceDate) => {
+    const filenameDate = detectDateFromFilename(file.name);
+    const dateForFilenameTime = filenameDate || fallbackAttendanceDate;
+    const timeFromFilename = detectTimeFromFilename(file.name, dateForFilenameTime);
+
+    if (filenameDate || timeFromFilename) {
+        return {
+            attendanceDate: filenameDate || '',
+            timeIn: timeFromFilename || '',
+            messageParts: [
+                filenameDate ? `date from filename` : null,
+                timeFromFilename ? `time from filename` : null,
+            ].filter(Boolean),
+            messageTarget: file.name,
+        };
+    }
+
+    if (file.lastModified) {
+        const modifiedAt = new Date(file.lastModified);
+
+        return {
+            attendanceDate: formatDateForInput(modifiedAt),
+            timeIn: formatTimeForInput(modifiedAt),
+            messageParts: ['date and time from the original file timestamp'],
+            messageTarget: formatDateTime(modifiedAt.toISOString()),
+        };
+    }
+
+    return {
+        attendanceDate: '',
+        timeIn: '',
+        messageParts: ['no usable date or time was found in the screenshot file'],
+        messageTarget: '',
+    };
+};
+
+const buildComparableDateTime = (attendanceDate, timeValue) => {
+    if (!attendanceDate || !timeValue) {
+        return null;
+    }
+
+    return new Date(`${attendanceDate}T${timeValue}:00`);
+};
+
+const floorDateToMinute = (date) => {
+    if (!date) {
+        return null;
+    }
+
+    const rounded = new Date(date);
+    rounded.setSeconds(0, 0);
+
+    return rounded;
+};
+
+const isEarlierThanDetectedMinute = (submittedTimeString, attendanceDate, detectedTimeString, detectedDate) => {
+    if (!submittedTimeString || !attendanceDate || !detectedTimeString || !detectedDate) {
+        return false;
+    }
+
+    const submittedDateTime = floorDateToMinute(buildComparableDateTime(attendanceDate, submittedTimeString));
+    const detectedDateTime = floorDateToMinute(buildComparableDateTime(detectedDate, detectedTimeString));
+
+    if (!submittedDateTime || !detectedDateTime) {
+        return false;
+    }
+
+    return submittedDateTime < detectedDateTime;
+};
+
 export default function OnlineAttendance({ requests: initialRequests, scheduleDetails, filters }) {
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showCancelModal, setShowCancelModal] = useState(false);
@@ -77,6 +213,7 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
     const [supportingDocuments, setSupportingDocuments] = useState([]);
     const [documentUploadError, setDocumentUploadError] = useState(null);
     const [attendanceCheck, setAttendanceCheck] = useState({ checked: false, canSubmit: true, hasAttendance: false, hasPendingRequest: false });
+    const [screenshotDetection, setScreenshotDetection] = useState(null);
     const fileInRef = useRef(null);
     const fileOutRef = useRef(null);
 
@@ -118,7 +255,9 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
         time_in: '',
         time_out: '',
         screenshot_in: null,
+        screenshot_in_last_modified_at: null,
         screenshot_out: null,
+        screenshot_out_last_modified_at: null,
         remarks: '',
     });
 
@@ -127,7 +266,32 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
         if (!file) return;
 
         createForm.setData(field, file);
+        createForm.setData(`${field}_last_modified_at`, file.lastModified || null);
         createForm.clearErrors(field);
+
+        if (field === 'screenshot_in') {
+            const detection = detectScreenshotDateTime(file, createForm.data.attendance_date);
+            const message = detection.messageTarget
+                ? `Suggested ${detection.messageParts.join(' and ')}: ${detection.messageTarget}`
+                : 'No usable date or time was found in the screenshot file. You can enter them manually now.';
+
+            setScreenshotDetection({
+                attendanceDate: detection.attendanceDate,
+                timeIn: detection.timeIn,
+                message,
+            });
+
+            if (detection.attendanceDate) {
+                createForm.setData('attendance_date', detection.attendanceDate);
+                createForm.clearErrors('attendance_date');
+                checkAttendance(detection.attendanceDate);
+            }
+
+            if (detection.timeIn) {
+                createForm.setData('time_in', detection.timeIn);
+                createForm.clearErrors('time_in');
+            }
+        }
 
         // Generate preview
         const reader = new FileReader();
@@ -153,6 +317,18 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
         if (!createForm.data.schedule_detail_id) {
             createForm.setError('schedule_detail_id', 'Please select an official class, temporary substitute, or internal duty.');
             toast.error('Please select a schedule before submitting.');
+            return;
+        }
+
+        const detectedDateTime = floorDateToMinute(buildComparableDateTime(
+            screenshotDetection?.attendanceDate || createForm.data.attendance_date,
+            screenshotDetection?.timeIn,
+        ));
+
+        if (detectedDateTime && isEarlierThanDetectedMinute(createForm.data.time_in, createForm.data.attendance_date, screenshotDetection?.timeIn, screenshotDetection?.attendanceDate || createForm.data.attendance_date)) {
+            const message = `Time In cannot be earlier than the detected screenshot time of ${formatDateTime(detectedDateTime.toISOString())}.`;
+            createForm.setError('time_in', message);
+            toast.error(message);
             return;
         }
 
@@ -182,8 +358,14 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
         if (createForm.data.screenshot_in) {
             formData.append('screenshot_in', createForm.data.screenshot_in);
         }
+        if (createForm.data.screenshot_in_last_modified_at) {
+            formData.append('screenshot_in_last_modified_at', String(createForm.data.screenshot_in_last_modified_at));
+        }
         if (createForm.data.screenshot_out) {
             formData.append('screenshot_out', createForm.data.screenshot_out);
+        }
+        if (createForm.data.screenshot_out_last_modified_at) {
+            formData.append('screenshot_out_last_modified_at', String(createForm.data.screenshot_out_last_modified_at));
         }
         
         // Add supporting documents in the correct format for the backend
@@ -202,6 +384,7 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
                 createForm.reset();
                 setPreviewIn(null);
                 setPreviewOut(null);
+                setScreenshotDetection(null);
                 setSupportingDocuments([]);
                 setDocumentUploadError(null);
                 fetchRequests(filterStatus, 1);
@@ -223,6 +406,7 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
         createForm.clearErrors();
         setPreviewIn(null);
         setPreviewOut(null);
+        setScreenshotDetection(null);
         setSupportingDocuments([]);
         setDocumentUploadError(null);
         setAttendanceCheck({ checked: false, canSubmit: true, hasAttendance: false, hasPendingRequest: false });
@@ -469,50 +653,6 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
                             <InputError message={createForm.errors.class_type} />
                         </div>
 
-                        {/* Date */}
-                        <div>
-                            <InputLabel htmlFor="attendance_date">Date of Class <span className="text-red-500">*</span></InputLabel>
-                            <CustomDatePicker
-                                id="attendance_date"
-                                value={createForm.data.attendance_date}
-                                onChange={(val) => {
-                                    createForm.setData('attendance_date', val);
-                                    createForm.clearErrors('attendance_date');
-                                    checkAttendance(val);
-                                }}
-                            />
-                            <InputError message={createForm.errors.attendance_date} />
-                            {attendanceCheck.checked && (attendanceCheck.hasAttendance || attendanceCheck.hasPendingRequest) && (
-                                <p className="mt-1 text-xs font-bold text-amber-600 dark:text-amber-400">
-                                    {attendanceCheck.hasAttendance
-                                        ? 'Note: You already have an attendance record for this date.'
-                                        : 'Note: You already have a pending request for this date.'}
-                                </p>
-                            )}
-                        </div>
-
-                        {/* Time In & Out */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div>
-                                <InputLabel htmlFor="time_in">Time In <span className="text-red-500">*</span></InputLabel>
-                                <CustomTimePicker
-                                    id="time_in"
-                                    value={createForm.data.time_in}
-                                    onChange={(val) => { createForm.setData('time_in', val); createForm.clearErrors('time_in'); }}
-                                />
-                                <InputError message={createForm.errors.time_in} />
-                            </div>
-                            <div>
-                                <InputLabel value="Time Out (optional)" htmlFor="time_out" />
-                                <CustomTimePicker
-                                    id="time_out"
-                                    value={createForm.data.time_out}
-                                    onChange={(val) => { createForm.setData('time_out', val); createForm.clearErrors('time_out'); }}
-                                />
-                                <InputError message={createForm.errors.time_out} />
-                            </div>
-                        </div>
-
                         {/* Screenshot: Time In */}
                         <div>
                             <InputLabel>Screenshot — Time In (proof) <span className="text-red-500">*</span></InputLabel>
@@ -540,6 +680,76 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
                                 onChange={(e) => handleFileChange('screenshot_in', e)}
                             />
                             <InputError message={createForm.errors.screenshot_in} />
+                            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                                Upload the screenshot first. The form will suggest a Time In from the filename or original file timestamp, and the server will still run the full final detection when you submit.
+                            </p>
+                        </div>
+
+                        {/* Date */}
+                        <div>
+                            <InputLabel htmlFor="attendance_date">Date of Class <span className="text-red-500">*</span></InputLabel>
+                            <CustomDatePicker
+                                id="attendance_date"
+                                disabled={!createForm.data.screenshot_in}
+                                value={createForm.data.attendance_date}
+                                onChange={(val) => {
+                                    createForm.setData('attendance_date', val);
+                                    createForm.clearErrors('attendance_date');
+                                    checkAttendance(val);
+                                }}
+                            />
+                            <InputError message={createForm.errors.attendance_date} />
+                            {!createForm.data.screenshot_in ? (
+                                <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                                    Upload the Time In screenshot first to unlock this field.
+                                </p>
+                            ) : screenshotDetection?.attendanceDate ? (
+                                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                                    Date suggested from the uploaded screenshot evidence.
+                                </p>
+                            ) : null}
+                            {attendanceCheck.checked && (attendanceCheck.hasAttendance || attendanceCheck.hasPendingRequest) && (
+                                <p className="mt-1 text-xs font-bold text-amber-600 dark:text-amber-400">
+                                    {attendanceCheck.hasAttendance
+                                        ? 'Note: You already have an attendance record for this date.'
+                                        : 'Note: You already have a pending request for this date.'}
+                                </p>
+                            )}
+                        </div>
+
+                        {/* Time In & Out */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <InputLabel htmlFor="time_in">Time In <span className="text-red-500">*</span></InputLabel>
+                                <CustomTimePicker
+                                    id="time_in"
+                                    value={createForm.data.time_in}
+                                    disabled={!createForm.data.screenshot_in}
+                                    onChange={(val) => {
+                                        createForm.setData('time_in', val);
+                                        createForm.clearErrors('time_in');
+                                    }}
+                                />
+                                <InputError message={createForm.errors.time_in} />
+                                {!createForm.data.screenshot_in ? (
+                                    <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                                        Upload the Time In screenshot first to unlock this field.
+                                    </p>
+                                ) : screenshotDetection?.message ? (
+                                    <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                                        {screenshotDetection.message}
+                                    </p>
+                                ) : null}
+                            </div>
+                            <div>
+                                <InputLabel value="Time Out (optional)" htmlFor="time_out" />
+                                <CustomTimePicker
+                                    id="time_out"
+                                    value={createForm.data.time_out}
+                                    onChange={(val) => { createForm.setData('time_out', val); createForm.clearErrors('time_out'); }}
+                                />
+                                <InputError message={createForm.errors.time_out} />
+                            </div>
                         </div>
 
                         {/* Screenshot: Time Out */}
@@ -569,6 +779,9 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
                                 onChange={(e) => handleFileChange('screenshot_out', e)}
                             />
                             <InputError message={createForm.errors.screenshot_out} />
+                            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                                Time Out detection uses the same fallback order. If no screenshot is uploaded, only your manual Time Out entry will be used.
+                            </p>
                         </div>
 
                         {/* Remarks */}
@@ -785,6 +998,10 @@ function RequestCard({ req, onCancel, onOpenScreenshot }) {
                                     <p><span className="font-semibold">Date:</span> {req.attendance_date}</p>
                                     <p><span className="font-semibold">Time In:</span> {req.time_in}</p>
                                     <p><span className="font-semibold">Time Out:</span> {req.time_out}</p>
+                                    <p><span className="font-semibold">Time In proof:</span> {formatEvidenceSummary(req.screenshot_in_evidence)}</p>
+                                    {req.screenshot_out && (
+                                        <p><span className="font-semibold">Time Out proof:</span> {formatEvidenceSummary(req.screenshot_out_evidence)}</p>
+                                    )}
                                 </div>
                             </div>
 
