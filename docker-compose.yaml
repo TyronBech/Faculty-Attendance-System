@@ -34,7 +34,7 @@ services:
       dockerfile: Dockerfile.nginx
     restart: unless-stopped
     ports:
-      - "8089:80"
+      - "8100:80"
     volumes:
       - laravel_storage:/var/www/html/storage:ro
     depends_on:
