@@ -5,9 +5,9 @@ namespace App\Services;
 use App\Jobs\SyncImportBatchJob;
 use App\Models\Agent;
 use App\Models\BiometricLog;
+use App\Models\Faculty;
 use App\Models\ImportBatch;
 use Carbon\Carbon;
-use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
@@ -46,51 +46,70 @@ class BiometricLogIngestionService
             'errors' => [],
         ];
 
-        DB::transaction(function () use ($logs, $deviceId, $batch, &$summary): void {
-            foreach ($logs as $index => $log) {
-                $normalized = $this->normalizeLog($log, $deviceId);
+        $normalizedRows = [];
 
-                if ($normalized['error'] !== null) {
-                    $summary['failed']++;
-                    $summary['errors'][] = 'Log '.($index + 1).': '.$normalized['error'];
+        foreach ($logs as $index => $log) {
+            $normalized = $this->normalizeLog($log, $deviceId);
 
+            if ($normalized['error'] !== null) {
+                $summary['failed']++;
+                $summary['errors'][] = 'Log '.($index + 1).': '.$normalized['error'];
+
+                continue;
+            }
+
+            $normalizedRows[] = [
+                ...$normalized['data'],
+                'source_index' => $index,
+            ];
+        }
+
+        $facultyIds = Faculty::query()
+            ->whereIn('biometric_id', array_values(array_unique(array_column($normalizedRows, 'biometric_id'))))
+            ->pluck('biometric_id')
+            ->mapWithKeys(static fn (string $biometricId): array => [$biometricId => true])
+            ->all();
+
+        $insertableRows = [];
+
+        foreach ($normalizedRows as $row) {
+            if (! isset($facultyIds[$row['biometric_id']])) {
+                $summary['failed']++;
+                $summary['errors'][] = 'Log '.($row['source_index'] + 1).': biometric ID does not match a faculty record.';
+
+                continue;
+            }
+
+            unset($row['source_index']);
+            $insertableRows[] = $row;
+        }
+
+        DB::transaction(function () use ($insertableRows, $batch, &$summary): void {
+            $restoredFingerprints = $this->restoreSoftDeletedBiometricLogs($batch, $insertableRows);
+            $timestamp = now();
+            $rowsToInsert = [];
+
+            foreach ($insertableRows as $row) {
+                if (isset($restoredFingerprints[$this->logFingerprint($row)])) {
                     continue;
                 }
 
-                try {
-                    BiometricLog::create([
-                        'biometric_id' => $normalized['data']['biometric_id'],
-                        'log_datetime' => $normalized['data']['log_datetime'],
-                        'log_type' => $normalized['data']['log_type'],
-                        'device_id' => $normalized['data']['device_id'],
-                        'import_batch_id' => $batch->id,
-                        'is_processed' => false,
-                    ]);
-
-                    $summary['processed']++;
-                } catch (QueryException $e) {
-                    if ($this->isDuplicateKeyException($e)) {
-                        $restored = $this->restoreSoftDeletedBiometricLog(
-                            $batch,
-                            $normalized['data']['biometric_id'],
-                            $normalized['data']['log_datetime'],
-                            $normalized['data']['log_type'],
-                            $normalized['data']['device_id']
-                        );
-
-                        if ($restored) {
-                            $summary['processed']++;
-                        } else {
-                            $summary['duplicates']++;
-                        }
-
-                        continue;
-                    }
-
-                    $summary['failed']++;
-                    $summary['errors'][] = 'Log '.($index + 1).': failed to insert record.';
-                }
+                $rowsToInsert[] = [
+                    ...$row,
+                    'import_batch_id' => $batch->id,
+                    'is_processed' => false,
+                    'created_at' => $timestamp,
+                    'updated_at' => $timestamp,
+                ];
             }
+
+            $inserted = $rowsToInsert === []
+                ? 0
+                : BiometricLog::query()->insertOrIgnore($rowsToInsert);
+
+            $restored = count($restoredFingerprints);
+            $summary['processed'] = $inserted + $restored;
+            $summary['duplicates'] = count($insertableRows) - $summary['processed'];
         });
 
         $status = $summary['processed'] > 0 ? 'pending' : ($summary['failed'] > 0 ? 'failed' : 'pending');
@@ -340,33 +359,47 @@ class BiometricLogIngestionService
         return "imports/biometric-logs/api/{$source}/{$deviceSegment}-{$stamp}.json";
     }
 
-    private function restoreSoftDeletedBiometricLog(
-        ImportBatch $batch,
-        string $biometricId,
-        string $parsedDateTime,
-        string $logType,
-        ?string $deviceId,
-    ): bool {
-        $softDeletedLog = BiometricLog::withTrashed()
-            ->where('biometric_id', $biometricId)
-            ->where('log_datetime', $parsedDateTime)
-            ->where('log_type', $logType)
-            ->whereNotNull('deleted_at')
-            ->first();
-
-        if (! $softDeletedLog) {
-            return false;
+    /**
+     * @param  array<int, array{biometric_id: string, log_datetime: string, log_type: string, device_id: ?string}>  $rows
+     * @return array<string, true>
+     */
+    private function restoreSoftDeletedBiometricLogs(ImportBatch $batch, array $rows): array
+    {
+        if ($rows === []) {
+            return [];
         }
 
-        $softDeletedLog->restore();
+        $softDeletedLogs = BiometricLog::onlyTrashed()
+            ->whereIn('biometric_id', array_values(array_unique(array_column($rows, 'biometric_id'))))
+            ->whereIn('log_datetime', array_values(array_unique(array_column($rows, 'log_datetime'))))
+            ->whereIn('log_type', array_values(array_unique(array_column($rows, 'log_type'))))
+            ->get()
+            ->keyBy(fn (BiometricLog $log): string => $this->logFingerprint([
+                'biometric_id' => $log->biometric_id,
+                'log_datetime' => $log->log_datetime->format('Y-m-d H:i:s'),
+                'log_type' => $log->log_type,
+            ]));
 
-        $softDeletedLog->update([
-            'device_id' => $deviceId,
-            'import_batch_id' => $batch->id,
-            'is_processed' => false,
-        ]);
+        $restoredFingerprints = [];
 
-        return true;
+        foreach ($rows as $row) {
+            $fingerprint = $this->logFingerprint($row);
+            $softDeletedLog = $softDeletedLogs->get($fingerprint);
+
+            if (! $softDeletedLog || isset($restoredFingerprints[$fingerprint])) {
+                continue;
+            }
+
+            $softDeletedLog->restore();
+            $softDeletedLog->update([
+                'device_id' => $row['device_id'],
+                'import_batch_id' => $batch->id,
+                'is_processed' => false,
+            ]);
+            $restoredFingerprints[$fingerprint] = true;
+        }
+
+        return $restoredFingerprints;
     }
 
     private function parseDateTime(mixed $value): ?string
@@ -451,27 +484,15 @@ class BiometricLogIngestionService
         return $normalized;
     }
 
-    private function isDuplicateKeyException(QueryException $exception): bool
+    /**
+     * @param  array{biometric_id: string, log_datetime: string, log_type: string}  $row
+     */
+    private function logFingerprint(array $row): string
     {
-        $errorInfo = $exception->errorInfo ?? null;
-
-        if (is_array($errorInfo) && count($errorInfo) >= 2) {
-            $sqlState = (string) $errorInfo[0];
-            $driverCode = (string) $errorInfo[1];
-
-            if ($sqlState === '23000' && $driverCode === '1062') {
-                return true;
-            }
-
-            if ($sqlState === '23505') {
-                return true;
-            }
-        }
-
-        $message = strtolower((string) $exception->getMessage());
-
-        return str_contains($message, 'duplicate entry')
-            || str_contains($message, 'unique constraint')
-            || str_contains($message, 'unique violation');
+        return implode('|', [
+            $row['biometric_id'],
+            $row['log_datetime'],
+            $row['log_type'],
+        ]);
     }
 }

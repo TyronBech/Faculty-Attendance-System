@@ -101,6 +101,24 @@ class BiometricLogIngestionTest extends TestCase
             ->assertJsonValidationErrors(['logs']);
     }
 
+    public function test_more_than_500_logs_returns_422(): void
+    {
+        $agent = Agent::factory()->create();
+
+        Sanctum::actingAs($agent, ['biometric-logs:push']);
+
+        $response = $this->postJson('/api/biometric-logs', [
+            'logs' => array_fill(0, 501, [
+                'id' => '1',
+                'timestamp' => '2026-06-01 08:00:00',
+                'state' => 0,
+            ]),
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['logs']);
+    }
+
     /* ------------------------------------------------------------------ */
     /*  Successful Ingestion */
     /* ------------------------------------------------------------------ */
@@ -209,6 +227,24 @@ class BiometricLogIngestionTest extends TestCase
                 ['id' => '404', 'timestamp' => '2026-06-01 08:00:00', 'state' => 0],
                 ['id' => '404', 'timestamp' => '2026-06-01 17:00:00', 'state' => 1],
             ],
+        ]);
+
+        $response->assertStatus(200)
+            ->assertJsonPath('data.inserted', 1)
+            ->assertJsonPath('data.duplicates', 1);
+    }
+
+    public function test_duplicate_logs_within_the_same_batch_are_counted(): void
+    {
+        $agent = Agent::factory()->create();
+        $faculty = Faculty::factory()->create(['biometric_id' => '405']);
+
+        Sanctum::actingAs($agent, ['biometric-logs:push']);
+
+        $log = ['id' => '405', 'timestamp' => '2026-06-01 08:00:00', 'state' => 0];
+
+        $response = $this->postJson('/api/biometric-logs', [
+            'logs' => [$log, $log],
         ]);
 
         $response->assertStatus(200)

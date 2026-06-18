@@ -35,7 +35,7 @@ class StoreBiometricLogsRequest extends FormRequest
             'branch_id' => ['nullable', 'integer', 'min:1'],
             'source' => ['nullable', 'string', 'max:100'],
             'auto_sync' => ['sometimes', 'boolean'],
-            'logs' => ['required', 'array', 'min:1'],
+            'logs' => ['required', 'array', 'min:1', 'max:500'],
             'logs.*' => ['required', 'array'],
         ];
     }
