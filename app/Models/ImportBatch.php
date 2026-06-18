@@ -21,6 +21,7 @@ class ImportBatch extends Model
         'duplicate_records',
         'status',
         'imported_by',
+        'agent_id',
         'started_at',
         'completed_at',
         'error_log',
@@ -39,12 +40,17 @@ class ImportBatch extends Model
     }
 
     /* ------------------------------------------------------------------ */
-    /*  Relationships                                                     */
+    /*  Relationships */
     /* ------------------------------------------------------------------ */
 
     public function importedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'imported_by');
+    }
+
+    public function agent(): BelongsTo
+    {
+        return $this->belongsTo(Agent::class);
     }
 
     public function biometricLogs(): HasMany
