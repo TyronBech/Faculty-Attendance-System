@@ -7,6 +7,7 @@ enum Role: string
     // ── Admin-guard roles ──────────────────────────────────────────────────
     case SuperAdmin = 'super_admin';
     case Admin      = 'admin';
+    case HrAdmin    = 'hr_admin';
     case HrStaff    = 'hr_staff';
     case HeadAcademicProgram = 'head_academic_program';
 
@@ -36,6 +37,7 @@ enum Role: string
         return match ($this) {
             self::SuperAdmin => 'Super Admin',
             self::Admin      => 'Admin',
+            self::HrAdmin    => 'HR Admin',
             self::HrStaff    => 'HR Staff',
             self::HeadAcademicProgram => 'Head of Academic Program',
             self::Faculty    => 'Faculty',
@@ -48,6 +50,7 @@ enum Role: string
         return match ($this) {
             self::SuperAdmin            => Permission::adminPermissions(),
             self::Admin                 => Permission::adminPermissions(),
+            self::HrAdmin               => Permission::hrStaffPermissions(),
             self::HrStaff               => Permission::hrStaffPermissions(),
             self::HeadAcademicProgram   => Permission::headAcademicProgramPermissions(),
             self::Faculty               => Permission::webPermissions(),

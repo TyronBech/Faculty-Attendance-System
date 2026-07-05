@@ -9,7 +9,7 @@ use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Protects routes that require an authenticated admin-guard user.
- * Applies to: super_admin, admin, hr_staff roles (guard_name = 'admin').
+ * Applies to admin-guard users such as super_admin, admin, hr_admin, hr_staff, and program heads.
  */
 class EnsureAdminAuthenticated
 {

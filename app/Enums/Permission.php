@@ -61,6 +61,7 @@ enum Permission: string
 
     // ── DTR ────────────────────────────────────────────────────────────────
     case GenerateDtr = 'generate dtr';
+    case ManageHrDtrSync = 'manage hr dtr sync';
 
     // ── Leaves ─────────────────────────────────────────────────────────────
     // case ViewLeaves             = 'view leaves';
@@ -117,6 +118,7 @@ enum Permission: string
             // self::EditAttendance,
             // self::DeleteAttendance,
             self::GenerateDtr,
+            self::ManageHrDtrSync,
             // self::ViewLeaves,
             // self::CreateLeaves,
             // self::EditLeaves,
@@ -179,6 +181,7 @@ enum Permission: string
             // self::EditAttendance,
             // self::DeleteAttendance,
             self::GenerateDtr,
+            self::ManageHrDtrSync,
             // self::ViewLeaves,
             // self::CreateLeaves,
             // self::EditLeaves,

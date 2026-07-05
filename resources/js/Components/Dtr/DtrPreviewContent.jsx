@@ -1,3 +1,5 @@
+import { Fragment } from 'react';
+
 const colorMap = {
     red: 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800',
     amber: 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800',
@@ -15,6 +17,42 @@ function SummaryCard({ label, value, sub, color = 'red' }) {
             {sub && <p className="mt-0.5 text-xs opacity-70">{sub}</p>}
         </div>
     );
+}
+
+function formatMinutes(value) {
+    const minutes = Number(value ?? 0);
+
+    return minutes > 0 ? `${minutes} min` : '';
+}
+
+function legacySlotsForRow(row, prefix) {
+    return [
+        {
+            in: row[`${prefix}morning_in`] ?? row.morning_in ?? '',
+            out: row[`${prefix}morning_out`] ?? row.morning_out ?? '',
+            is_absent: Boolean(row[`${prefix}morning_absent`]),
+        },
+        {
+            in: row[`${prefix}afternoon_in`] ?? row.afternoon_in ?? '',
+            out: row[`${prefix}afternoon_out`] ?? row.afternoon_out ?? '',
+            is_absent: Boolean(row[`${prefix}afternoon_absent`]),
+        },
+        {
+            in: row[`${prefix}night_in`] ?? row.night_in ?? '',
+            out: row[`${prefix}night_out`] ?? row.night_out ?? '',
+            is_absent: Boolean(row[`${prefix}night_absent`]),
+        },
+    ];
+}
+
+function slotsForRow(row, prefix) {
+    const slots = Array.isArray(row[`${prefix}slots`]) ? row[`${prefix}slots`] : legacySlotsForRow(row, prefix);
+
+    return slots.map((slot) => ({
+        in: slot?.in ?? '',
+        out: slot?.out ?? '',
+        is_absent: Boolean(slot?.is_absent),
+    }));
 }
 
 export function DtrSummary({ summary }) {
@@ -40,6 +78,10 @@ export function DtrSummary({ summary }) {
 export function DtrTimeLog({ rows, totalHours, mode = 'official', onModeChange }) {
     const activePrefix = mode === 'internal' ? 'internal_' : 'official_';
     const totalHoursText = Number(rows.reduce((total, row) => total + Number(row[`${activePrefix}total_hours_rendered`] ?? row.total_hours_rendered ?? 0), 0)).toFixed(2);
+    const maxSlots = Math.max(3, ...rows.map((row) => slotsForRow(row, activePrefix).length));
+    const slotLabels = maxSlots <= 3
+        ? ['Morning', 'Afternoon', 'Night']
+        : Array.from({ length: maxSlots }, (_, index) => `Slot ${index + 1}`);
 
     return (
         <div>
@@ -77,9 +119,11 @@ export function DtrTimeLog({ rows, totalHours, mode = 'official', onModeChange }
                     <thead>
                         <tr className="bg-gray-50 text-gray-600 dark:bg-gray-800 dark:text-gray-400">
                             <th className="w-12 px-3 py-2 text-center font-semibold">Day</th>
-                            <th className="px-2 py-2 text-center font-semibold" colSpan={2}>Morning</th>
-                            <th className="px-2 py-2 text-center font-semibold" colSpan={2}>Afternoon</th>
-                            <th className="px-2 py-2 text-center font-semibold" colSpan={2}>Night</th>
+                            {slotLabels.map((label) => (
+                                <th key={label} className="px-2 py-2 text-center font-semibold" colSpan={2}>
+                                    {label}
+                                </th>
+                            ))}
                             <th className="w-20 px-2 py-2 text-center font-semibold">Total</th>
                             <th className="w-20 px-2 py-2 text-center font-semibold">Required</th>
                             <th className="w-16 px-2 py-2 text-center font-semibold">Tardy</th>
@@ -87,12 +131,12 @@ export function DtrTimeLog({ rows, totalHours, mode = 'official', onModeChange }
                         </tr>
                         <tr className="border-b border-gray-200 bg-gray-50 text-xs text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-500">
                             <th></th>
-                            <th className="px-2 py-1 font-medium">IN</th>
-                            <th className="px-2 py-1 font-medium">OUT</th>
-                            <th className="px-2 py-1 font-medium">IN</th>
-                            <th className="px-2 py-1 font-medium">OUT</th>
-                            <th className="px-2 py-1 font-medium">IN</th>
-                            <th className="px-2 py-1 font-medium">OUT</th>
+                            {slotLabels.map((label) => (
+                                <Fragment key={label}>
+                                    <th className="px-2 py-1 font-medium">IN</th>
+                                    <th className="px-2 py-1 font-medium">OUT</th>
+                                </Fragment>
+                            ))}
                             <th></th>
                             <th></th>
                             <th></th>
@@ -109,16 +153,9 @@ export function DtrTimeLog({ rows, totalHours, mode = 'official', onModeChange }
                             const hasTardy = tardyMinutes > 0 || undertimeMinutes > 0;
                             const displayDay = mode === 'internal' ? (row.internal_day ?? row.day) : (row.official_day ?? row.day);
                             const dayShift = mode === 'internal' ? (row.internal_day_shift ?? 0) : 0;
-                            const morningIn = row[`${prefix}morning_in`] ?? row.morning_in ?? '';
-                            const morningOut = row[`${prefix}morning_out`] ?? row.morning_out ?? '';
-                            const afternoonIn = row[`${prefix}afternoon_in`] ?? row.afternoon_in ?? '';
-                            const afternoonOut = row[`${prefix}afternoon_out`] ?? row.afternoon_out ?? '';
-                            const nightIn = row[`${prefix}night_in`] ?? row.night_in ?? '';
-                            const nightOut = row[`${prefix}night_out`] ?? row.night_out ?? '';
-                            const morningAbsent = Boolean(row[`${prefix}morning_absent`]);
-                            const afternoonAbsent = Boolean(row[`${prefix}afternoon_absent`]);
-                            const nightAbsent = Boolean(row[`${prefix}night_absent`]);
-                            const hasTimes = Boolean(morningIn || morningOut || afternoonIn || afternoonOut || nightIn || nightOut);
+                            const slots = slotsForRow(row, prefix);
+                            const paddedSlots = Array.from({ length: maxSlots }, (_, index) => slots[index] ?? { in: '', out: '', is_absent: false });
+                            const hasTimes = slots.some((slot) => slot.in || slot.out);
                             const totalHours = Number(row[`${prefix}total_hours_rendered`] ?? row.total_hours_rendered ?? 0).toFixed(2);
                             const requiredHours = Number(row[`${prefix}required_hours`] ?? row.required_hours ?? 0).toFixed(2);
 
@@ -149,29 +186,21 @@ export function DtrTimeLog({ rows, totalHours, mode = 'official', onModeChange }
                                         </div>
                                     </td>
                                     {isHoliday && !hasTimes ? (
-                                        <td colSpan={6} className="px-2 py-1.5 text-center text-xs italic">
+                                        <td colSpan={maxSlots * 2} className="px-2 py-1.5 text-center text-xs italic">
                                             {row.holiday_label || 'HOLIDAY'}
                                         </td>
                                     ) : (
                                         <>
-                                            <td className={`px-2 py-1.5 text-center text-xs ${morningAbsent ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300 font-semibold' : ''}`}>
-                                                {morningIn}
-                                            </td>
-                                            <td className={`px-2 py-1.5 text-center text-xs ${morningAbsent ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300 font-semibold' : ''}`}>
-                                                {morningOut}
-                                            </td>
-                                            <td className={`px-2 py-1.5 text-center text-xs ${afternoonAbsent ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300 font-semibold' : ''}`}>
-                                                {afternoonIn}
-                                            </td>
-                                            <td className={`px-2 py-1.5 text-center text-xs ${afternoonAbsent ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300 font-semibold' : ''}`}>
-                                                {afternoonOut}
-                                            </td>
-                                            <td className={`px-2 py-1.5 text-center text-xs ${nightAbsent ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300 font-semibold' : ''}`}>
-                                                {nightIn}
-                                            </td>
-                                            <td className={`px-2 py-1.5 text-center text-xs ${nightAbsent ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300 font-semibold' : ''}`}>
-                                                {nightOut}
-                                            </td>
+                                            {paddedSlots.map((slot, index) => (
+                                                <Fragment key={index}>
+                                                    <td className={`px-2 py-1.5 text-center text-xs ${slot.is_absent ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300 font-semibold' : ''}`}>
+                                                        {slot.in}
+                                                    </td>
+                                                    <td className={`px-2 py-1.5 text-center text-xs ${slot.is_absent ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300 font-semibold' : ''}`}>
+                                                        {slot.out}
+                                                    </td>
+                                                </Fragment>
+                                            ))}
                                         </>
                                     )}
                                     <td className="px-2 py-1.5 text-center text-xs font-semibold">
@@ -181,10 +210,10 @@ export function DtrTimeLog({ rows, totalHours, mode = 'official', onModeChange }
                                         {requiredHours}
                                     </td>
                                     <td className="px-2 py-1.5 text-center text-xs font-medium">
-                                        {tardyMinutes > 0 ? tardyMinutes : ''}
+                                        {formatMinutes(tardyMinutes)}
                                     </td>
                                     <td className="px-2 py-1.5 text-center text-xs font-medium">
-                                        {undertimeMinutes > 0 ? undertimeMinutes : ''}
+                                        {formatMinutes(undertimeMinutes)}
                                     </td>
                                 </tr>
                             );
@@ -192,7 +221,7 @@ export function DtrTimeLog({ rows, totalHours, mode = 'official', onModeChange }
                     </tbody>
                     <tfoot>
                         <tr className="border-t border-gray-200 bg-gray-50 text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
-                            <td colSpan={7} className="px-3 py-2 text-right text-xs font-semibold">
+                            <td colSpan={1 + (maxSlots * 2)} className="px-3 py-2 text-right text-xs font-semibold">
                                 Totals
                             </td>
                             <td className="px-2 py-2 text-center text-xs font-bold">
@@ -202,10 +231,10 @@ export function DtrTimeLog({ rows, totalHours, mode = 'official', onModeChange }
                                 {Number(rows.reduce((total, row) => total + Number(row[`${activePrefix}required_hours`] ?? row.required_hours ?? 0), 0)).toFixed(2)}
                             </td>
                             <td className="px-2 py-2 text-center text-xs font-bold">
-                                {rows.reduce((total, row) => total + Number(row[`${activePrefix}tardy_minutes`] ?? row.tardy_minutes ?? 0), 0)}
+                                {formatMinutes(rows.reduce((total, row) => total + Number(row[`${activePrefix}tardy_minutes`] ?? row.tardy_minutes ?? 0), 0))}
                             </td>
                             <td className="px-2 py-2 text-center text-xs font-bold">
-                                {rows.reduce((total, row) => total + Number(row[`${activePrefix}undertime_minutes`] ?? row.undertime_minutes ?? 0), 0)}
+                                {formatMinutes(rows.reduce((total, row) => total + Number(row[`${activePrefix}undertime_minutes`] ?? row.undertime_minutes ?? 0), 0))}
                             </td>
                         </tr>
                     </tfoot>

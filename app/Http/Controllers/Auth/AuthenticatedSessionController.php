@@ -48,7 +48,7 @@ class AuthenticatedSessionController extends Controller
         $user = $request->user();
 
         // Block admin-role users from logging in through the faculty portal
-        $adminRoles = ['super_admin', 'admin', 'hr_staff', 'head_academic_program'];
+        $adminRoles = ['super_admin', 'admin', 'hr_admin', 'hr_staff', 'head_academic_program'];
         if ($user->hasAnyRole($adminRoles)) {
             Auth::guard('web')->logout();
             $request->session()->invalidate();

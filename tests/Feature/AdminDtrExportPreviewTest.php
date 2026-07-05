@@ -584,6 +584,10 @@ class AdminDtrExportPreviewTest extends TestCase
 
         $this->assertNotNull($dayRow);
         $this->assertSame('present', $dayRow['status']);
+        $this->assertSame(4, $dayRow['official_slot_count']);
+        $this->assertCount(4, $dayRow['official_slots']);
+        $this->assertSame('10:00AM', $dayRow['official_slots'][3]['in']);
+        $this->assertSame('11:00AM', $dayRow['official_slots'][3]['out']);
         $this->assertContains('10:00AM', [
             $dayRow['official_morning_in'],
             $dayRow['official_afternoon_in'],

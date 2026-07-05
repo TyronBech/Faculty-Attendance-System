@@ -776,6 +776,11 @@ class AdminAttendanceImportController extends Controller
         })->first();
     }
 
+    private function calculateLateMinutes(Carbon $actualTimeIn, Carbon $operationalTimeIn): int
+    {
+        return (int) $operationalTimeIn->diffInMinutes($actualTimeIn);
+    }
+
     /**
      * Create/update attendance records for a faculty on a target date based on imported biometric logs.
      *
@@ -836,24 +841,25 @@ class AdminAttendanceImportController extends Controller
                 continue;
             }
 
-            // Determine official times (apply change-request override when present).
-            if ($change) {
-                $officialTimeIn = Carbon::parse($targetDate->toDateString().' '.Carbon::parse($change->requested_time_in)->format('H:i:s'));
-                $officialTimeOut = Carbon::parse($targetDate->toDateString().' '.Carbon::parse($change->requested_time_out)->format('H:i:s'));
-            } else {
-                $officialTimeIn = Carbon::parse($targetDate->toDateString().' '.Carbon::parse($detail->start_time)->format('H:i:s'));
-                $officialTimeOut = $detail->end_time
-                    ? Carbon::parse($targetDate->toDateString().' '.Carbon::parse($detail->end_time)->format('H:i:s'))
-                    : $officialTimeIn->copy()->addMinutes(max(60, (int) round(((float) ($detail->hours_required ?? 1)) * 60)));
-            }
+            $officialTimeIn = Carbon::parse($targetDate->toDateString().' '.Carbon::parse($detail->start_time)->format('H:i:s'));
+            $officialTimeOut = $detail->end_time
+                ? Carbon::parse($targetDate->toDateString().' '.Carbon::parse($detail->end_time)->format('H:i:s'))
+                : $officialTimeIn->copy()->addMinutes(max(60, (int) round(((float) ($detail->hours_required ?? 1)) * 60)));
+
+            $requestedOperationalTimeIn = $change
+                ? Carbon::parse($targetDate->toDateString().' '.Carbon::parse($change->requested_time_in)->format('H:i:s'))
+                : $officialTimeIn;
+            $requestedOperationalTimeOut = $change
+                ? Carbon::parse($targetDate->toDateString().' '.Carbon::parse($change->requested_time_out)->format('H:i:s'))
+                : $officialTimeOut;
 
             // Select the InternalSchedule row whose device_time_in most closely matches
-            // the official start time, ensuring the correct block is chosen when
+            // the requested operational start, ensuring the correct block is chosen when
             // multiple operational rows exist for the same faculty/schedule/day.
             $internalSchedule = $this->findClosestOperationalSchedule(
                 $faculty,
                 $dayOfWeek,
-                $officialTimeIn,
+                $requestedOperationalTimeIn,
                 $detail->schedule_id
             );
 
@@ -864,9 +870,9 @@ class AdminAttendanceImportController extends Controller
                     : $operationalTimeIn->copy()->addMinutes(max(60, (int) round(((float) ($detail->hours_required ?? 1)) * 60)));
                 $operationalDayOfWeek = $internalSchedule->day_of_week;
             } else {
-                $operationalTimeIn = $officialTimeIn->copy();
-                $operationalTimeOut = $officialTimeOut->copy();
-                $operationalDayOfWeek = $detail->day;
+                $operationalTimeIn = $requestedOperationalTimeIn->copy();
+                $operationalTimeOut = $requestedOperationalTimeOut->copy();
+                $operationalDayOfWeek = $change?->requested_day_of_week ?? $detail->day;
             }
 
             // ── Match biometric logs to this detail's time window ────────────
@@ -920,7 +926,7 @@ class AdminAttendanceImportController extends Controller
 
             if ($actualTimeIn->greaterThan($operationalTimeIn->copy()->addMinutes(self::GRACE_PERIOD_MINUTES))) {
                 $status = 'Late';
-                $lateMinutes = (int) $operationalTimeIn->copy()->addMinutes(self::GRACE_PERIOD_MINUTES)->diffInMinutes($actualTimeIn);
+                $lateMinutes = $this->calculateLateMinutes($actualTimeIn, $operationalTimeIn);
             }
 
             if ($actualTimeOut->lessThan($operationalTimeOut)) {
@@ -1027,7 +1033,7 @@ class AdminAttendanceImportController extends Controller
 
                 if ($actualTimeIn->greaterThan($operationalTimeIn->copy()->addMinutes(self::GRACE_PERIOD_MINUTES))) {
                     $status = 'Late';
-                    $lateMinutes = (int) $operationalTimeIn->copy()->addMinutes(self::GRACE_PERIOD_MINUTES)->diffInMinutes($actualTimeIn);
+                    $lateMinutes = $this->calculateLateMinutes($actualTimeIn, $operationalTimeIn);
                 }
 
                 if ($actualTimeOut->lessThan($operationalTimeOut)) {

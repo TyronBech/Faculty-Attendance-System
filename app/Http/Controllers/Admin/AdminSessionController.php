@@ -66,7 +66,7 @@ class AdminSessionController extends Controller
 
         // Ensure the authenticated user has an admin-level role
         $user = User::findOrFail(Auth::guard('admin')->user()->id);
-        $adminRoles = ['super_admin', 'admin', 'hr_staff', 'head_academic_program'];
+        $adminRoles = ['super_admin', 'admin', 'hr_admin', 'hr_staff', 'head_academic_program'];
 
         if (! $user->hasAnyRole($adminRoles)) {
             Auth::guard('admin')->logout();

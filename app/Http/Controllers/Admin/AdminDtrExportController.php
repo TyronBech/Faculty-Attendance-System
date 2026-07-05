@@ -287,6 +287,8 @@ class AdminDtrExportController extends Controller
 
             $officialSlots = $this->selectDisplaySlots($officialRecords, 'official');
             $internalSlots = $this->selectDisplaySlots($internalRecords, 'internal');
+            $allOfficialSlots = $this->sortDisplaySlots($officialRecords, 'official');
+            $allInternalSlots = $this->sortDisplaySlots($internalRecords, 'internal');
 
             $officialSlotMap = [
                 'morning' => $officialSlots[0] ?? null,
@@ -377,6 +379,8 @@ class AdminDtrExportController extends Controller
                 'official_night_in' => $officialTimes['night']['in'],
                 'official_night_out' => $officialTimes['night']['out'],
                 'official_night_absent' => $officialTimes['night']['is_absent'],
+                'official_slots' => $this->buildDisplaySlotDetails($allOfficialSlots, 'official'),
+                'official_slot_count' => count($officialRecords),
 
                 // Internal tab
                 'internal_morning_in' => $internalTimes['morning']['in'],
@@ -388,6 +392,8 @@ class AdminDtrExportController extends Controller
                 'internal_night_in' => $internalTimes['night']['in'],
                 'internal_night_out' => $internalTimes['night']['out'],
                 'internal_night_absent' => $internalTimes['night']['is_absent'],
+                'internal_slots' => $this->buildDisplaySlotDetails($allInternalSlots, 'internal'),
+                'internal_slot_count' => count($internalRecords),
 
                 'official_tardy_minutes' => (int) $officialTardyMinutes,
                 'official_undertime_minutes' => (int) $officialUndertimeMinutes,
@@ -581,6 +587,27 @@ class AdminDtrExportController extends Controller
     {
         return collect($records)
             ->sortBy(fn ($record): int => $this->slotSortTimestamp($record, $mode))
+            ->values()
+            ->all();
+    }
+
+    private function buildDisplaySlotDetails(array $records, string $mode): array
+    {
+        return collect($records)
+            ->map(function ($record) use ($mode): array {
+                $timeIn = $mode === 'internal'
+                    ? ($record?->operational_time_in ?? $record?->official_time_in)
+                    : $record?->official_time_in;
+                $timeOut = $mode === 'internal'
+                    ? ($record?->operational_time_out ?? $record?->official_time_out)
+                    : $record?->official_time_out;
+
+                return [
+                    'in' => $this->formatTime($timeIn),
+                    'out' => $this->formatTime($timeOut),
+                    'is_absent' => $this->isAbsentSlot($record),
+                ];
+            })
             ->values()
             ->all();
     }

@@ -19,6 +19,11 @@ class AdminDashboardController extends Controller
      */
     public function index(Request $request)
     {
+        if ($request->user('admin')?->hasAnyRole(['hr_admin', 'hr_staff'])
+            && ! $request->user('admin')?->hasAnyRole(['super_admin', 'admin'])) {
+            return redirect()->route('admin.hr.dashboard');
+        }
+
         $now = Carbon::now();
 
         return Inertia::render('Admin/Dashboard', [

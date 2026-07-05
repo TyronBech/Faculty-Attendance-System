@@ -20,9 +20,12 @@ export default function AuthenticatedLayout({ header, children }) {
     const isAdmin =
         roles.includes("super_admin") ||
         roles.includes("admin") ||
+        roles.includes("hr_admin") ||
         roles.includes("hr_staff") ||
         roles.includes("head_academic_program");
     const isSuperAdmin = roles.includes("super_admin");
+    const isHrAdmin = roles.includes("hr_admin");
+    const isHrStaff = roles.includes("hr_staff");
 
     const canViewFacultyAttendance = can(PERMISSIONS.VIEW_ATTENDANCE);
     const canGenerateFacultyDtr = can(PERMISSIONS.GENERATE_DTR);
@@ -42,13 +45,16 @@ export default function AuthenticatedLayout({ header, children }) {
     const canViewAdminBackups =
         isSuperAdmin || can(PERMISSIONS.BACKUP_DATABASE);
     const canViewAdminDtrExport = can(PERMISSIONS.GENERATE_DTR);
+    const canManageHrDtrSync = can(PERMISSIONS.MANAGE_HR_DTR_SYNC);
     const canSeeAdminAttendanceDropdown =
         canViewAdminAttendanceImports ||
         canViewAdminManualAttendance ||
         canViewAdminBackups ||
         canViewAdminDtrExport;
     const dashboardRoute = isAdmin
-        ? "admin.dashboard"
+        ? (isHrAdmin || isHrStaff) && !isSuperAdmin && !roles.includes("admin")
+            ? "admin.hr.dashboard"
+            : "admin.dashboard"
         : isFaculty
           ? "faculty.dashboard"
           : "dashboard";
@@ -59,7 +65,7 @@ export default function AuthenticatedLayout({ header, children }) {
         displayName?.charAt(0)?.toUpperCase() ??
         user.email.charAt(0).toUpperCase();
     const dashboardActive = isAdmin
-        ? route().current("admin.dashboard")
+        ? route().current("admin.dashboard") || route().current("admin.hr.dashboard")
         : isFaculty
           ? route().current("faculty.dashboard")
           : route().current("dashboard");
@@ -302,6 +308,15 @@ export default function AuthenticatedLayout({ header, children }) {
                                         )}
 
                                         {/* ── Admin Requests dropdown ───────── */}
+                                        {canManageHrDtrSync && (
+                                            <NavLink
+                                                href={route("admin.hr.dashboard")}
+                                                active={route().current("admin.hr.*")}
+                                            >
+                                                HR DTR
+                                            </NavLink>
+                                        )}
+
                                         {canViewAdminRequests && (
                                             <Dropdown>
                                                 <Dropdown.Trigger>
@@ -786,6 +801,15 @@ export default function AuthenticatedLayout({ header, children }) {
                                 )}
 
                                 {/* ── Admin Requests group ─────────── */}
+                                {canManageHrDtrSync && (
+                                    <ResponsiveNavLink
+                                        href={route("admin.hr.dashboard")}
+                                        active={route().current("admin.hr.*")}
+                                    >
+                                        HR DTR
+                                    </ResponsiveNavLink>
+                                )}
+
                                 {canViewAdminRequests && (
                                     <div>
                                         <button

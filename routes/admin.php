@@ -19,6 +19,7 @@ use App\Http\Controllers\Admin\AdminScheduleChangeRequestController;
 use App\Http\Controllers\Admin\AdminScheduleController;
 use App\Http\Controllers\Admin\AdminSessionController;
 use App\Http\Controllers\Admin\AdminUndertimeJustificationController;
+use App\Http\Controllers\Admin\HrDashboardController;
 use Illuminate\Support\Facades\Route;
 
 // ── Admin Guest routes (no auth required) ──────────────────────────────────
@@ -91,6 +92,18 @@ Route::middleware(['auth.admin'])->prefix('admin')->group(function () {
     Route::get('/api/external-schedules', [AdminDashboardController::class, 'externalSchedules'])
         ->middleware('check.permission:'.Permission::ViewDashboard->value.',admin')
         ->name('admin.api.external-schedules');
+
+    Route::get('/hr/dashboard', [HrDashboardController::class, 'index'])
+        ->middleware('check.permission:'.Permission::ManageHrDtrSync->value.',admin')
+        ->name('admin.hr.dashboard');
+
+    Route::patch('/hr/dtr-settings', [HrDashboardController::class, 'updateSettings'])
+        ->middleware('check.permission:'.Permission::ManageHrDtrSync->value.',admin')
+        ->name('admin.hr.dtr-settings.update');
+
+    Route::post('/hr/dtr-sync', [HrDashboardController::class, 'sync'])
+        ->middleware('check.permission:'.Permission::ManageHrDtrSync->value.',admin')
+        ->name('admin.hr.dtr-sync');
 
     Route::get('/dtr-export/preview', [AdminDtrExportController::class, 'preview'])
         ->middleware('check.permission:'.Permission::GenerateDtr->value.',admin')

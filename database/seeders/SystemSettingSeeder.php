@@ -93,6 +93,13 @@ class SystemSettingSeeder extends Seeder
                     'description' => 'Maximum counted manual attendance requests allowed per faculty each semester.',
                     'is_editable' => true,
                 ],
+                [
+                    'setting_key' => 'hr_dtr_sync_days',
+                    'setting_value' => '15,30',
+                    'setting_type' => 'csv_integer',
+                    'description' => 'Month days when HR pending DTR records should be synchronized automatically.',
+                    'is_editable' => true,
+                ],
             ];
 
             foreach ($settings as $setting) {

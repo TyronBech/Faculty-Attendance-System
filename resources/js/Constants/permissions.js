@@ -33,6 +33,7 @@ export const PERMISSIONS = {
 
     BACKUP_DATABASE: "backup database",
     GENERATE_DTR: "generate dtr",
+    MANAGE_HR_DTR_SYNC: "manage hr dtr sync",
 
     VIEW_OWN_REQUESTS: "view own requests",
     CREATE_OWN_REQUESTS: "create own requests",
