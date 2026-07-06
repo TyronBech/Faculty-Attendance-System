@@ -781,7 +781,7 @@ export default function AuthenticatedLayout({ header, children }) {
                                         href={route("admin.rbac.index")}
                                         active={route().current("admin.rbac.*")}
                                     >
-                                        RBAC
+                                        Manage Users
                                     </ResponsiveNavLink>
                                 )}
 
