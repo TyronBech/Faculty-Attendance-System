@@ -297,7 +297,7 @@ export default function AuthenticatedLayout({ header, children }) {
                                                     "admin.rbac.*",
                                                 )}
                                             >
-                                                RBAC
+                                                 Manage Users
                                             </NavLink>
                                         )}
 

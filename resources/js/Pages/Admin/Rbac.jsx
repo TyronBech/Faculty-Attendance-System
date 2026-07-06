@@ -195,7 +195,7 @@ export default function Rbac({ roles, permissions, users }) {
 
     return (
         <AuthenticatedLayout>
-            <Head title="RBAC" />
+            <Head title="Manage Users" />
 
             <section className="relative isolate overflow-hidden rounded-2xl bg-gradient-to-br from-[#7a1315] via-[#95191d] to-[#cc2127] px-6 py-10 sm:px-10 sm:py-12 shadow-xl shadow-red-900/25">
                 <div className="pointer-events-none absolute -left-20 -top-20 h-60 w-60 rounded-full bg-white/10 blur-3xl" />
@@ -205,7 +205,7 @@ export default function Rbac({ roles, permissions, users }) {
                         Super Admin Area
                     </p>
                     <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
-                        Role Based Access Control
+                        Manage Roles & Permissions
                     </h1>
                     <p className="mt-3 max-w-3xl text-sm text-white/80 sm:text-base">
                         Manage permissions, create and edit roles, and update user role assignments in one place.
