@@ -1,5 +1,5 @@
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
-import { Head, useForm } from "@inertiajs/react";
+import { Head, Link, useForm } from "@inertiajs/react";
 
 function StatCard({ stat }) {
     return (
@@ -95,6 +95,12 @@ export default function HrDashboard({
                     >
                         {syncForm.processing ? "Syncing..." : "Manual Sync"}
                     </button>
+                    <Link
+                        href={route("admin.hr.dtrs.index")}
+                        className="rounded-xl border border-white/40 px-5 py-3 text-sm font-bold text-white transition hover:bg-white/10"
+                    >
+                        Review DTRs
+                    </Link>
                 </div>
             </section>
 
@@ -190,6 +196,14 @@ export default function HrDashboard({
                         <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-bold text-[#7a1315] dark:bg-red-900/20 dark:text-red-300">
                             {syncSettings.currentPeriod}
                         </span>
+                    </div>
+                    <div className="mt-3">
+                        <Link
+                            href={route("admin.hr.dtrs.index")}
+                            className="text-sm font-bold text-[#7a1315] hover:text-[#5f0e10] dark:text-red-300 dark:hover:text-red-200"
+                        >
+                            Open approval page →
+                        </Link>
                     </div>
 
                     <div className="mt-4 overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">

@@ -310,7 +310,7 @@ export default function AuthenticatedLayout({ header, children }) {
                                         {/* ── Admin Requests dropdown ───────── */}
                                         {canManageHrDtrSync && (
                                             <NavLink
-                                                href={route("admin.hr.dashboard")}
+                                                href={route("admin.hr.dtrs.index")}
                                                 active={route().current("admin.hr.*")}
                                             >
                                                 HR DTR
@@ -803,7 +803,7 @@ export default function AuthenticatedLayout({ header, children }) {
                                 {/* ── Admin Requests group ─────────── */}
                                 {canManageHrDtrSync && (
                                     <ResponsiveNavLink
-                                        href={route("admin.hr.dashboard")}
+                                        href={route("admin.hr.dtrs.index")}
                                         active={route().current("admin.hr.*")}
                                     >
                                         HR DTR

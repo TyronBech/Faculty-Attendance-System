@@ -75,7 +75,7 @@ export function DtrSummary({ summary }) {
     );
 }
 
-export function DtrTimeLog({ rows, totalHours, mode = 'official', onModeChange }) {
+export function DtrTimeLog({ rows, totalHours, mode = 'official', onModeChange, showModeToggle = true }) {
     const activePrefix = mode === 'internal' ? 'internal_' : 'official_';
     const totalHoursText = Number(rows.reduce((total, row) => total + Number(row[`${activePrefix}total_hours_rendered`] ?? row.total_hours_rendered ?? 0), 0)).toFixed(2);
     const maxSlots = Math.max(3, ...rows.map((row) => slotsForRow(row, activePrefix).length));
@@ -89,30 +89,32 @@ export function DtrTimeLog({ rows, totalHours, mode = 'official', onModeChange }
                 <h3 className="text-sm font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">
                     Time Logs
                 </h3>
-                <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1 dark:border-gray-700 dark:bg-gray-800">
-                    <button
-                        type="button"
-                        onClick={() => onModeChange('official')}
-                        className={`rounded-md px-3 py-1 text-xs font-semibold transition ${
-                            mode === 'official'
-                                ? 'bg-[#7a1315] text-white'
-                                : 'text-gray-600 hover:bg-gray-200 dark:text-gray-300 dark:hover:bg-gray-700'
-                        }`}
-                    >
-                        Official
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => onModeChange('internal')}
-                        className={`rounded-md px-3 py-1 text-xs font-semibold transition ${
-                            mode === 'internal'
-                                ? 'bg-[#7a1315] text-white'
-                                : 'text-gray-600 hover:bg-gray-200 dark:text-gray-300 dark:hover:bg-gray-700'
-                        }`}
-                    >
-                        Internal
-                    </button>
-                </div>
+                {showModeToggle && (
+                    <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1 dark:border-gray-700 dark:bg-gray-800">
+                        <button
+                            type="button"
+                            onClick={() => onModeChange('official')}
+                            className={`rounded-md px-3 py-1 text-xs font-semibold transition ${
+                                mode === 'official'
+                                    ? 'bg-[#7a1315] text-white'
+                                    : 'text-gray-600 hover:bg-gray-200 dark:text-gray-300 dark:hover:bg-gray-700'
+                            }`}
+                        >
+                            Official
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => onModeChange('internal')}
+                            className={`rounded-md px-3 py-1 text-xs font-semibold transition ${
+                                mode === 'internal'
+                                    ? 'bg-[#7a1315] text-white'
+                                    : 'text-gray-600 hover:bg-gray-200 dark:text-gray-300 dark:hover:bg-gray-700'
+                            }`}
+                        >
+                            Internal
+                        </button>
+                    </div>
+                )}
             </div>
             <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
                 <table className="w-full text-sm">
@@ -128,6 +130,7 @@ export function DtrTimeLog({ rows, totalHours, mode = 'official', onModeChange }
                             <th className="w-20 px-2 py-2 text-center font-semibold">Required</th>
                             <th className="w-16 px-2 py-2 text-center font-semibold">Tardy</th>
                             <th className="w-20 px-2 py-2 text-center font-semibold">Under Time</th>
+                            <th className="w-20 px-2 py-2 text-center font-semibold">Overtime</th>
                         </tr>
                         <tr className="border-b border-gray-200 bg-gray-50 text-xs text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-500">
                             <th></th>
@@ -141,6 +144,7 @@ export function DtrTimeLog({ rows, totalHours, mode = 'official', onModeChange }
                             <th></th>
                             <th></th>
                             <th></th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -150,7 +154,8 @@ export function DtrTimeLog({ rows, totalHours, mode = 'official', onModeChange }
                             const prefix = mode === 'internal' ? 'internal_' : 'official_';
                             const tardyMinutes = Number(row[`${prefix}tardy_minutes`] ?? row.tardy_minutes ?? 0);
                             const undertimeMinutes = Number(row[`${prefix}undertime_minutes`] ?? row.undertime_minutes ?? 0);
-                            const hasTardy = tardyMinutes > 0 || undertimeMinutes > 0;
+                            const overtimeMinutes = Number(row[`${prefix}overtime_minutes`] ?? row.overtime_minutes ?? 0);
+                            const hasTardy = tardyMinutes > 0 || undertimeMinutes > 0 || overtimeMinutes > 0;
                             const displayDay = mode === 'internal' ? (row.internal_day ?? row.day) : (row.official_day ?? row.day);
                             const dayShift = mode === 'internal' ? (row.internal_day_shift ?? 0) : 0;
                             const slots = slotsForRow(row, prefix);
@@ -215,6 +220,9 @@ export function DtrTimeLog({ rows, totalHours, mode = 'official', onModeChange }
                                     <td className="px-2 py-1.5 text-center text-xs font-medium">
                                         {formatMinutes(undertimeMinutes)}
                                     </td>
+                                    <td className="px-2 py-1.5 text-center text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                                        {formatMinutes(overtimeMinutes)}
+                                    </td>
                                 </tr>
                             );
                         })}
@@ -235,6 +243,9 @@ export function DtrTimeLog({ rows, totalHours, mode = 'official', onModeChange }
                             </td>
                             <td className="px-2 py-2 text-center text-xs font-bold">
                                 {formatMinutes(rows.reduce((total, row) => total + Number(row[`${activePrefix}undertime_minutes`] ?? row.undertime_minutes ?? 0), 0))}
+                            </td>
+                            <td className="px-2 py-2 text-center text-xs font-bold">
+                                {formatMinutes(rows.reduce((total, row) => total + Number(row[`${activePrefix}overtime_minutes`] ?? row.overtime_minutes ?? 0), 0))}
                             </td>
                         </tr>
                     </tfoot>

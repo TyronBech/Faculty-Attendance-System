@@ -10,6 +10,7 @@ use App\Models\ImportBatch;
 use App\Models\InternalSchedule;
 use App\Models\ScheduleChangeRequest;
 use App\Models\ScheduleDetail;
+use App\Models\SystemSetting;
 use Carbon\Carbon;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
@@ -781,6 +782,20 @@ class AdminAttendanceImportController extends Controller
         return (int) $operationalTimeIn->diffInMinutes($actualTimeIn);
     }
 
+    private function calculateOvertimeMinutes(Carbon $actualTimeOut, Carbon $operationalTimeOut): int
+    {
+        if (! $actualTimeOut->greaterThan($operationalTimeOut)) {
+            return 0;
+        }
+
+        $minutes = (int) $operationalTimeOut->diffInMinutes($actualTimeOut);
+        $threshold = (int) (SystemSetting::query()
+            ->where('setting_key', 'overtime_threshold_minutes')
+            ->value('setting_value') ?? 0);
+
+        return $minutes >= $threshold ? $minutes : 0;
+    }
+
     /**
      * Create/update attendance records for a faculty on a target date based on imported biometric logs.
      *
@@ -934,9 +949,7 @@ class AdminAttendanceImportController extends Controller
                 $undertimeMinutes = (int) $actualTimeOut->diffInMinutes($operationalTimeOut);
             }
 
-            if ($actualTimeOut->greaterThan($operationalTimeOut)) {
-                $overtimeMinutes = (int) $operationalTimeOut->diffInMinutes($actualTimeOut);
-            }
+            $overtimeMinutes = $this->calculateOvertimeMinutes($actualTimeOut, $operationalTimeOut);
 
             $totalHoursRendered = 0;
             if ($actualTimeIn && $actualTimeOut && $actualTimeOut->greaterThan($actualTimeIn)) {
@@ -1041,9 +1054,7 @@ class AdminAttendanceImportController extends Controller
                     $undertimeMinutes = (int) $actualTimeOut->diffInMinutes($operationalTimeOut);
                 }
 
-                if ($actualTimeOut->greaterThan($operationalTimeOut)) {
-                    $overtimeMinutes = (int) $operationalTimeOut->diffInMinutes($actualTimeOut);
-                }
+                $overtimeMinutes = $this->calculateOvertimeMinutes($actualTimeOut, $operationalTimeOut);
 
                 $totalHoursRendered = round($actualTimeIn->diffInMinutes($actualTimeOut) / 60, 2);
 

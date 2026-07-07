@@ -10,6 +10,7 @@ use App\Models\ScheduleDetail;
 use App\Models\ScheduleChangeRequest;
 use App\Models\BiometricLog;
 use App\Models\OnlineAttendanceRequest;
+use App\Models\SystemSetting;
 use Carbon\Carbon;
 
 class AttendanceReconciliationService
@@ -166,9 +167,7 @@ class AttendanceReconciliationService
                 $undertimeMinutes = $actualTimeOut->diffInMinutes($expectedTimeOut);
             }
 
-            if ($actualTimeOut->greaterThan($expectedTimeOut)) {
-                $overtimeMinutes = $expectedTimeOut->diffInMinutes($actualTimeOut);
-            }
+            $overtimeMinutes = $this->calculateOvertimeMinutes($actualTimeOut, $expectedTimeOut);
 
             $validStart = $actualTimeIn->greaterThan($expectedTimeIn) ? $actualTimeIn : $expectedTimeIn;
             $validEnd = $actualTimeOut->lessThan($expectedTimeOut) ? $actualTimeOut : $expectedTimeOut;
@@ -329,6 +328,20 @@ class AttendanceReconciliationService
         }
 
         return $entries;
+    }
+
+    private function calculateOvertimeMinutes(Carbon $actualTimeOut, Carbon $expectedTimeOut): int
+    {
+        if (! $actualTimeOut->greaterThan($expectedTimeOut)) {
+            return 0;
+        }
+
+        $minutes = (int) $expectedTimeOut->diffInMinutes($actualTimeOut);
+        $threshold = (int) (SystemSetting::query()
+            ->where('setting_key', 'overtime_threshold_minutes')
+            ->value('setting_value') ?? 0);
+
+        return $minutes >= $threshold ? $minutes : 0;
     }
 
     /**

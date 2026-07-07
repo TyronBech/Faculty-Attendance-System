@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\DtrRecord;
 use App\Models\Faculty;
+use App\Models\HrDtrStatus;
 use App\Models\SystemSetting;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -50,7 +51,9 @@ class HrDtrSyncService
                         ->where('year', $targetYear)
                         ->first();
 
-                    if ($existingRecord && in_array($existingRecord->status, ['approved', 'finalized'], true)) {
+                    $existingHrStatus = $existingRecord?->hrStatus?->status;
+
+                    if (in_array($existingHrStatus, ['approved', 'rejected'], true)) {
                         $summary['skipped']++;
 
                         continue;
@@ -59,7 +62,7 @@ class HrDtrSyncService
                     $conversion = $this->attendanceToDtrService->convertToDtr($faculty->id, $targetMonth, $targetYear);
                     $dtrSummary = $conversion['summary'] ?? [];
 
-                    DtrRecord::updateOrCreate(
+                    $dtrRecord = DtrRecord::updateOrCreate(
                         [
                             'faculty_id' => $faculty->id,
                             'month' => $targetMonth,
@@ -76,6 +79,11 @@ class HrDtrSyncService
                             'status' => 'pending',
                             'generated_at' => now(),
                         ]
+                    );
+
+                    HrDtrStatus::firstOrCreate(
+                        ['dtr_record_id' => $dtrRecord->id],
+                        ['status' => 'pending']
                     );
 
                     $summary[$existingRecord ? 'updated' : 'created']++;

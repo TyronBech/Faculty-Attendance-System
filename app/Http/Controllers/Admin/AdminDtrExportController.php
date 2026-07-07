@@ -341,6 +341,8 @@ class AdminDtrExportController extends Controller
                 ->sum(fn ($record) => (int) ($record?->computed_late_minutes ?? $record?->late_minutes ?? 0));
             $officialUndertimeMinutes = collect($officialRecords)
                 ->sum(fn ($record) => (int) ($record?->computed_undertime_minutes ?? $record?->undertime_minutes ?? 0));
+            $officialOvertimeMinutes = collect($officialRecords)
+                ->sum(fn ($record) => (int) ($record?->computed_overtime_minutes ?? $record?->overtime_minutes ?? 0));
             $officialTotalHoursRendered = collect($officialRecords)
                 ->sum(fn ($record) => (float) ($record?->computed_total_hours_rendered ?? 0));
             $officialRequiredHours = collect($officialRecords)
@@ -349,6 +351,8 @@ class AdminDtrExportController extends Controller
                 ->sum(fn ($record) => (int) ($record?->computed_late_minutes ?? $record?->late_minutes ?? 0));
             $internalUndertimeMinutes = collect($internalRecords)
                 ->sum(fn ($record) => (int) ($record?->computed_undertime_minutes ?? $record?->undertime_minutes ?? 0));
+            $internalOvertimeMinutes = collect($internalRecords)
+                ->sum(fn ($record) => (int) ($record?->computed_overtime_minutes ?? $record?->overtime_minutes ?? 0));
             $internalTotalHoursRendered = collect($internalRecords)
                 ->sum(fn ($record) => (float) ($record?->computed_total_hours_rendered ?? 0));
             $internalRequiredHours = collect($internalRecords)
@@ -397,15 +401,18 @@ class AdminDtrExportController extends Controller
 
                 'official_tardy_minutes' => (int) $officialTardyMinutes,
                 'official_undertime_minutes' => (int) $officialUndertimeMinutes,
+                'official_overtime_minutes' => (int) $officialOvertimeMinutes,
                 'official_total_hours_rendered' => round($officialTotalHoursRendered, 2),
                 'official_required_hours' => round($officialRequiredHours, 2),
                 'internal_tardy_minutes' => (int) $internalTardyMinutes,
                 'internal_undertime_minutes' => (int) $internalUndertimeMinutes,
+                'internal_overtime_minutes' => (int) $internalOvertimeMinutes,
                 'internal_total_hours_rendered' => round($internalTotalHoursRendered, 2),
                 'internal_required_hours' => round($internalRequiredHours, 2),
 
                 'tardy_minutes' => (int) $officialTardyMinutes,
                 'undertime_minutes' => (int) $officialUndertimeMinutes,
+                'overtime_minutes' => (int) $officialOvertimeMinutes,
                 'total_hours_rendered' => round($officialTotalHoursRendered, 2),
                 'required_hours' => round($officialRequiredHours, 2),
                 'status' => $dayData['status'] ?? 'none',

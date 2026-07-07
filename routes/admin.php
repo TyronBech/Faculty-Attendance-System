@@ -97,6 +97,18 @@ Route::middleware(['auth.admin'])->prefix('admin')->group(function () {
         ->middleware('check.permission:'.Permission::ManageHrDtrSync->value.',admin')
         ->name('admin.hr.dashboard');
 
+    Route::get('/hr/dtrs', [HrDashboardController::class, 'dtrs'])
+        ->middleware('check.permission:'.Permission::ManageHrDtrSync->value.',admin')
+        ->name('admin.hr.dtrs.index');
+
+    Route::patch('/hr/dtrs/{dtrRecord}/approve', [HrDashboardController::class, 'approveDtr'])
+        ->middleware('check.permission:'.Permission::ManageHrDtrSync->value.',admin')
+        ->name('admin.hr.dtrs.approve');
+
+    Route::patch('/hr/dtrs/{dtrRecord}/reject', [HrDashboardController::class, 'rejectDtr'])
+        ->middleware('check.permission:'.Permission::ManageHrDtrSync->value.',admin')
+        ->name('admin.hr.dtrs.reject');
+
     Route::patch('/hr/dtr-settings', [HrDashboardController::class, 'updateSettings'])
         ->middleware('check.permission:'.Permission::ManageHrDtrSync->value.',admin')
         ->name('admin.hr.dtr-settings.update');

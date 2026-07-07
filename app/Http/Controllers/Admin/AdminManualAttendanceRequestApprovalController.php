@@ -505,9 +505,7 @@ class AdminManualAttendanceRequestApprovalController extends Controller
             ? $actualTimeOut->diffInMinutes($operationalTimeOut)
             : 0;
 
-        $overtimeMinutes = $actualTimeOut->greaterThan($operationalTimeOut)
-            ? $operationalTimeOut->diffInMinutes($actualTimeOut)
-            : 0;
+        $overtimeMinutes = $this->calculateOvertimeMinutes($actualTimeOut, $operationalTimeOut);
 
         $totalMinutesRendered = max(0, $actualTimeIn->diffInMinutes($actualTimeOut, false));
         $totalHoursRendered = round($totalMinutesRendered / 60, 2);
@@ -554,6 +552,20 @@ class AdminManualAttendanceRequestApprovalController extends Controller
         }
 
         return 'present';
+    }
+
+    private function calculateOvertimeMinutes(Carbon $actualTimeOut, Carbon $operationalTimeOut): int
+    {
+        if (! $actualTimeOut->greaterThan($operationalTimeOut)) {
+            return 0;
+        }
+
+        $minutes = (int) $operationalTimeOut->diffInMinutes($actualTimeOut);
+        $threshold = (int) (SystemSetting::query()
+            ->where('setting_key', 'overtime_threshold_minutes')
+            ->value('setting_value') ?? 0);
+
+        return $minutes >= $threshold ? $minutes : 0;
     }
 
     private function combineDateAndTime(Carbon $date, string|Carbon $time): Carbon

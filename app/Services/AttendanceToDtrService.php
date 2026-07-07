@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\AttendanceRecord;
 use App\Models\Holiday;
+use App\Models\SystemSetting;
 use Carbon\Carbon;
 
 class AttendanceToDtrService
@@ -46,8 +47,10 @@ class AttendanceToDtrService
                 $lateMinutes = (int) ($record->computed_late_minutes ?? $record->late_minutes ?? 0);
                 $undertimeMinutes = (int) ($record->computed_undertime_minutes ?? $record->undertime_minutes ?? 0);
                 $nightMinutes = (int) ($record->night_minutes ?? 0);
-                $overtimeMinutes = (int) ($record->overtime_minutes ?? 0);
-                $overtimeNightMinutes = (int) ($record->overtime_night_minutes ?? 0);
+                $overtimeMinutes = (int) ($record->computed_overtime_minutes ?? $record->overtime_minutes ?? 0);
+                $overtimeNightMinutes = $overtimeMinutes > 0
+                    ? (int) ($record->overtime_night_minutes ?? 0)
+                    : 0;
                 $hasActualAttendance = ! empty($record->actual_time_in) || ! empty($record->actual_time_out);
 
                 $hasAnyActualAttendance = $hasAnyActualAttendance || $hasActualAttendance;
@@ -109,6 +112,9 @@ class AttendanceToDtrService
         $monthlyAttendance = $this->absenceDetectionService->buildMergedRecords($facultyId, $month, $year, $monthlyAttendance);
 
         $attendance = [];
+        $overtimeThresholdMinutes = (int) (SystemSetting::query()
+            ->where('setting_key', 'overtime_threshold_minutes')
+            ->value('setting_value') ?? 0);
 
         foreach ($monthlyAttendance as $mt) {
             // Preserve raw times before any in-memory adjustments.
@@ -175,6 +181,7 @@ class AttendanceToDtrService
 
             $lateMinutes = 0;
             $undertimeMinutes = 0;
+            $overtimeMinutes = 0;
 
             if ($actualIn && $baseIn) {
                 $lateMinutes = $actualIn->greaterThan($baseIn->copy()->addMinutes($gracePeriodMinutes))
@@ -186,10 +193,18 @@ class AttendanceToDtrService
                 $undertimeMinutes = $actualOut->lessThan($baseOut)
                     ? (int) $actualOut->diffInMinutes($baseOut)
                     : 0;
+
+                if ($actualOut->greaterThan($baseOut)) {
+                    $rawOvertimeMinutes = (int) $baseOut->diffInMinutes($actualOut);
+                    $overtimeMinutes = $rawOvertimeMinutes >= $overtimeThresholdMinutes
+                        ? $rawOvertimeMinutes
+                        : 0;
+                }
             }
 
             $mt->computed_late_minutes = $lateMinutes;
             $mt->computed_undertime_minutes = $undertimeMinutes;
+            $mt->computed_overtime_minutes = $overtimeMinutes;
 
             if ($officialIn) {
                 $mt->official_time_in = $officialIn->copy()->addMinutes($lateMinutes);
