@@ -1151,7 +1151,6 @@ export default function AttendanceImports({ batches, filters }) {
                 >
                     <form
                         className="flex max-h-[88dvh] flex-col"
-                        className="flex max-h-[88dvh] flex-col"
                     onSubmit={(event) => {
                             event.preventDefault();
                             saveEditedLog();
