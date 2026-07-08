@@ -49,8 +49,8 @@ export default function Sidebar({ collapsed, onCollapse }) {
     const dashboardRoute = isAdmin
         ? "admin.dashboard"
         : isFaculty
-          ? "faculty.dashboard"
-          : "dashboard";
+            ? "faculty.dashboard"
+            : "dashboard";
     const profileRoute = isAdmin ? "admin.profile.edit" : "profile.edit";
     const logoutRoute = isAdmin ? "admin.logout" : "logout";
     const displayName = auth.display_name ?? user.username ?? user.email;
@@ -61,8 +61,8 @@ export default function Sidebar({ collapsed, onCollapse }) {
     const dashboardActive = isAdmin
         ? route().current("admin.dashboard")
         : isFaculty
-          ? route().current("faculty.dashboard")
-          : route().current("dashboard");
+            ? route().current("faculty.dashboard")
+            : route().current("dashboard");
 
     // Faculty Requests group active state
     const facultyRequestsActive =
@@ -107,8 +107,8 @@ export default function Sidebar({ collapsed, onCollapse }) {
                     (collapsed === false
                         ? "translate-x-0 w-[272px]"
                         : "-translate-x-full w-[272px] lg:translate-x-0 " +
-                          // Desktop collapsed width
-                          "lg:w-[72px]")
+                        // Desktop collapsed width
+                        "lg:w-[72px]")
                 }
             >
                 {/* ── Brand Header ──────────────────────────── */}
@@ -368,18 +368,7 @@ export default function Sidebar({ collapsed, onCollapse }) {
                                 </SidebarLink>
                             )}
 
-                            {canViewAdminLogs && (
-                                <SidebarLink
-                                    href={route("admin.activity-logs.index")}
-                                    active={route().current(
-                                        "admin.activity-logs.*",
-                                    )}
-                                    icon="fa-clock-rotate-left"
-                                    collapsed={collapsed}
-                                >
-                                    Activity Logs
-                                </SidebarLink>
-                            )}
+
 
                             {/* Admin Attendance Group */}
                             {canSeeAdminAttendanceDropdown && (
@@ -440,6 +429,18 @@ export default function Sidebar({ collapsed, onCollapse }) {
                                         </SidebarLink>
                                     )}
                                 </SidebarGroup>
+                            )}
+                            {canViewAdminLogs && (
+                                <SidebarLink
+                                    href={route("admin.activity-logs.index")}
+                                    active={route().current(
+                                        "admin.activity-logs.*",
+                                    )}
+                                    icon="fa-clock-rotate-left"
+                                    collapsed={collapsed}
+                                >
+                                    Activity Logs
+                                </SidebarLink>
                             )}
                         </>
                     )}
