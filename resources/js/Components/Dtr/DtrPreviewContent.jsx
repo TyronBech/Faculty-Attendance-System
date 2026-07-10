@@ -157,6 +157,7 @@ export function DtrTimeLog({ rows, totalHours, mode = 'official', onModeChange, 
                             const overtimeMinutes = Number(row[`${prefix}overtime_minutes`] ?? row.overtime_minutes ?? 0);
                             const hasTardy = tardyMinutes > 0 || undertimeMinutes > 0 || overtimeMinutes > 0;
                             const displayDay = mode === 'internal' ? (row.internal_day ?? row.day) : (row.official_day ?? row.day);
+                            const dayLabel = row.day_label ?? '';
                             const dayShift = mode === 'internal' ? (row.internal_day_shift ?? 0) : 0;
                             const slots = slotsForRow(row, prefix);
                             const paddedSlots = Array.from({ length: maxSlots }, (_, index) => slots[index] ?? { in: '', out: '', is_absent: false });
@@ -177,7 +178,14 @@ export function DtrTimeLog({ rows, totalHours, mode = 'official', onModeChange, 
                                 <tr key={row.day} className={`${rowClass} transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50`}>
                                     <td className="px-3 py-1.5 text-center text-xs font-bold">
                                         <div className="flex flex-col items-center gap-0.5">
-                                            <span>{displayDay}</span>
+                                            <span className="inline-flex items-center gap-1">
+                                                <span>{displayDay}</span>
+                                                {dayLabel && (
+                                                    <span className="text-[9px] font-semibold uppercase text-gray-400 dark:text-gray-500">
+                                                        {dayLabel}
+                                                    </span>
+                                                )}
+                                            </span>
                                             {dayShift !== 0 && (
                                                 <span className="text-[9px] font-semibold text-indigo-700 dark:text-indigo-300">
                                                     {dayShift > 0 ? `+${dayShift}d` : `${dayShift}d`}

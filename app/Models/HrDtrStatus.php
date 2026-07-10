@@ -12,6 +12,8 @@ class HrDtrStatus extends Model
 
     protected $fillable = [
         'dtr_record_id',
+        'period_start',
+        'period_end',
         'status',
         'reviewed_by',
         'reviewed_at',
@@ -20,6 +22,8 @@ class HrDtrStatus extends Model
     protected function casts(): array
     {
         return [
+            'period_start' => 'date',
+            'period_end' => 'date',
             'reviewed_at' => 'datetime',
         ];
     }

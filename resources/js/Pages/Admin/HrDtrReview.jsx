@@ -292,6 +292,8 @@ export default function HrDtrReview({
                     faculty_id: record.facultyId,
                     month: record.month,
                     year: record.year,
+                    start_day: record.startDay,
+                    end_day: record.endDay,
                 },
             })
             .then((response) => setPreviewData(response.data))

@@ -13,11 +13,11 @@ class AttendanceToDtrService
         private readonly AbsenceDetectionService $absenceDetectionService,
     ) {}
 
-    public function convertToDtr(int $facultyId, int $month, int $year): array
+    public function convertToDtr(int $facultyId, int $month, int $year, ?int $startDay = null, ?int $endDay = null): array
     {
         $attendance = $this->buildConversionMap($facultyId, $month, $year);
         $holidaysByDay = $this->buildHolidaysMap($month, $year);
-        $finalizedAttendance = $this->finalizeAttendanceMapping($attendance, $holidaysByDay, $month, $year);
+        $finalizedAttendance = $this->finalizeAttendanceMapping($attendance, $holidaysByDay, $month, $year, $startDay, $endDay);
 
         $summary = [
             'daysPresent' => 0,
@@ -254,11 +254,13 @@ class AttendanceToDtrService
         return $holidaysByDay;
     }
 
-    private function finalizeAttendanceMapping(array $attendance, array $holidaysByDay, int $month, int $year): array
+    private function finalizeAttendanceMapping(array $attendance, array $holidaysByDay, int $month, int $year, ?int $startDay = null, ?int $endDay = null): array
     {
         $daysInMonth = Carbon::create($year, $month, 1)->daysInMonth;
+        $start = max(1, $startDay ?? 1);
+        $end = min($daysInMonth, $endDay ?? $daysInMonth);
 
-        for ($day = 1; $day <= $daysInMonth; $day++) {
+        for ($day = $start; $day <= $end; $day++) {
             $dayRecords = $attendance[$day]['records'] ?? [];
             $hasAnyActualAttendance = false;
 

@@ -11,6 +11,7 @@ use App\Models\ScheduleChangeRequest;
 use App\Models\ScheduleDetail;
 use App\Models\TemporaryFacultySchedule;
 use App\Services\AttendanceReconciliationService;
+use App\Services\HrDtrCutoffReminderService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -22,7 +23,7 @@ class FacultyDashboardController extends Controller
      *
      * The controller stays thin — all data logic lives in the Faculty model.
      */
-    public function index(Request $request, AttendanceReconciliationService $service)
+    public function index(Request $request, AttendanceReconciliationService $service, HrDtrCutoffReminderService $reminderService)
     {
         /** @var Faculty|null $faculty */
         $faculty = $request->user()->faculty;
@@ -37,6 +38,8 @@ class FacultyDashboardController extends Controller
                 'monthlyAverages' => ['avgCheckIn' => '--:--', 'avgCheckOut' => '--:--'],
                 'currentDate' => Carbon::now()->format('l, F j, Y'),
                 'greeting' => $this->getGreeting(),
+                'notifications' => [],
+                'cutoffReminders' => $reminderService->upcomingReminders(),
             ]);
         }
 
@@ -73,6 +76,20 @@ class FacultyDashboardController extends Controller
             'filters' => [
                 'range' => $range,
             ],
+            'notifications' => $request->user()
+                ->notifications()
+                ->latest()
+                ->limit(5)
+                ->get()
+                ->map(fn ($notification): array => [
+                    'id' => $notification->id,
+                    'title' => (string) ($notification->data['title'] ?? 'Notification'),
+                    'message' => (string) ($notification->data['message'] ?? ''),
+                    'url' => $notification->data['url'] ?? null,
+                    'readAt' => $notification->read_at?->toIso8601String(),
+                    'createdAt' => $notification->created_at?->diffForHumans(),
+                ]),
+            'cutoffReminders' => $reminderService->upcomingReminders(),
         ]);
     }
 

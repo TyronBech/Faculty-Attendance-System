@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\OnlineAttendanceRequest;
+use App\Services\HrDtrCutoffReminderService;
 use App\Services\HrDtrSyncService;
 use App\Services\OnlineAttendanceSyncService;
 use App\Services\TemporaryFacultyScheduleSyncService;
@@ -69,17 +70,35 @@ Artisan::command('hr:dtr-sync-pending {--force}', function (HrDtrSyncService $sy
 
     $summary = $syncService->syncPendingDtrs();
 
-    $this->info("HR pending DTR sync complete for {$summary['month']}/{$summary['year']}.");
+    if (! $summary['period_start'] || ! $summary['period_end']) {
+        $this->info("HR DTR sync skipped for {$summary['month']}/{$summary['year']}. No rendered cutoff period is available yet.");
+
+        return;
+    }
+
+    $this->info("HR pending DTR sync complete for {$summary['period_start']} to {$summary['period_end']}.");
     $this->info("Created: {$summary['created']}");
     $this->info("Updated: {$summary['updated']}");
     $this->info("Skipped: {$summary['skipped']}");
 })->purpose('Create or refresh pending DTR records when today matches HR sync settings');
+
+Artisan::command('hr:dtr-cutoff-reminders', function (HrDtrCutoffReminderService $reminderService) {
+    $summary = $reminderService->sendDueReminders();
+
+    $this->info("HR DTR cutoff reminders sent. Faculty: {$summary['faculty_notified']}; Admin: {$summary['admin_notified']}.");
+})->purpose('Notify faculty and admins 7 or 3 days before HR DTR cutoff');
 
 Schedule::command('hr:dtr-sync-pending')
     ->dailyAt('02:00')
     ->withoutOverlapping()
     ->runInBackground()
     ->appendOutputTo(storage_path('logs/hr-dtr-sync.log'));
+
+Schedule::command('hr:dtr-cutoff-reminders')
+    ->dailyAt('08:00')
+    ->withoutOverlapping()
+    ->runInBackground()
+    ->appendOutputTo(storage_path('logs/hr-dtr-cutoff-reminders.log'));
 
 Schedule::command('flss:sync')
     ->dailyAt('01:00')

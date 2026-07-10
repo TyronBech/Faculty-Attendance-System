@@ -8,12 +8,15 @@ use App\Models\Faculty;
 use App\Models\HrDtrStatus;
 use App\Models\ImportBatch;
 use App\Models\SystemSetting;
+use App\Models\User;
+use App\Notifications\HrDtrRejectedNotification;
 use App\Services\AttendanceToDtrService;
 use App\Services\HrDtrSyncService;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -56,26 +59,21 @@ class HrDashboardController extends Controller
                 'month' => $now->month,
                 'year' => $now->year,
             ],
-            'pendingDtrs' => DtrRecord::query()
+            'pendingDtrs' => HrDtrStatus::query()
                 ->with([
-                    'faculty:id,first_name,middle_name,last_name,department_id',
-                    'hrStatus',
+                    'dtrRecord.faculty:id,first_name,middle_name,last_name,department_id',
                 ])
-                ->where(function ($query): void {
-                    $query
-                        ->whereDoesntHave('hrStatus')
-                        ->orWhereHas('hrStatus', fn ($hrStatusQuery) => $hrStatusQuery->where('status', 'pending'));
-                })
-                ->latest('generated_at')
+                ->where('status', 'pending')
+                ->latest('created_at')
                 ->limit(10)
                 ->get()
-                ->map(fn (DtrRecord $record): array => [
-                    'id' => $record->id,
-                    'faculty' => $record->faculty?->full_name ?? 'Unknown Faculty',
-                    'period' => Carbon::create($record->year, $record->month, 1)->format('F Y'),
-                    'lateMinutes' => (int) $record->total_late_minutes,
-                    'undertimeMinutes' => (int) $record->total_undertime_minutes,
-                    'generatedAt' => $record->generated_at?->format('M j, Y g:i A'),
+                ->map(fn (HrDtrStatus $status): array => [
+                    'id' => $status->id,
+                    'faculty' => $status->dtrRecord?->faculty?->full_name ?? 'Unknown Faculty',
+                    'period' => $this->formatHrPeriod($status),
+                    'lateMinutes' => 0,
+                    'undertimeMinutes' => 0,
+                    'generatedAt' => $status->created_at?->format('M j, Y g:i A'),
                 ]),
         ]);
     }
@@ -94,31 +92,22 @@ class HrDashboardController extends Controller
         $month = $validated['month'] ?? null;
         $year = $validated['year'] ?? null;
 
-        $records = DtrRecord::query()
+        $records = HrDtrStatus::query()
             ->with([
-                'faculty:id,first_name,middle_name,last_name,department_id,faculty_code',
-                'faculty.department:id,name,code',
-                'faculty.schedules' => fn ($query) => $query
+                'dtrRecord.faculty:id,first_name,middle_name,last_name,department_id,faculty_code',
+                'dtrRecord.faculty.department:id,name,code',
+                'dtrRecord.faculty.schedules' => fn ($query) => $query
                     ->where('status', 'active')
                     ->with('scheduleDetails')
                     ->orderByDesc('academic_year')
                     ->orderByDesc('semester'),
-                'hrStatus.reviewedBy:id,username,email',
+                'reviewedBy:id,username,email',
             ])
-            ->when($status === 'pending', function ($query): void {
-                $query->where(function ($statusQuery): void {
-                    $statusQuery
-                        ->whereDoesntHave('hrStatus')
-                        ->orWhereHas('hrStatus', fn ($hrStatusQuery) => $hrStatusQuery->where('status', 'pending'));
-                });
-            })
-            ->when(in_array($status, ['approved', 'rejected'], true), function ($query) use ($status): void {
-                $query->whereHas('hrStatus', fn ($hrStatusQuery) => $hrStatusQuery->where('status', $status));
-            })
-            ->when($month, fn ($query) => $query->where('month', $month))
-            ->when($year, fn ($query) => $query->where('year', $year))
+            ->when($status !== '', fn ($query) => $query->where('status', $status))
+            ->when($month, fn ($query) => $query->whereHas('dtrRecord', fn ($recordQuery) => $recordQuery->where('month', $month)))
+            ->when($year, fn ($query) => $query->whereHas('dtrRecord', fn ($recordQuery) => $recordQuery->where('year', $year)))
             ->when($search !== '', function ($query) use ($search): void {
-                $query->whereHas('faculty', function ($facultyQuery) use ($search): void {
+                $query->whereHas('dtrRecord.faculty', function ($facultyQuery) use ($search): void {
                     $facultyQuery
                         ->where('first_name', 'like', "%{$search}%")
                         ->orWhere('middle_name', 'like', "%{$search}%")
@@ -126,11 +115,11 @@ class HrDashboardController extends Controller
                         ->orWhere('faculty_code', 'like', "%{$search}%");
                 });
             })
-            ->latest('generated_at')
+            ->latest('period_end')
             ->latest('updated_at')
             ->paginate(15)
             ->withQueryString()
-            ->through(fn (DtrRecord $record): array => $this->formatDtrRecord($record, $dtrService));
+            ->through(fn (HrDtrStatus $status): array => $this->formatDtrRecord($status, $dtrService));
 
         return Inertia::render('Admin/HrDtrReview', [
             'dtrs' => $records,
@@ -197,45 +186,54 @@ class HrDashboardController extends Controller
             $validated['year'] ?? null,
         ));
 
+        if (! $summary['period_start'] || ! $summary['period_end']) {
+            return back()->with('info', 'No rendered HR cutoff period is available for the selected month yet.');
+        }
+
         return back()->with(
             'success',
-            "HR DTR sync completed: {$summary['created']} created, {$summary['updated']} updated, {$summary['skipped']} skipped."
+            "HR DTR sync completed for {$summary['period_start']} to {$summary['period_end']}: {$summary['created']} created, {$summary['updated']} updated, {$summary['skipped']} skipped."
         );
     }
 
-    public function approveDtr(Request $request, DtrRecord $dtrRecord, AttendanceToDtrService $dtrService): RedirectResponse
+    public function approveDtr(Request $request, HrDtrStatus $hrDtrStatus): RedirectResponse
     {
-        if ($this->currentHrStatus($dtrRecord) !== 'pending') {
+        if ($hrDtrStatus->status !== 'pending') {
             return back()->with('error', 'Only pending DTR records can be approved.');
         }
 
-        $this->refreshDtrRecordTotals($dtrRecord, $dtrService);
-
-        HrDtrStatus::updateOrCreate(
-            ['dtr_record_id' => $dtrRecord->id],
-            [
-                'status' => 'approved',
-                'reviewed_by' => $request->user('admin')?->id,
-                'reviewed_at' => now(),
-            ]
-        );
+        $hrDtrStatus->update([
+            'status' => 'approved',
+            'reviewed_by' => $request->user('admin')?->id,
+            'reviewed_at' => now(),
+        ]);
 
         return back()->with('success', 'DTR record approved.');
     }
 
-    public function rejectDtr(Request $request, DtrRecord $dtrRecord): RedirectResponse
+    public function rejectDtr(Request $request, HrDtrStatus $hrDtrStatus): RedirectResponse
     {
-        if ($this->currentHrStatus($dtrRecord) !== 'pending') {
+        if ($hrDtrStatus->status !== 'pending') {
             return back()->with('error', 'Only pending DTR records can be rejected.');
         }
 
-        HrDtrStatus::updateOrCreate(
-            ['dtr_record_id' => $dtrRecord->id],
-            [
-                'status' => 'rejected',
-                'reviewed_by' => $request->user('admin')?->id,
-                'reviewed_at' => now(),
-            ]
+        $hrDtrStatus->update([
+            'status' => 'rejected',
+            'reviewed_by' => $request->user('admin')?->id,
+            'reviewed_at' => now(),
+        ]);
+
+        $hrDtrStatus->load('dtrRecord.faculty.user');
+        $facultyUser = $hrDtrStatus->dtrRecord?->faculty?->user;
+        $adminUsers = User::role(['super_admin', 'admin', 'hr_admin', 'hr_staff'], 'admin')->get();
+
+        if ($facultyUser) {
+            $facultyUser->notify(new HrDtrRejectedNotification($hrDtrStatus, 'faculty'));
+        }
+
+        Notification::send(
+            $adminUsers,
+            new HrDtrRejectedNotification($hrDtrStatus, 'admin')
         );
 
         return back()->with('success', 'DTR record rejected.');
@@ -255,89 +253,80 @@ class HrDashboardController extends Controller
         return $now->copy()->addMonthNoOverflow()->day(min($syncDays[0] ?? 15, $now->copy()->addMonthNoOverflow()->daysInMonth))->format('F j, Y');
     }
 
-    private function formatDtrRecord(DtrRecord $record, AttendanceToDtrService $dtrService): array
+    private function formatDtrRecord(HrDtrStatus $status, AttendanceToDtrService $dtrService): array
     {
-        $summary = $this->liveDtrSummary($record, $dtrService);
+        $record = $status->dtrRecord;
+        $summary = $record ? $this->liveDtrSummary($status, $dtrService) : [];
 
         return [
-            'id' => $record->id,
-            'facultyId' => $record->faculty_id,
-            'faculty' => $record->faculty?->full_name ?? 'Unknown Faculty',
-            'facultyCode' => $record->faculty?->faculty_code ?? 'N/A',
-            'department' => $record->faculty?->department?->code
-                ?? $record->faculty?->department?->name
+            'id' => $status->id,
+            'facultyId' => $record?->faculty_id,
+            'faculty' => $record?->faculty?->full_name ?? 'Unknown Faculty',
+            'facultyCode' => $record?->faculty?->faculty_code ?? 'N/A',
+            'department' => $record?->faculty?->department?->code
+                ?? $record?->faculty?->department?->name
                 ?? 'N/A',
-            'period' => Carbon::create($record->year, $record->month, 1)->format('F Y'),
-            'month' => (int) $record->month,
-            'year' => (int) $record->year,
-            'status' => $record->hrStatus?->status ?? 'pending',
-            'daysPresent' => (int) ($summary['daysPresent'] ?? $record->total_days_present),
-            'daysAbsent' => (int) ($summary['daysAbsent'] ?? $record->total_days_absent),
-            'daysLate' => (int) ($summary['timesLate'] ?? $record->total_days_late),
-            'lateMinutes' => (int) ($summary['totalLateMinutes'] ?? $record->total_late_minutes),
-            'undertimeMinutes' => (int) ($summary['totalUndertimeMinutes'] ?? $record->total_undertime_minutes),
+            'period' => $this->formatHrPeriod($status),
+            'month' => (int) ($record?->month ?? $status->period_start?->month),
+            'year' => (int) ($record?->year ?? $status->period_start?->year),
+            'startDay' => $status->period_start?->day,
+            'endDay' => $status->period_end?->day,
+            'status' => $status->status,
+            'daysPresent' => (int) ($summary['daysPresent'] ?? 0),
+            'daysAbsent' => (int) ($summary['daysAbsent'] ?? 0),
+            'daysLate' => (int) ($summary['timesLate'] ?? 0),
+            'lateMinutes' => (int) ($summary['totalLateMinutes'] ?? 0),
+            'undertimeMinutes' => (int) ($summary['totalUndertimeMinutes'] ?? 0),
             'overtimeMinutes' => (int) ($summary['totalOvertimeMinutes'] ?? 0),
-            'hoursRendered' => (float) ($summary['totalHoursRendered'] ?? $record->total_hours_rendered),
-            'hoursRequired' => (float) ($summary['totalRequiredHours'] ?? $record->total_hours_required),
-            'generatedAt' => $record->generated_at?->format('M j, Y g:i A'),
-            'approvedAt' => $record->hrStatus?->reviewed_at?->format('M j, Y g:i A'),
-            'approvedBy' => $record->hrStatus?->reviewedBy?->username ?? $record->hrStatus?->reviewedBy?->email,
-            'scheduleCards' => $this->formatScheduleCards($record),
+            'hoursRendered' => (float) ($summary['totalHoursRendered'] ?? 0),
+            'hoursRequired' => (float) ($summary['totalRequiredHours'] ?? 0),
+            'generatedAt' => $status->created_at?->format('M j, Y g:i A'),
+            'approvedAt' => $status->reviewed_at?->format('M j, Y g:i A'),
+            'approvedBy' => $status->reviewedBy?->username ?? $status->reviewedBy?->email,
+            'scheduleCards' => $record ? $this->formatScheduleCards($record) : [],
         ];
     }
 
     /**
      * @return array<string, mixed>
      */
-    private function liveDtrSummary(DtrRecord $record, AttendanceToDtrService $dtrService): array
+    private function liveDtrSummary(HrDtrStatus $status, AttendanceToDtrService $dtrService): array
     {
+        $record = $status->dtrRecord;
+
+        if (! $record) {
+            return [];
+        }
+
         $conversion = $dtrService->convertToDtr(
             (int) $record->faculty_id,
             (int) $record->month,
             (int) $record->year,
+            $status->period_start?->day,
+            $status->period_end?->day,
         );
 
         return $conversion['summary'] ?? [];
     }
 
-    private function refreshDtrRecordTotals(DtrRecord $record, AttendanceToDtrService $dtrService): void
-    {
-        $summary = $this->liveDtrSummary($record, $dtrService);
-
-        $record->fill([
-            'total_days_present' => (int) ($summary['daysPresent'] ?? $record->total_days_present),
-            'total_days_absent' => (int) ($summary['daysAbsent'] ?? $record->total_days_absent),
-            'total_days_late' => (int) ($summary['timesLate'] ?? $record->total_days_late),
-            'total_late_minutes' => (int) ($summary['totalLateMinutes'] ?? $record->total_late_minutes),
-            'total_undertime_minutes' => (int) ($summary['totalUndertimeMinutes'] ?? $record->total_undertime_minutes),
-            'total_hours_rendered' => (float) ($summary['totalHoursRendered'] ?? $record->total_hours_rendered),
-            'total_hours_required' => (float) ($summary['totalRequiredHours'] ?? $record->total_hours_required),
-            'generated_at' => $record->generated_at ?? now(),
-        ]);
-
-        $record->save();
-    }
-
-    private function currentHrStatus(DtrRecord $record): string
-    {
-        return $record->hrStatus?->status ?? 'pending';
-    }
-
     private function hrStatusCount(string $status): int
     {
-        if ($status === 'pending') {
-            return DtrRecord::query()
-                ->where(function ($query): void {
-                    $query
-                        ->whereDoesntHave('hrStatus')
-                        ->orWhereHas('hrStatus', fn ($hrStatusQuery) => $hrStatusQuery->where('status', 'pending'));
-                })
-                ->count();
+        return HrDtrStatus::query()
+            ->where('status', $status)
+            ->count();
+    }
+
+    private function formatHrPeriod(HrDtrStatus $status): string
+    {
+        if (! $status->period_start || ! $status->period_end) {
+            $record = $status->dtrRecord;
+
+            return $record
+                ? Carbon::create($record->year, $record->month, 1)->format('F Y')
+                : 'Unknown Period';
         }
 
-        return DtrRecord::query()
-            ->whereHas('hrStatus', fn ($query) => $query->where('status', $status))
-            ->count();
+        return $status->period_start->format('M j').' - '.$status->period_end->format('M j, Y');
     }
 
     /**

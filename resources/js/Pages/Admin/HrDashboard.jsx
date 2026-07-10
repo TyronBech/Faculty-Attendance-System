@@ -84,7 +84,7 @@ export default function HrDashboard({
                             Schedule vs DTR Validation
                         </h1>
                         <p className="mt-2 max-w-2xl text-sm text-white/75">
-                            Review pending DTR records, control HR sync days, and manually refresh pending DTRs for the current payroll period.
+                            Review pending DTR records, control HR cutoff days, and manually refresh DTRs for the latest rendered cutoff period.
                         </p>
                     </div>
                     <button
@@ -116,7 +116,7 @@ export default function HrDashboard({
                         HR Sync Settings
                     </h2>
                     <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                        Pending DTRs are prepared on these month days. Default is 15 and 30.
+                        Pending DTRs are prepared only after these cutoff days are rendered. Default is 15 and 30.
                     </p>
 
                     <form onSubmit={saveSettings} className="mt-4 space-y-3">

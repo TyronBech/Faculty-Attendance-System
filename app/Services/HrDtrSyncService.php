@@ -19,6 +19,8 @@ class HrDtrSyncService
      * @return array{
      *     month: int,
      *     year: int,
+     *     period_start: string|null,
+     *     period_end: string|null,
      *     processed: int,
      *     created: int,
      *     updated: int,
@@ -30,20 +32,32 @@ class HrDtrSyncService
         $now = Carbon::now();
         $targetMonth = $month ?? $now->month;
         $targetYear = $year ?? $now->year;
+        $period = $this->resolvedRenderedPeriod($targetMonth, $targetYear, $now);
 
         $summary = [
             'month' => $targetMonth,
             'year' => $targetYear,
+            'period_start' => $period?->get('start')?->toDateString(),
+            'period_end' => $period?->get('end')?->toDateString(),
             'processed' => 0,
             'created' => 0,
             'updated' => 0,
             'skipped' => 0,
         ];
 
+        if (! $period) {
+            return $summary;
+        }
+
+        $periodStart = $period->get('start');
+        $periodEnd = $period->get('end');
+        $startDay = (int) $periodStart->day;
+        $endDay = (int) $periodEnd->day;
+
         Faculty::query()
             ->where('is_active', true)
             ->orderBy('id')
-            ->chunkById(100, function (Collection $faculties) use (&$summary, $targetMonth, $targetYear): void {
+            ->chunkById(100, function (Collection $faculties) use (&$summary, $targetMonth, $targetYear, $periodStart, $periodEnd, $startDay, $endDay): void {
                 foreach ($faculties as $faculty) {
                     $existingRecord = DtrRecord::query()
                         ->where('faculty_id', $faculty->id)
@@ -51,15 +65,18 @@ class HrDtrSyncService
                         ->where('year', $targetYear)
                         ->first();
 
-                    $existingHrStatus = $existingRecord?->hrStatus?->status;
+                    $existingHrStatus = $existingRecord?->hrStatuses()
+                        ->whereDate('period_start', $periodStart->toDateString())
+                        ->whereDate('period_end', $periodEnd->toDateString())
+                        ->first();
 
-                    if (in_array($existingHrStatus, ['approved', 'rejected'], true)) {
+                    if (in_array($existingHrStatus?->status, ['approved', 'rejected'], true)) {
                         $summary['skipped']++;
 
                         continue;
                     }
 
-                    $conversion = $this->attendanceToDtrService->convertToDtr($faculty->id, $targetMonth, $targetYear);
+                    $conversion = $this->attendanceToDtrService->convertToDtr($faculty->id, $targetMonth, $targetYear, $startDay, $endDay);
                     $dtrSummary = $conversion['summary'] ?? [];
 
                     $dtrRecord = DtrRecord::updateOrCreate(
@@ -82,7 +99,11 @@ class HrDtrSyncService
                     );
 
                     HrDtrStatus::firstOrCreate(
-                        ['dtr_record_id' => $dtrRecord->id],
+                        [
+                            'dtr_record_id' => $dtrRecord->id,
+                            'period_start' => $periodStart->toDateString(),
+                            'period_end' => $periodEnd->toDateString(),
+                        ],
                         ['status' => 'pending']
                     );
 
@@ -102,6 +123,39 @@ class HrDtrSyncService
         );
 
         return $summary;
+    }
+
+    /**
+     * @return Collection{start: Carbon, end: Carbon}|null
+     */
+    private function resolvedRenderedPeriod(int $month, int $year, Carbon $now): ?Collection
+    {
+        $periodMonth = Carbon::create($year, $month, 1);
+        $daysInMonth = $periodMonth->daysInMonth;
+        $cutoffDays = collect(self::syncDays())
+            ->map(fn (int $day): int => min($day, $daysInMonth))
+            ->unique()
+            ->sort()
+            ->values();
+
+        $comparisonDate = $periodMonth->isSameMonth($now)
+            ? min($now->day, $daysInMonth)
+            : ($periodMonth->lessThan($now->copy()->startOfMonth()) ? $daysInMonth : 0);
+
+        $eligibleCutoffs = $cutoffDays->filter(fn (int $day): bool => $day <= $comparisonDate)->values();
+        $cutoffDay = $eligibleCutoffs->last();
+
+        if (! $cutoffDay) {
+            return null;
+        }
+
+        $cutoffIndex = $eligibleCutoffs->count() - 1;
+        $previousCutoffDay = $cutoffIndex > 0 ? (int) $eligibleCutoffs[$cutoffIndex - 1] : 0;
+
+        return collect([
+            'start' => Carbon::create($year, $month, $previousCutoffDay + 1)->startOfDay(),
+            'end' => Carbon::create($year, $month, (int) $cutoffDay)->endOfDay(),
+        ]);
     }
 
     /**

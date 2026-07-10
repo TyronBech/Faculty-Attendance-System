@@ -265,10 +265,85 @@ function ChartTooltip({ active, payload, label }) {
     );
 }
 
+function FacultyNotificationPanel({ notifications = [], cutoffReminders = [] }) {
+    const items = [
+        ...cutoffReminders.map((reminder) => ({
+            id: `cutoff-${reminder.cutoffDate}-${reminder.daysBefore}`,
+            title: reminder.title,
+            message: reminder.message,
+            tone: 'amber',
+            url: null,
+            meta: `${reminder.daysBefore} days before cutoff`,
+        })),
+        ...notifications.map((notification) => ({
+            id: notification.id,
+            title: notification.title,
+            message: notification.message,
+            tone: notification.readAt ? 'gray' : 'red',
+            url: notification.url,
+            meta: notification.createdAt,
+        })),
+    ];
+
+    if (items.length === 0) {
+        return null;
+    }
+
+    const toneClasses = {
+        amber: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200',
+        red: 'border-red-200 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-900/20 dark:text-red-200',
+        gray: 'border-gray-200 bg-gray-50 text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300',
+    };
+
+    return (
+        <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+            <div className="mb-4">
+                <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+                    DTR Notices
+                </h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                    HR cutoff reminders and DTR review updates.
+                </p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                {items.map((item) => {
+                    const content = (
+                        <div className={`rounded-xl border p-4 ${toneClasses[item.tone] ?? toneClasses.gray}`}>
+                            <div className="flex items-start gap-3">
+                                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/70 dark:bg-gray-900/40">
+                                    <i className={`fa-solid ${item.tone === 'amber' ? 'fa-calendar-day' : 'fa-circle-exclamation'} text-sm`} />
+                                </div>
+                                <div>
+                                    <p className="font-bold">{item.title}</p>
+                                    <p className="mt-1 text-sm opacity-80">{item.message}</p>
+                                    {item.meta && (
+                                        <p className="mt-2 text-xs font-semibold uppercase tracking-wide opacity-60">
+                                            {item.meta}
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    );
+
+                    return item.url ? (
+                        <Link key={item.id} href={item.url} className="block transition hover:-translate-y-0.5">
+                            {content}
+                        </Link>
+                    ) : (
+                        <div key={item.id}>{content}</div>
+                    );
+                })}
+            </div>
+        </section>
+    );
+}
+
 /* ──────────────────────────────────────────────
    Main Faculty Dashboard page
    ────────────────────────────────────────────── */
-export default function FacultyDashboard({ stats, todaySchedule, checkInTrend, monthlyAverages, currentDate, greeting, filters, recentAttendance }) {
+export default function FacultyDashboard({ stats, todaySchedule, checkInTrend, monthlyAverages, currentDate, greeting, filters, recentAttendance, notifications = [], cutoffReminders = [] }) {
     const { auth } = usePage().props;
 
     //Faculty Fullname
@@ -333,6 +408,11 @@ export default function FacultyDashboard({ stats, todaySchedule, checkInTrend, m
             </section>
 
             {/* ── Today's Schedule ────────────────────── */}
+            <FacultyNotificationPanel
+                notifications={notifications}
+                cutoffReminders={cutoffReminders}
+            />
+
             <section className="mt-10">
                 <div className="flex items-center justify-between mb-4">
                     <h2 className="text-lg font-bold text-gray-900 dark:text-white">

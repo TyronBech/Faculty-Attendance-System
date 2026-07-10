@@ -27,6 +27,8 @@ class AdminDtrExportController extends Controller
             'faculty_id' => ['required', 'integer', 'exists:faculties,id'],
             'month' => ['required', 'integer', 'between:1,12'],
             'year' => ['required', 'integer', 'between:2000,2100'],
+            'start_day' => ['nullable', 'integer', 'between:1,31'],
+            'end_day' => ['nullable', 'integer', 'between:1,31'],
             'export_type' => ['nullable', 'in:default,temporary_substitute'],
         ]);
 
@@ -36,14 +38,16 @@ class AdminDtrExportController extends Controller
 
         $month = (int) $validated['month'];
         $year = (int) $validated['year'];
+        $startDay = isset($validated['start_day']) ? (int) $validated['start_day'] : null;
+        $endDay = isset($validated['end_day']) ? (int) $validated['end_day'] : null;
 
-        $conversion = $service->convertToDtr($faculty->id, $month, $year);
+        $conversion = $service->convertToDtr($faculty->id, $month, $year, $startDay, $endDay);
         $attendance = $conversion['attendance'] ?? [];
         $summary = $conversion['summary'] ?? [];
 
-        $rows = $this->buildRows($attendance, $month, $year);
+        $rows = $this->buildRows($attendance, $month, $year, $startDay, $endDay);
 
-        $periodLabel = Carbon::create($year, $month, 1)->format('F Y');
+        $periodLabel = $this->periodLabel($month, $year, $startDay, $endDay);
 
         return response()->json([
             'faculty' => [
@@ -255,13 +259,15 @@ class AdminDtrExportController extends Controller
         ];
     }
 
-    public function buildRows(array $attendance, int $month, int $year): array
+    public function buildRows(array $attendance, int $month, int $year, ?int $startDay = null, ?int $endDay = null): array
     {
         $daysInMonth = Carbon::create($year, $month, 1)->daysInMonth;
+        $start = max(1, $startDay ?? 1);
+        $end = min($daysInMonth, $endDay ?? $daysInMonth);
         $officialMovementOverlays = $this->buildOfficialMovementOverlays($attendance);
         $rows = [];
 
-        for ($day = 1; $day <= $daysInMonth; $day++) {
+        for ($day = $start; $day <= $end; $day++) {
             $dayData = $attendance[$day] ?? ['status' => 'none', 'records' => [], 'holidays' => []];
             $records = $dayData['records'] ?? [];
             $officialDisplayRecords = $this->applyOfficialMovementOverlays(
@@ -361,6 +367,7 @@ class AdminDtrExportController extends Controller
 
             $rows[] = [
                 'day' => $day,
+                'day_label' => $this->weekdayAbbreviation($officialDate),
                 'official_day' => $day,
                 'internal_day' => $internalDay,
                 'internal_day_shift' => (int) $internalDayShift,
@@ -424,6 +431,31 @@ class AdminDtrExportController extends Controller
         }
 
         return $rows;
+    }
+
+    private function periodLabel(int $month, int $year, ?int $startDay = null, ?int $endDay = null): string
+    {
+        $start = Carbon::create($year, $month, max(1, $startDay ?? 1));
+        $end = Carbon::create($year, $month, min(Carbon::create($year, $month, 1)->daysInMonth, $endDay ?? Carbon::create($year, $month, 1)->daysInMonth));
+
+        if ($start->isSameDay($end->copy()->startOfMonth()) && $end->isSameDay($end->copy()->endOfMonth())) {
+            return $start->format('F Y');
+        }
+
+        return $start->format('M j').' - '.$end->format('M j, Y');
+    }
+
+    private function weekdayAbbreviation(Carbon $date): string
+    {
+        return match ((int) $date->dayOfWeekIso) {
+            1 => 'M',
+            2 => 'T',
+            3 => 'W',
+            4 => 'Th',
+            5 => 'F',
+            6 => 'Sa',
+            7 => 'Su',
+        };
     }
 
     public function formatTime(mixed $value): string

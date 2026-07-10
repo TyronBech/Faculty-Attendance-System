@@ -101,11 +101,11 @@ Route::middleware(['auth.admin'])->prefix('admin')->group(function () {
         ->middleware('check.permission:'.Permission::ManageHrDtrSync->value.',admin')
         ->name('admin.hr.dtrs.index');
 
-    Route::patch('/hr/dtrs/{dtrRecord}/approve', [HrDashboardController::class, 'approveDtr'])
+    Route::patch('/hr/dtrs/{hrDtrStatus}/approve', [HrDashboardController::class, 'approveDtr'])
         ->middleware('check.permission:'.Permission::ManageHrDtrSync->value.',admin')
         ->name('admin.hr.dtrs.approve');
 
-    Route::patch('/hr/dtrs/{dtrRecord}/reject', [HrDashboardController::class, 'rejectDtr'])
+    Route::patch('/hr/dtrs/{hrDtrStatus}/reject', [HrDashboardController::class, 'rejectDtr'])
         ->middleware('check.permission:'.Permission::ManageHrDtrSync->value.',admin')
         ->name('admin.hr.dtrs.reject');
 
